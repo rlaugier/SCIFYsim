@@ -3,17 +3,20 @@ import numpy as np
 
 #from . import mol_dens
 #from .mol_dens import mol_dens
-from . import n_air
+from . import utilities # Utilities for computation
+from . import combiners # A library of combiners
+
+from . import n_air # Manages the refractive index of air
 from .n_air import *
 
-from . import parsefile
+from . import parsefile # Used to parse .ini files 
 #from .parsefile import *
 
 #from . import confconverter
-from . import control_loop
+from . import control_loop # Legacy from GENIEsim : builds closed loop TFs
 
-from . import observatory as obs
-from . import plot_tools as pt
+from . import observatory as obs # Manages the geometry of the array
+from . import plot_tools as pt  # Tools to facilitate the plotting
 
 import sympy as sp
 import numpy as np
