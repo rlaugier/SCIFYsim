@@ -42,7 +42,7 @@ class ee(object):
         The evaluation call for funcions for the numexpr case
         Evaluating the list of functions and returning it as an array
         """
-        return np.array([self.funcs[i](*args) for i in range(self.outlen)]).reshape(self.outshape)
+        return np.stack([np.asarray(self.funcs[i](*args)) for i in range(self.outlen)])
     
     def numpy_call(self, *args):
         """
@@ -85,7 +85,7 @@ def test_ex():
     
     
     f3 = sp.Matrix([[x**2 + y**2, x**2 - y**2],
-                    [x**2 + y**2, x**2 - y**2]])
+                    [x**2 + 2*y**2, x**2 - 2*y**2]])
     objf3 = ee(f3)
     objf3.fprint()
     
@@ -97,3 +97,19 @@ def test_ex():
     print(objf3.outlen)
     b = objf3(10.,11.)
     print("Result with numexpr :\n", b)
+    
+    print("")
+    print("Broadcasting example")
+    print("====================")
+    
+    objf2.lambdify((x, y), modules="numpy")
+    b = objf2(10.*np.arange(3)[:,None], 11.*np.arange(4)[None,:])
+    print("broadcas with numpy :\n", b)
+    print("shape:", b.shape)
+    
+    objf2.lambdify((x, y), modules="numexpr")
+    b = objf2(10.*np.arange(3)[:,None], 11.*np.arange(4)[None,:])
+    print("broadcas with numexpr :\n", b)
+    print("shape:", b.shape)
+    
+    return b
