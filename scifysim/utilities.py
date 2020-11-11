@@ -1,6 +1,24 @@
 import sympy as sp
 import numpy as np
 from kernuller import fprint
+
+import logging
+
+logit = logging.getLogger(__name__)
+
+def vec2diag(vec):
+    thelen = vec.shape[0]
+    A = sp.eye(thelen)
+    for i in range(thelen):
+        A[i,i]= vec[i]
+    return A
+
+class source(object):
+    def __init__(self, xx, yy, ss):
+        self.xx = xx
+        self.yy = yy
+        self.ss = ss
+
 class ee(object):
     def __init__(self, expression):
         """
@@ -113,3 +131,4 @@ def test_ex():
     print("shape:", b.shape)
     
     return b
+

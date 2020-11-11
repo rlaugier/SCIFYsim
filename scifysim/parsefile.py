@@ -32,22 +32,23 @@ def getdate(self, section, key, mode=None):
     """
     from astropy.time import Time
     if mode is not None:
-        logit.error("No modes available yet")
-        raise NotImplementedError("No other modes are implemented yet")
-    logit.info("Pulling an array from config file")
-    rawstring = self[section][key]
-    listargs = rawstring.replace(" ", "").split(",")
-    formated = listargs[0]+"-"+listargs[1]+"-"+listargs[2]+"T"\
-            +listargs[3]+":"+listargs[4]+":"+listargs[5]
-    logit.debug(rawstring)
-    logit.debug(formated)
-    thetime = Time(formated)
+        raise NotImplementedError("No modes implemented yet")
+    else:
+        logit.info("Pulling an array from config file")
+        rawstring = self[section][key]
+        listargs = rawstring.replace(" ", "").split(",")
+        formated = listargs[0]+"-"+listargs[1]+"-"+listargs[2]+"T"\
+                +listargs[3]+":"+listargs[4]+":"+listargs[5]
+        logit.debug(rawstring)
+        logit.debug(formated)
+        thetime = Time(formated)
     return thetime
 ConfigParser.getdate = getdate
 
 def parse_file(file):
     """
     Just a quick macro to parse the config file
+    file   : The path to a file
     """
     logit.info("Parsing a config file")
     aconfig = ConfigParser(inline_comment_prefixes="#")

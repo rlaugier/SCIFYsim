@@ -4,6 +4,11 @@ import numpy as np
 from kernuller import fprint
 
 
+import logging
+
+logit = logging.getLogger(__name__)
+
+
 
 def bracewell_ph():
     """
@@ -98,3 +103,4 @@ def test_combiners():
     fprint(a)
     Mn = kernuller.sp2np(a.subs(thesubs)).astype(np.complex128)
     fig, axs = kernuller.cmp(Mn, nx=2, out_label=np.arange(8), mainlinewidth=0.05)
+    

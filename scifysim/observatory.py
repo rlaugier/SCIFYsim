@@ -31,7 +31,7 @@ class observatory(object):
     """
     This class help define the properties of the observatory infrastructure, especially the uv coverage.
     """
-    def __init__(self, statlocs, location=None, verbose=False):
+    def __init__(self, statlocs, location=None, verbose=False, multi_dish=True):
         """
         statlocs : The station locations 
                     (east, north) for each aperture shape is (Na, 2)
@@ -42,7 +42,7 @@ class observatory(object):
         if location is None:
             self.observatory_location = astroplan.Observer.at_site("Paranal", timezone="UTC")
         else :
-            self.observatory_location = location
+            self.observatory_location = astroplan.Observer.at_site(location, timezone="UTC")
         self.statlocs = statlocs
         
         self.theta = sp.symbols("self.theta")
@@ -59,7 +59,7 @@ class observatory(object):
         self.C = sp.lambdify(self.theta, self.Cs, modules="numpy")
 
         
-    def build_observing_sequence(self, times=["2020-04-13T00:00:00","2020-04-13T10:30:00"],
+    def build_observing_sequence(self, times=None,
                             npoints=20, remove_daytime=False):
         """
         Returns the series of obstimes needed to compute the altaz positions
@@ -71,6 +71,8 @@ class observatory(object):
                  
         remove_daytime : Whether to remove the points that fall during the day
         """
+        if times is None:
+            times = ["2020-04-13T00:00:00","2020-04-13T10:30:00"]
         #npoints is defined which means we work from define the sampling from an interval
         if npoints is not None:
             obs2502 = Time(times)

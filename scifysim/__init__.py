@@ -5,6 +5,10 @@ import numpy as np
 #from .mol_dens import mol_dens
 from . import utilities # Utilities for computation
 from . import combiners # A library of combiners
+from . import injection # A classes to simulate fiber injection
+from . import combiner  # A class to simulate the bihaviour of the combiner
+from . import spectrograph # Simulate the behaviour of the spectrograph and camera
+from . import director  # A class to rule them all
 
 from . import n_air # Manages the refractive index of air
 from .n_air import *
