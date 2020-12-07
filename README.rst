@@ -23,6 +23,7 @@ The following packages are required:
  - numpy
  - sympy
  - scipy
+ - numexpr
  - matplotlib
  - tqdm
  - kernuller # https://github.com/rlaugier/kernuller

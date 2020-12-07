@@ -5,6 +5,8 @@ import numpy as np
 from tqdm import tqdm
 import logging
 
+from kernuller import mas2rad, rad2mas
+
 logit = logging.getLogger(__name__)
 
 class simulator(object):
@@ -72,7 +74,7 @@ class simulator(object):
         
     
     @classmethod
-    def from_config(cls, file=None, fpath=None,):
+    def from_config(cls, file=None, fpath=None):
         """
         Construct the injector object from a config file
         file      : A pre-parsed config file
@@ -123,7 +125,7 @@ class simulator(object):
                  focal_res=None,
                  pscale=None,
                  interpolation=None,
-                 injector=None):
+                 injector=None, seed=None):
         """
         Either: 
             * Provide all parameters
@@ -135,7 +137,7 @@ class simulator(object):
             self.tt_correction = tt_correction
             logit.warning("no_piston not implemented")
             self.no_piston = no_piston
-            self.injector = sf.injection.injector.from_config_file(file=file)
+            self.injector = sf.injection.injector.from_config_file(file=file, seed=seed)
             # Recovering some 
         else:
             if injector is None:
@@ -175,22 +177,23 @@ class simulator(object):
         t_co      : Coherence time (seconds) 
         """
         self.n_subexps = int(texp/t_co)
-        taraltaz = self.obs.observatory_location.altaz(time, target=self.target)
-        array = self.obs.get_projected_array(taraltaz)
+        #taraltaz = self.obs.observatory_location.altaz(time, target=self.target)
+        taraltaz, tarPA = self.obs.get_position(self.target, time)
+        array = self.obs.get_projected_array(taraltaz, PA=tarPA)
         integrator = sf.spectrograph.integrator()
         for i in tqdm(range(self.n_subexps)):
             injected = next(self.injector.get_efunc)(self.lambda_science_range)
             # lambdified argument order matters! This should remain synchronous
             # with the lambdify call
             combined = np.array([self.combiner.encaps(self.source.xx, self.source.yy,
-                                    array.flatten(), 2*np.pi/thelambda, injected[:,i])
-                                     for i, thelambda in enumerate(self.lambda_science_range)])
+                                    array.flatten(), 2*np.pi/thelambda, injected[:,m])
+                                     for m, thelambda in enumerate(self.lambda_science_range)])
             # incoherently combining over sources
             # Warning: modifying the array
-            combined = np.sum(combined*np.conjugate(combined), axis=(1))
+            combined = np.sum(np.abs(combined*np.conjugate(combined)), axis=(2))
             integrator.accumulate(combined)
         mean, std = integrator.compute_stats()
-        result = integrator.acc
+        return integrator
     def prepare_sequence(self, file=None, times=None, n_points=20, remove_daytime=False):
         """
         Prepare an observing sequence

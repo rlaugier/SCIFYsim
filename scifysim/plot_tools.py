@@ -26,9 +26,13 @@ def getcolor(index, tracelength=None):
     Converts an index to one of the basic colors of matplotlib
     """
     return "C"+str(index)
-def getcolortrace(index, length):
-    trace = colortraces[index]()
-    return t
+def getcolortrace(cmap, value, length, alpha=None):
+    if not isinstance(cmap, plt.matplotlib.colors.LinearSegmentedColormap):
+        thecmap = colortraces[cmap]
+    else:
+        thecmap = cmap
+    trace = thecmap(value/length, alpha=alpha)
+    return trace
     
 def piston2size(piston, dist=140., psz=8., usize=150.):
     """
@@ -45,7 +49,9 @@ def piston2size(piston, dist=140., psz=8., usize=150.):
 
 
     
-def plot_pupil(thearray, thepistons=None, psz=8., usize=150., dist=140., perspective=True):
+def plot_pupil(thearray, thepistons=None, psz=8.,
+               usize=150., dist=140., perspective=True,
+               compass=None, grid=None):
     """
     Plots the projected 
     dist  : The distance of the observer to the array
@@ -53,7 +59,13 @@ def plot_pupil(thearray, thepistons=None, psz=8., usize=150., dist=140., perspec
     usize : A scaling parameter default = 150
     perspective: whether to simulate an effect of perspective
                 with the size of the markers
-                
+    compass: A pair of positions indicating the direction of North and East
+             after transformation by the same projection as the array
+             [North_vector[e,n], East_vector[e,n]]
+    grid   : Similar to the compass but for a bunch of parallels and meridians
+            [parallels[[e0,n0], [e1, n1], ... ],
+             meridians[[e0,n0], [e1, n1], ...]]
+    
     Returns:
     fig   : The figure 
     """
@@ -70,12 +82,143 @@ def plot_pupil(thearray, thepistons=None, psz=8., usize=150., dist=140., perspec
             thesize = 100.*np.ones_like(thepistons[i])
         plt.scatter(thearray[i, 0],thearray[i, 1], c=getcolor(i),
                     s=thesize, alpha=0.5)
+    logit.debug("Pistons: ")
     logit.debug(str(thepistons[:]))
+    
+    if compass is not None:
+        plt.plot((0.,compass[0,0]),
+                 (0.,compass[0,1]),
+                 "r-", linewidth=5, label="North")
+        plt.plot((0.,compass[1,0]),
+                 (0.,compass[1,1]),
+                 "k-", linewidth=5,  label="east")
+    if grid is not None:
+        # Plotting parallels:
+        for line in grid[0]:
+            plt.plot(line[:,0], line[:,1],"k-", linewidth=0.5)
+        # Plotting meridians:
+        for line in grid[1]:
+            plt.plot(line[:,0], line[:,1],"k--", linewidth=0.5)
+        
+    
     plt.gca().set_aspect("equal")
     plt.title("Array as seen by target%s"%(projection_string))
-    plt.xlabel("Az-position (m)")
-    plt.ylabel("Alt-position (m)")
+    plt.xlabel("RA position (m)")
+    plt.ylabel("Dec position (m)")
+    if compass is not None:
+        plt.legend()
     #plt.xlim(np.min([0,:]), np.max([0,:]))
     #plt.ylim(np.min([1,:]), np.max([1,:]))
     plt.show()
     return fig
+
+def plot_projected_pupil(asim, seq_index,
+                         grid=False, grid_res=5,
+                         compass=True, compass_length=10.,
+                         usize=150., dist=140., perspective=True):
+    """
+    Designed as a wrapper around plot_pupil that also handles
+    additional illustration.
+    As a contrast to plot_pupil, plot_projected_pupil takes in a
+    simulator object.
+    The plots are made of the array as seen from the target in meters 
+    projected to RA-Dec coordinates.
+    
+    asim    : Simulator object
+    seq_index: The index in the observing sequence (This feature may evolve)
+    grid    : Whether to plot a grid of ground position
+    grid_res: The number of lines in the grid for each direction
+    compass : Whether to plot a little North and East symbol for direction
+    compoass_length: In meters the length of the compass needles.
+    """
+    anarray = asim.obs.statlocs
+    
+    #Get the pointing of the array:
+    altaz, PA = asim.obs.get_position(asim.target, asim.sequence[seq_index])
+    #Building a grid
+    if grid :
+        xx, yy = np.meshgrid(np.linspace(np.min(anarray[:,0]), np.max(anarray[:,0]), grid_res),
+                            np.linspace(np.min(anarray[:,1]), np.max(anarray[:,1]), grid_res))
+        grid = np.array([xx,yy])
+        parallels = np.array(list(zip(grid[0].flat, grid[1].flat))).reshape(5,5,2)
+        meridians = np.array(list(zip(grid[0].T.flat, grid[1].T.flat))).reshape(5,5,2)
+        formatted_grid = np.array([parallels,meridians])
+        projected_grid = formatted_grid.copy()
+        for i in range(formatted_grid.shape[0]):
+            for j in range(formatted_grid.shape[1]):
+                projected_grid[i,j] = asim.obs.get_projected_array(altaz,
+                                                               PA=PA,
+                                                               loc_array=formatted_grid[i,j])
+    else:
+        projected_grid = None
+        
+    if compass:
+        mycompass = np.array([[0., 10.],
+                             [10.,0.]])
+        pcompass = asim.obs.get_projected_array(altaz, PA=PA, loc_array=mycompass)
+    else:
+        compass = None
+        
+    p_array = asim.obs.get_projected_array(altaz, PA=PA, loc_array=anarray)
+    thepistons = asim.obs.get_projected_geometric_pistons(altaz)
+    
+    fig = plot_pupil(p_array, thepistons, compass=pcompass,
+                    usize=usize, dist=dist, perspective=perspective,
+                    grid=projected_grid)
+    
+    return fig
+    
+    
+    
+
+def plot_injection(theinjector):
+    """
+    Provides a view of the injector status.
+    Plots the phase screen for each pupil.
+    """
+    import matplotlib.pyplot as plt
+    if not isinstance(theinjector, sf.injection.injector):
+        raise ValueError("Expects an injector module")
+    # Showing the wavefronts
+    #tweaking the colormap showing the pupil cutout
+    current_cmap = plt.matplotlib.cm.get_cmap("coolwarm")
+    current_cmap.set_bad(color='black')
+    plt.figure(figsize=(8,4),dpi=100)
+    for i in range(theinjector.ntelescopes):
+        plt.subplot(1,theinjector.ntelescopes,i+1)
+        plt.imshow((theinjector.focal_plane[i][0]._phs/theinjector.focal_plane[i][0].pupil),
+                           cmap=current_cmap)
+    plt.show()
+    # Showing the injection profiles
+    plt.show()
+    plt.figure(figsize=(2*theinjector.ntelescopes,2*2),dpi=100)
+    for i in range(theinjector.ntelescopes):
+        plt.subplot(2,theinjector.ntelescopes,i+1)
+        plt.imshow(np.abs(theinjector.focal_planes[i,0]), cmap="Blues")
+        CS = plt.contour(theinjector.lpmap[0], levels=theinjector.map_quartiles[0], colors="black")
+        plt.clabel(CS, inline=1, fontsize=6)
+        plt.subplot(2,theinjector.ntelescopes,i+1+theinjector.ntelescopes)
+        plt.imshow(np.abs(theinjector.focal_planes[i,-1]), cmap="Reds")
+        CS = plt.contour(theinjector.lpmap[-1], levels=theinjector.map_quartiles[-1], colors="black")
+        plt.clabel(CS, inline=1, fontsize=6)
+    plt.suptitle("Injection focal plane (contours: LP01 mode quartiles)")
+    plt.show()
+
+    tindexes = ["Telescope %d"%(i) for i in range(theinjector.injected.shape[0])]
+    plt.figure()
+    width = 0.1
+    for i in range(theinjector.injected.shape[1]):
+        plt.bar(np.arange(4)+i*width,np.abs(theinjector.injected[:,i]), width, label="%.1f µm"%(theinjector.lambda_range[i]*1e6))
+    plt.legend(loc="lower right",fontsize=7, title_fontsize=8)
+    plt.ylabel("Injection amplitude")
+    plt.title("Injection amplitude for each telescope by WL")
+    plt.show()
+
+    plt.figure()
+    width = 0.1
+    for i in range(theinjector.injected.shape[1]):
+        plt.bar(np.arange(4)+i*width,np.angle(theinjector.injected[:,i]), width, label="%.1f µm"%(theinjector.lambda_range[i]*1e6))
+    plt.legend(loc="lower right",fontsize=7, title_fontsize=8)
+    plt.ylabel("Injection phase (radians)")
+    plt.title("Injection phase for each telescope by WL")
+    plt.show()

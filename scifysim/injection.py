@@ -20,12 +20,23 @@ test_injector for the `injector`
 import numpy as np
 import threading
 import time
-from xaosim import wavefront as wft
+# amto_screen is now provided in house to provide seed
+#from xaosim import wavefront as wft
+
+shift = np.fft.fftshift
+fft   = np.fft.fft2
+ifft  = np.fft.ifft2
 
 
 import logging
 
 logit = logging.getLogger(__name__)
+
+from . import utilities
+
+def seed_numpy(myseed):
+    rs = np.random.RandomState(myseed)
+    
 
 # ===========================================================
 # ===========================================================
@@ -56,7 +67,7 @@ class atmo(object):
     # ==================================================
     def __init__(self, name="MaunaKea", csz = 512,
                  lsz=8.0, r0=0.2, L0=10.0,
-                 fc=24.5, correc=1.0):
+                 fc=24.5, correc=1.0, seed=None):
 
         ''' Kolmogorov type atmosphere + qstatic error
 
@@ -80,7 +91,7 @@ class atmo(object):
         self.rms_i   = 0.0
         self.correc  = correc
         self.fc      = fc
-        self.kolm    = wft.atmo_screen(csz, lsz, r0, L0, fc, correc).real
+        self.kolm    = atmo_screen(csz, lsz, r0, L0, fc, correc, seed=seed).real
         
         self.qstatic = np.zeros((self.csz, self.csz))
         self.shm_phs = self.qstatic
@@ -119,7 +130,7 @@ class atmo(object):
             print("no new quasi-static screen was provided!")
 
     # ==============================================================
-    def update_screen(self, correc=None, fc=None, r0=None, L0=None):
+    def update_screen(self, correc=None, fc=None, r0=None, L0=None, seed=None):
         ''' ------------------------------------------------
         Generic update of the properties of the phase-screen
         
@@ -136,8 +147,8 @@ class atmo(object):
         if fc is not None:
             self.fc = fc
             
-        self.kolm    = wft.atmo_screen(
-            self.csz, self.lsz, self.r0, self.L0, self.fc, self.correc).real
+        self.kolm    = atmo_screen(
+            self.csz, self.lsz, self.r0, self.L0, self.fc, self.correc, seed=seed).real
 
         self.kolm2   = np.tile(self.kolm, (2,2))
 
@@ -181,6 +192,65 @@ class atmo(object):
             self.rms_i = subk.std()
             self.shm_phs = subk + self.qstatic
             yield self.shm_phs
+            
+# ==================================================================
+def atmo_screen(isz, ll, r0, L0, fc=25, correc=1.0, pdiam=None,seed=None):
+    ''' -----------------------------------------------------------
+    The Kolmogorov - Von Karman phase screen generation algorithm.
+
+    Adapted from the work of Carbillet & Riccardi (2010).
+    http://cdsads.u-strasbg.fr/abs/2010ApOpt..49G..47C
+
+    Kolmogorov screen can be altered by an attenuation of the power
+    by a correction factor *correc* up to a cut-off frequency *fc*
+    expressed in number of cycles across the phase screen
+
+    Parameters:
+    ----------
+
+    - isz    : the size of the array to be computed (in pixels)
+    - ll     :  the physical extent of the phase screen (in meters)
+    - r0     : the Fried parameter, measured at a given wavelength (in meters)
+    - L0     : the outer scale parameter (in meters)
+    - fc     : DM cutoff frequency (in lambda/D)
+    - correc : correction of wavefront amplitude (factor 10, 100, ...)
+    - pdiam  : pupil diameter (in meters)
+
+    Returns: two independent phase screens, available in the real and 
+    imaginary part of the returned array.
+
+    Remarks:
+    -------
+    If pdiam is not specified, the code assumes that the diameter of
+    the pupil is equal to the extent of the phase screen "ll".
+    ----------------------------------------------------------- '''
+    
+    #phs = 2*np.pi * (np.random.rand(isz, isz) - 0.5)
+    rng = np.random.default_rng(np.random.SeedSequence(seed))
+    phs = rng.uniform(low=-np.pi, high=np.pi, size=(isz,isz))
+
+    xx, yy = np.meshgrid(np.arange(isz)-isz/2, np.arange(isz)-isz/2)
+    rr = np.hypot(yy, xx)
+    rr = shift(rr)
+    rr[0,0] = 1.0
+
+    modul = (rr**2 + (ll/L0)**2)**(-11/12.)
+
+    if pdiam is not None:
+        in_fc = (rr < fc * ll / pdiam)
+    else:
+        in_fc = (rr < fc)
+
+    modul[in_fc] /= correc
+    
+    screen = ifft(modul * np.exp(1j*phs)) * isz**2
+    screen *= np.sqrt(2*0.0228)*(ll/r0)**(5/6.)
+
+    screen -= screen.mean()
+    return(screen)
+
+# ======================================================================
+
             
 dtor = np.pi/180.0  # to convert degrees to radians
 i2pi = 1j*2*np.pi   # complex phase factor
@@ -243,6 +313,7 @@ class focuser(object):
 
         self.pdiam  = pdiam                 # pupil diameter in meters
         self.pscale = pscale                # plate scale in mas/pixel
+        self.fov = self.isz * self.pscale
         self.wl     = wl                    # wavelength in meters
         self.frm0   = np.zeros((ysz, xsz))  # initial camera frame
 
@@ -453,7 +524,8 @@ class injector(object):
                  focal_hrange=20.0e-6,
                  focal_res=50,
                  pscale = 4.5,
-                 interpolation=None):
+                 interpolation=None,
+                 seed=None):
         """
         Generates fiber injection object.
         pupil     : The telescope pupil to consider
@@ -469,9 +541,12 @@ class injector(object):
         focal_hrange : The half-range of the focal region to simulate (m)
         focal_res : The total resolution of the focal plane to simulate
         pscale    : The pixel scale for imager setup (mas/pix)
+        seed      : Value to pass for random phase screen initialization
                     
         Use: call `next(self.it)` that returns injection phasors
         For more information, look into the attributes.
+        
+        To get the ideal injection: self.best_injection(lambdas)
         """
         if lambda_range is None:
             self.lambda_range = np.linspace(3.0e-6, 4.2e-6, 6)
@@ -491,23 +566,26 @@ class injector(object):
         #Now calling the common part of the config
         self.pupil = pupil
         self.interpolation = interpolation
-        self._setup()
+        self._setup(seed=seed)
         # Preparing iterators
         self.it = self.give_fiber()
         if interpolation is not None:
+            self.compute_best_injection(interpolation=interpolation)
             self.get_efunc = self.give_interpolated(interpolation=interpolation)
         self.focal_planes = None
         self.injected = None
         
     @classmethod
     def from_config_file(cls, file=None, fpath=None,
-                         focal_res=50, pupil=None):
+                         focal_res=50, pupil=None, seed=None):
         """
         Construct the injector object from a config file
         file      : A pre-parsed config file
         fpath     : The path to a config file
         nwl       : The number of wl channels
         focal_res : The total resolution of the focal plane to simulate 
+        
+        Gathers the variables from the config file then calls for a class instance (__init__())
         """
         from scifysim import parsefile
         if file is None:
@@ -591,25 +669,33 @@ class injector(object):
                  focal_hrange=focal_hrange,
                  focal_res=focal_res,
                  pscale = pscale,
-                 interpolation=interpolation)
+                 interpolation=interpolation,
+                 seed=seed)
         obj.config = theconfig
         return obj
         
         
         
-    def _setup(self):
+    def _setup(self, seed=None):
         """
         Common part of the setup
+        Nota: the seed for creation of the screen is incremented by 1 between pupils
         """
         self.phscreensz = self.pupil.shape[0]
         
         self.screen = []
         self.focal_plane = []
         for i in range(self.ntelescopes):
-            self.screen.append(atmo(csz=self.phscreensz, r0=self.r0))
+            if seed is not None:
+                theseed = seed + i
+            else: 
+                theseed = seed
+            self.screen.append(atmo(csz=self.phscreensz, r0=self.r0, seed=theseed))
             self.focal_plane.append([focuser(csz=self.phscreensz, xsz=self.focal_res,ysz=self.focal_res,pupil=self.pupil,
                            pscale=self.pscale, wl=wl) for wl in self.lambda_range])
             self.fiber = fiber_head()
+        # Caluclating the focal length of the focuser
+        self.focal_length = self.focal_hrange/utilities.mas2rad(self.focal_plane[0][0].fov/2)
         for fp in self.focal_plane:
             for wl in range(self.lambda_range.shape[0]):
                 fp[wl].signal = 1.
@@ -643,6 +729,12 @@ class injector(object):
         """
         outs = np.array([self.einterp[i](lambdas) for i in range(self.ntelescopes)])
         return outs
+    def best_injection(self,lambdas):
+        """
+        Convenience function that applies interpolation for all the inputs
+        """
+        outs = np.array([self.best_einterp[i](lambdas) for i in range(self.ntelescopes)])
+        return outs
             
     def give_interpolated(self,interpolation):
         """
@@ -665,6 +757,27 @@ class injector(object):
                                       fill_value="extrapolate")\
                                                             for i in range(self.ntelescopes)]
             yield self.all_inj_phasors
+            
+    def compute_best_injection(self,interpolation):
+        """
+        This one will yield the method that interpolates all the injection phasors
+        """
+        from scipy.interpolate import interp1d
+        
+        focal_planes = []
+        for i, scope in enumerate(self.focal_plane):
+            thescreen = np.zeros_like(next(self.screen[i].it))
+            focal_wl = []
+            for fiberwl in scope:
+                focal_wl.append(fiberwl.getimage(thescreen))
+            focal_planes.append(focal_wl)
+        focal_planes = np.array(focal_planes)
+        self.focal_planes = focal_planes
+        self.injected = np.sum(self.focal_planes*self.lpmap[None,:,:,:], axis=(2,3))
+        self.best_einterp = [interp1d(self.lambda_range,
+                                  self.injected[i,:],kind=interpolation,
+                                  fill_value="extrapolate")\
+                                                        for i in range(self.ntelescopes)]
             
 
 from scipy.special import j0, k0
@@ -811,12 +924,15 @@ def test_fiber():
     return myfiber
             
 def test_injection(phscreensz=200, r0=8.,
-                   interpolation=None):
+                   interpolation=None, seed=20127):
+    """
+    Remember to pass seed=None if you want a random initialization
+    """
     import xaosim
     # Construct a pupil using xaosim
     apup = xaosim.pupil.VLT(phscreensz, phscreensz,phscreensz/2)
     myinst = injector(pupil=apup, r0=r0,
-                     interpolation=interpolation)
+                     interpolation=interpolation, seed=seed)
     import matplotlib.pyplot as plt
     injected = next(myinst.it)
     #contourlabels = ["0.","0.25","0.5", "O.75"]
@@ -863,15 +979,18 @@ def test_injection(phscreensz=200, r0=8.,
     
     return myinst
 
-def test_injection_fromfile(phscreensz=200, r0=8.,
-                            fpath="/home/rlaugier/Documents/hi5/SCIFYsim/scifysim/config/defaul_modified_4T.ini",
-                            interpolation=None):
+def test_injection_fromfile(phscreensz=200, 
+                            fpath="/home/rlaugier/Documents/hi5/SCIFYsim/scifysim/config/default_new_4T.ini",
+                            seed=20127):
+    """
+    Remember to pass seed=None if you want a random initialization
+    """
     import xaosim
     # Construct a pupil using xaosim
     apup = xaosim.pupil.VLT(phscreensz, phscreensz,phscreensz/2)
     myinst = injector.from_config_file(fpath=fpath,
-                                     pupil=apup, r0=r0,
-                                     interpolation=interpolation)
+                                     pupil=apup,
+                                     seed=seed)
     import matplotlib.pyplot as plt
     injected = next(myinst.it)
     #contourlabels = ["0.","0.25","0.5", "O.75"]

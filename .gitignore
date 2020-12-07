@@ -1,5 +1,9 @@
 dist/
 build/
 scifysim.egg-info/
-.ipynb_checkpoints/
+*.ipynb_checkpoints/
 __pycache__
+*.log
+*.srctrldb
+*.srctrlbm
+*.srctrlprj

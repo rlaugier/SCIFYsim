@@ -24,10 +24,13 @@ class integrator():
         if self.keepall:
             self.vals.append(value)
     def compute_stats(self):
-        arr = np.array(self.acc)
-        self.mean =  arr.sum(axis=0) / self.runs
-        self.std = arr.std(axis=0)
-        return self.mean, self.std
+        if self.keepall:
+            arr = np.array(self.vals)
+            self.mean =  arr.sum(axis=0) / self.runs
+            self.std = arr.std(axis=0)
+            return self.mean, self.std
+        else:
+            pass
     def compute_noised(self):
         logit.warning("Noises not implemented yet")
         raise NotImplementedError("Noises not implemented yet")
@@ -35,11 +38,11 @@ class integrator():
         """
         Made a little bit complicated bye the ability to simulate CRED1 camera
         """
-        electrons = self.acc * mgain
+        electrons = self.acc * self.mgain
         electrons = np.random.poisson(lam=electrons*self.ENF)/self.ENF
         electrons = np.clip(electrons, 0, self.well)
         read = electrons + np.random.normal(size=electrons.shape, scale=self.ron)
-        return self.acc
+        return read
     def reset(self,):
         self.vals = []
         self.acc = 0

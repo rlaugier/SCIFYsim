@@ -1,5 +1,7 @@
 import sympy as sp
 import numpy as np
+from kernuller import mas2rad
+from kernuller import rad2mas
 from kernuller import fprint
 
 import logging
@@ -13,11 +15,7 @@ def vec2diag(vec):
         A[i,i]= vec[i]
     return A
 
-class source(object):
-    def __init__(self, xx, yy, ss):
-        self.xx = xx
-        self.yy = yy
-        self.ss = ss
+
 
 class ee(object):
     def __init__(self, expression):
@@ -132,3 +130,23 @@ def test_ex():
     
     return b
 
+
+
+
+
+import cProfile, pstats, io
+
+def profileit(func):
+    def wrapper(*args, **kwargs):
+        datafn = func.__name__ + ".profile" # Name the data file sensibly
+        prof = cProfile.Profile()
+        retval = prof.runcall(func, *args, **kwargs)
+        s = io.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(prof, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        with open(datafn, 'w') as perf_file:
+            perf_file.write(s.getvalue())
+        return retval
+
+    return wrapper
