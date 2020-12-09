@@ -146,7 +146,7 @@ class simulator(object):
                 return
             else:
                 self.injector = injector
-            return
+
         # Recovering some high level parameters:
         self.ntelescopes = self.injector.ntelescopes
         # Preparing science spectral chanels
@@ -154,6 +154,8 @@ class simulator(object):
                                                self.injector.lambda_range[-1],
                                                self.n_spec_ch)
         pass
+    
+    
     def prepare_combiner(self, file, **kwargs):
         """
         Constructs self.combiner

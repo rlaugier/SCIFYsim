@@ -38,8 +38,25 @@ def seed_numpy(myseed):
     rs = np.random.RandomState(myseed)
     
 
+def seeing_to_r0(seeing, wl):
+    """
+    seeing : seeing in arcseconds
+    wl     : wl in m
+    """
+    r0 = wl / (seeing/3600*np.pi/180) 
+    return r0
+    
+
 # ===========================================================
 # ===========================================================
+
+
+
+
+
+
+
+
 class atmo(object):
     '''Atmospheric Kolmogorov-type phase screen.
 
@@ -65,9 +82,11 @@ class atmo(object):
 
     '''
     # ==================================================
-    def __init__(self, name="MaunaKea", csz = 512,
+    def __init__(self, name="GRAVITY+", csz = 512,
+                 psz=200,
                  lsz=8.0, r0=0.2, L0=10.0,
-                 fc=24.5, correc=1.0, seed=None):
+                 fc=24.5, correc=1.0, seed=None,
+                 pdiam=8.0):
 
         ''' Kolmogorov type atmosphere + qstatic error
 
@@ -76,6 +95,7 @@ class atmo(object):
         ----------
         - name  : a string describing the instrument
         - csz   : the size of the Fourier array
+        - psz   : the size of the pupil in  pixels
         - lsz   : the screen linear size (in meters)
         - r0    : the Fried parameter (in meters)
         - L0    : the outer scale parameter (in meters)
@@ -84,16 +104,18 @@ class atmo(object):
 
 
         self.csz     = csz
+        self.psz     = psz
         self.lsz     = lsz
+        self.pdiam   = pdiam
         self.r0      = r0
         self.L0      = L0
         
         self.rms_i   = 0.0
         self.correc  = correc
         self.fc      = fc
-        self.kolm    = atmo_screen(csz, lsz, r0, L0, fc, correc, seed=seed).real
+        self.kolm    = atmo_screen(self.csz, self.lsz, self.r0, self.L0, self.fc, self.correc, pdiam=self.pdiam, seed=seed).real
         
-        self.qstatic = np.zeros((self.csz, self.csz))
+        self.qstatic = np.zeros((self.psz, self.psz))
         self.shm_phs = self.qstatic
 
         self.kolm2   = np.tile(self.kolm, (2,2))
@@ -155,8 +177,8 @@ class atmo(object):
         if self.keepgoing is False:
             # case that must be adressed:
             # amplitude changed when atmo is frozen!
-            subk = self.kolm2[self.offx:self.offx+self.csz,
-                              self.offy:self.offy+self.csz].copy()
+            subk = self.kolm2[self.offx:self.offx+self.psz,
+                              self.offy:self.offy+self.psz].copy()
             
             if self.ttc is True:            
                 ttx = np.sum(subk*self.xx) / self.xxnorm2
@@ -181,8 +203,8 @@ class atmo(object):
             self.offx = self.offx % self.csz
             self.offy = self.offy % self.csz
 
-            subk = self.kolm2[self.offx:self.offx+self.csz,
-                              self.offy:self.offy+self.csz].copy()
+            subk = self.kolm2[self.offx:self.offx+self.psz,
+                              self.offy:self.offy+self.psz].copy()
 
             if self.ttc is True:
                 ttx = np.sum(subk*self.xx) / self.xxnorm2
@@ -254,6 +276,18 @@ def atmo_screen(isz, ll, r0, L0, fc=25, correc=1.0, pdiam=None,seed=None):
             
 dtor = np.pi/180.0  # to convert degrees to radians
 i2pi = 1j*2*np.pi   # complex phase factor
+
+
+
+
+
+
+
+
+
+
+
+
 
 class focuser(object):
     ''' Generic monochoromatic camera class
@@ -514,10 +548,26 @@ class focuser(object):
 
             self.make_image(phscreen=atmomap, dmmap=dmmap, nochange=nochange)
             
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
 class injector(object):
-    def __init__(self,pupil="VLT", ntelescopes=4, tt_correction=None,
+    def __init__(self,pupil="VLT",
+                 pdiam=8., ntelescopes=4, tt_correction=None,
                  no_piston=False, lambda_range=None,
-                 r0=8.,
+                 r0=1.,
+                 screen_oversize=1.,
+                 L0=10.,
+                 fc=25.,
+                 correc=10.,
                  NA = 0.23,
                  a = 4.25e-6,
                  ncore = 2.7,
@@ -529,6 +579,7 @@ class injector(object):
         """
         Generates fiber injection object.
         pupil     : The telescope pupil to consider
+        pdiam     : The pupil diameter
         ntelescopes : The number of telescopes to inject
         pupil     : Apupil name or definition
         tt_correction : Amount of TT to correct (Not implemented yet)
@@ -553,6 +604,7 @@ class injector(object):
         else:
             self.lambda_range = lambda_range
         self.ntelescopes = ntelescopes
+        self.pdiam = pdiam
         ##########
         # Temporary
         logit.warning("Hard-coded variables:")
@@ -561,7 +613,13 @@ class injector(object):
         self.ncore = ncore #2.7
         self.focal_hrange = focal_hrange # 20.0e-6
         self.focal_res = focal_res # 50
+        
         self.r0 = r0
+        self.screen_oversize = screen_oversize
+        self.L0 = L0
+        self.fc_ao = fc
+        self.correc = correc
+        
         self.pscale = pscale
         #Now calling the common part of the config
         self.pupil = pupil
@@ -643,26 +701,45 @@ class injector(object):
         lambmin = lambcen - lambwidth/2
         lambmax = lambcen + lambwidth/2
         lambda_range = np.linspace(lambmin, lambmax, nwl)
-        # Focal scale and range
-        focal_res = focal_res
+        
+        pdiams = theconfig.getarray("configuration","diam")
+        pdiam = pdiams[0]
+        
+        #atmo_mode = theconfig.get("atmo", "atmo_mode")
+        #if "seeing" in atmo_mode:
+        #    r0 = seeing_to_r0(theconfig.getfloat("atmo","seeing"), lambcen)
+        #else:
+        #    r0 = theconfig.getfloat("atmo", "r0")
         r0 = theconfig.getfloat("atmo", "r0")
+        fc_ao = theconfig.getfloat("atmo", "fc_ao")
+        screen_oversize = theconfig.getfloat("atmo", "screen_size")
+        L0 = theconfig.getfloat("atmo", "Lout")
+        correc = theconfig.getfloat("atmo", "correc")
+        
         logit.warning("Setting default focal range")
         logit.warning("focal_hrange=20.0e-6,  pscale = 4.5")
+        # Focal scale and range
+        focal_res = focal_res
         focal_hrange = 20.0e-6
         pscale = 4.5
         logit.warning("Needs a nice way to build pupils in here")
         if pupil is None:
-            pres = 200
-            radius = 100
+            pres = theconfig.getint("atmo", "pup_res")
+            radius = pres//2
             pupil = tel_pupil(pres, pres, radius, file=theconfig, tel_index=0)
         
         ntelescopes = theconfig.getint("configuration", "n_dish")
         if ntelescopes is not 4:
             raise NotImplementedError("Currently only supports 4 telescopes")
             
-        obj = cls(pupil=pupil, ntelescopes=ntelescopes, tt_correction=None,
+        obj = cls(pupil=pupil,
+                 pdiam=pdiam, ntelescopes=ntelescopes, tt_correction=None,
                  no_piston=False, lambda_range=lambda_range,
+                 screen_oversize=screen_oversize,
                  r0=r0,
+                 L0 = L0,
+                 fc = fc_ao,
+                 correc = correc,
                  NA = NA,
                  a = a,
                  ncore = ncore,
@@ -690,9 +767,18 @@ class injector(object):
                 theseed = seed + i
             else: 
                 theseed = seed
-            self.screen.append(atmo(csz=self.phscreensz, r0=self.r0, seed=theseed))
-            self.focal_plane.append([focuser(csz=self.phscreensz, xsz=self.focal_res,ysz=self.focal_res,pupil=self.pupil,
-                           pscale=self.pscale, wl=wl) for wl in self.lambda_range])
+            self.screen.append(atmo(csz=int(self.phscreensz*self.screen_oversize),
+                                    psz=self.phscreensz,
+                                    lsz=self.pdiam*self.screen_oversize,
+                                    r0=self.r0,
+                                    L0=self.L0,
+                                    fc=self.fc_ao,
+                                    correc=self.correc,
+                                    pdiam=self.pdiam,
+                                    seed=theseed))
+            self.focal_plane.append([focuser(csz=self.phscreensz,
+                                             xsz=self.focal_res, ysz=self.focal_res, pupil=self.pupil,
+                                             pscale=self.pscale, wl=wl) for wl in self.lambda_range])
             self.fiber = fiber_head()
         # Caluclating the focal length of the focuser
         self.focal_length = self.focal_hrange/utilities.mas2rad(self.focal_plane[0][0].fov/2)
@@ -798,6 +884,12 @@ J1 = implemented_function("J_1", j1)
 K0 = implemented_function("K_0", k0)
 from sympy.functions.elementary.piecewise import Piecewise
 from kernuller import fprint
+
+
+
+
+
+
 
 class fiber_head(object):
     def __init__(self, ):

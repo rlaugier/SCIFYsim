@@ -74,6 +74,8 @@ def plot_pupil(thearray, thepistons=None, psz=8.,
         perspective = False
     if perspective:
         projection_string = " (sizes emulate perspective)"
+    else:
+        projection_string = ""
     fig = plt.figure()
     for i in range(thearray.shape[0]):
         if perspective:
@@ -177,6 +179,7 @@ def plot_injection(theinjector):
     Plots the phase screen for each pupil.
     """
     import matplotlib.pyplot as plt
+    import scifysim as sf
     if not isinstance(theinjector, sf.injection.injector):
         raise ValueError("Expects an injector module")
     # Showing the wavefronts

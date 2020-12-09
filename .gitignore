@@ -3,7 +3,10 @@ build/
 scifysim.egg-info/
 *.ipynb_checkpoints/
 __pycache__
+scifysim/log/*
 *.log
 *.srctrldb
 *.srctrlbm
 *.srctrlprj
+
+scifysim/config/defaul_modified_4T.ini

@@ -1,6 +1,0 @@
-2020-10-25 10:49:00,323-WARNING-astropy- OldEarthOrientationDataWarning: Your version of the IERS Bulletin A is 87.4 days old. For best precision (on the order of arcseconds), you must download an up-to-date IERS Bulletin A table. To do so, run:
-
->>> from astroplan import download_IERS_A
->>> download_IERS_A()
-
-2020-10-25 11:17:55,174-ERROR-scifysim.observatory- Removing daytime obs is not finallized
