@@ -115,9 +115,9 @@ class simulator(object):
     
     
     
-    def prepare_injector(self, file=None, ntelescopes=None, tt_correction=None,
+    def prepare_injector(self, file=None, fpath=None,
+                 ntelescopes=None, tt_correction=None,
                  no_piston=None, lambda_range=None,
-                 r0=None,
                  NA=None,
                  a=None,
                  ncore=None,
@@ -137,7 +137,7 @@ class simulator(object):
             self.tt_correction = tt_correction
             logit.warning("no_piston not implemented")
             self.no_piston = no_piston
-            self.injector = sf.injection.injector.from_config_file(file=file, seed=seed)
+            self.injector = sf.injection.injector.from_config_file(file=file, fpath=fpath, seed=seed)
             # Recovering some 
         else:
             if injector is None:

@@ -20,6 +20,7 @@ test_injector for the `injector`
 import numpy as np
 import threading
 import time
+from pathlib import Path
 # amto_screen is now provided in house to provide seed
 #from xaosim import wavefront as wft
 
@@ -86,7 +87,7 @@ class atmo(object):
                  psz=200,
                  lsz=8.0, r0=0.2, L0=10.0,
                  fc=24.5, correc=1.0, seed=None,
-                 pdiam=8.0):
+                 pdiam=8.0, config=None):
 
         ''' Kolmogorov type atmosphere + qstatic error
 
@@ -102,17 +103,38 @@ class atmo(object):
         -----------------------------------------------------
         '''
 
+        if config is None:
+            self.csz     = csz
+            self.psz     = psz
+            self.lsz     = lsz
+            self.pdiam   = pdiam
+            self.r0      = r0
+            self.L0      = L0
 
-        self.csz     = csz
-        self.psz     = psz
-        self.lsz     = lsz
-        self.pdiam   = pdiam
-        self.r0      = r0
-        self.L0      = L0
-        
-        self.rms_i   = 0.0
-        self.correc  = correc
-        self.fc      = fc
+            self.rms_i   = 0.0
+            self.correc  = correc
+            self.fc      = fc
+        else :
+            self.config = config
+            pres = self.config.getint("atmo", "pup_res")
+            screen_oversize = self.config.getfloat("atmo", "screen_size")
+            pdiams = self.config.getarray("configuration","diam")
+            pdiam = pdiams[0]
+            r0 = self.config.getfloat("atmo", "r0")
+            L0 = self.config.getfloat("atmo", "Lout")
+            correc = self.config.getfloat("atmo", "correc")
+            
+            self.csz     = int(pres*screen_oversize)
+            self.psz     = pres
+            self.pdiam   = pdiam
+            self.lsz     = self.pdiam*screen_oversize
+            self.r0      = r0
+            self.L0      = L0
+
+            self.rms_i   = 0.0
+            self.correc  = correc
+            self.fc      = fc
+            
         self.kolm    = atmo_screen(self.csz, self.lsz, self.r0, self.L0, self.fc, self.correc, pdiam=self.pdiam, seed=seed).real
         
         self.qstatic = np.zeros((self.psz, self.psz))
@@ -563,11 +585,6 @@ class injector(object):
     def __init__(self,pupil="VLT",
                  pdiam=8., ntelescopes=4, tt_correction=None,
                  no_piston=False, lambda_range=None,
-                 r0=1.,
-                 screen_oversize=1.,
-                 L0=10.,
-                 fc=25.,
-                 correc=10.,
                  NA = 0.23,
                  a = 4.25e-6,
                  ncore = 2.7,
@@ -575,7 +592,8 @@ class injector(object):
                  focal_res=50,
                  pscale = 4.5,
                  interpolation=None,
-                 seed=None):
+                 seed=None,
+                 atmo_config=None):
         """
         Generates fiber injection object.
         pupil     : The telescope pupil to consider
@@ -585,7 +603,6 @@ class injector(object):
         tt_correction : Amount of TT to correct (Not implemented yet)
         no_piston : Remove the effect of piston at the injection 
                     (So that it is handled only by the FT.)
-        r0        : The r0 of the phase screen
         NA        : Then numerical aperture of the fiber
         a         : The radius of the core (m)
         ncore    : The refractive index of the core
@@ -593,6 +610,7 @@ class injector(object):
         focal_res : The total resolution of the focal plane to simulate
         pscale    : The pixel scale for imager setup (mas/pix)
         seed      : Value to pass for random phase screen initialization
+        atmo_config: A parsed config file 
                     
         Use: call `next(self.it)` that returns injection phasors
         For more information, look into the attributes.
@@ -605,6 +623,9 @@ class injector(object):
             self.lambda_range = lambda_range
         self.ntelescopes = ntelescopes
         self.pdiam = pdiam
+        
+        self.atmo_config = atmo_config
+        
         ##########
         # Temporary
         logit.warning("Hard-coded variables:")
@@ -614,11 +635,6 @@ class injector(object):
         self.focal_hrange = focal_hrange # 20.0e-6
         self.focal_res = focal_res # 50
         
-        self.r0 = r0
-        self.screen_oversize = screen_oversize
-        self.L0 = L0
-        self.fc_ao = fc
-        self.correc = correc
         
         self.pscale = pscale
         #Now calling the common part of the config
@@ -648,15 +664,20 @@ class injector(object):
         from scifysim import parsefile
         if file is None:
             logit.debug("Need to read the file")
-            assert fpath is not None , "Need to proved at least\
+            assert fpath is not None , "Need to provide at least\
                                         a path to a config file"
             logit.debug("Loading the parsefile module")
             theconfig = parsefile.parse_file(fpath)
+            confpath = Path(fpath).parent
         else:
             logit.debug("file provided")
             assert isinstance(file, parsefile.ConfigParser), \
                              "The file must be a ConfigParser object"
             theconfig = file
+            if fpath is None:
+                logit.error("Now we use fpath to provide the root for appendix config files")
+            else:
+                confpath = Path(fpath)
         
         # Numerical aperture
         NA = theconfig.getfloat("fiber", "num_app")
@@ -705,16 +726,27 @@ class injector(object):
         pdiams = theconfig.getarray("configuration","diam")
         pdiam = pdiams[0]
         
+        separate_atmo_file = theconfig.getboolean("appendix","use_atmo")
+        if separate_atmo_file:
+            rel_path = theconfig.get("appendix", "atmo_file")
+            if confpath is not None:
+                logit.warning("file for atmo configuration:")
+                logit.warning((confpath/rel_path).absolute())
+                atmo_config = parsefile.parse_file(confpath/rel_path)
+            else:
+                logit.error("confp was not provided")
+                raise NameError("Need to provide fpath")
+        else:
+            logit.warning("Using same file for atmo configuration")
+            atmo_config = theconfig
+        
+            
         #atmo_mode = theconfig.get("atmo", "atmo_mode")
         #if "seeing" in atmo_mode:
         #    r0 = seeing_to_r0(theconfig.getfloat("atmo","seeing"), lambcen)
         #else:
         #    r0 = theconfig.getfloat("atmo", "r0")
-        r0 = theconfig.getfloat("atmo", "r0")
-        fc_ao = theconfig.getfloat("atmo", "fc_ao")
-        screen_oversize = theconfig.getfloat("atmo", "screen_size")
-        L0 = theconfig.getfloat("atmo", "Lout")
-        correc = theconfig.getfloat("atmo", "correc")
+        
         
         logit.warning("Setting default focal range")
         logit.warning("focal_hrange=20.0e-6,  pscale = 4.5")
@@ -735,17 +767,13 @@ class injector(object):
         obj = cls(pupil=pupil,
                  pdiam=pdiam, ntelescopes=ntelescopes, tt_correction=None,
                  no_piston=False, lambda_range=lambda_range,
-                 screen_oversize=screen_oversize,
-                 r0=r0,
-                 L0 = L0,
-                 fc = fc_ao,
-                 correc = correc,
-                 NA = NA,
-                 a = a,
-                 ncore = ncore,
+                 atmo_config=atmo_config,
+                 NA=NA,
+                 a=a,
+                 ncore=ncore,
                  focal_hrange=focal_hrange,
                  focal_res=focal_res,
-                 pscale = pscale,
+                 pscale=pscale,
                  interpolation=interpolation,
                  seed=seed)
         obj.config = theconfig
@@ -767,14 +795,7 @@ class injector(object):
                 theseed = seed + i
             else: 
                 theseed = seed
-            self.screen.append(atmo(csz=int(self.phscreensz*self.screen_oversize),
-                                    psz=self.phscreensz,
-                                    lsz=self.pdiam*self.screen_oversize,
-                                    r0=self.r0,
-                                    L0=self.L0,
-                                    fc=self.fc_ao,
-                                    correc=self.correc,
-                                    pdiam=self.pdiam,
+            self.screen.append(atmo(config=self.atmo_config,
                                     seed=theseed))
             self.focal_plane.append([focuser(csz=self.phscreensz,
                                              xsz=self.focal_res, ysz=self.focal_res, pupil=self.pupil,
