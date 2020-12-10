@@ -10,77 +10,14 @@ from kernuller import mas2rad, rad2mas
 logit = logging.getLogger(__name__)
 
 class simulator(object):
-    def __init__(self, location=None, array=None,
-                tarname="No name", tarpos=None, n_spec_ch=100):
+    def __init__(self,file=None, fpath=None):
+                 #location=None, array=None,
+                #tarname="No name", tarpos=None, n_spec_ch=100):
         """
-        The object meant to assemble and operate the simulator
-        location    : The location of the observatory (None defaults to VLTI)
-        array       : The pupil array geometry (either "VLTI", "CHARA"... or ndarray
-                        (see kernuller.VLTI for the format))
-        tarname     : Name of the target
-        tarpos      : RADEC position of the target
-        
-        n_spec_ch : Then number of sprectral chanels simulated
-        
-        """
-        logit.info("Setting up the array")
-        if (array is None) and (location is None):
-            raise NotImplementedError("You must provide an array")
-        
-        if "VLTI" in array:
-            self.array = kernuller.VLTI
-            self.multi_dish = True
-        elif "CHARA" in array:
-            self.array = kernuller.CHARA
-            self.multi_dish = True
-        #elif combiner is not None:
-        #    logit.warning("The array will be defined by default based on location")
-        #    pass
-        else :
-            # The array is provided as an ndarray
-            logit.info("Setting an arbitrary array")
-            if not isinstance(array, np.ndarray):
-                logit.error("Array name not understood")
-                logit.error("'CHARA' or 'VLTI' or a numpy ndarray")
-                raise ValueError("The array parameter must be \
-                            the name of a supported arary\
-                            or a numpy ndarray.")
-                                 
-            if array.shape[1] is not 2:
-                raise ValueError("Shape of array must be (n, 2)")
-            self.array = array
-            
-        # Setting up the location
-        logit.info("Setting up the location")
-        if location is None:
-            logit.warning("Location not provided")
-            if "VLTI" in array:
-                logit.warning("Location defaulted to Paranal")
-                location = "paranal"
-            elif "CHARA" in array:
-                logit.warning("Location defaulted to CHARA")
-                location = "CHARA"
-        else:
-            # If location is provided.
-            self.obs = sf.observatory.observatory(self.array, location=location)
-            
-        # Target informations
-        self.tarname = tarname
-        self.tarpos = tarpos
-        self.n_spec_ch = n_spec_ch
-        
-        self.sequence = None
-        
-        
-    
-    @classmethod
-    def from_config(cls, file=None, fpath=None):
-        """
-        Construct the injector object from a config file
+        The object meant to assemble and operate the simulator. Construct the injector object from a config file
         file      : A pre-parsed config file
         fpath     : The path to a config file
-        nwl       : The number of wl channels
-        focal_res : The total resolution of the focal plane to simulate 
+        
         """
         from scifysim import parsefile
         if file is None:
@@ -88,30 +25,52 @@ class simulator(object):
             assert fpath is not None , "Need to proved at least\
                                         a path to a config file"
             logit.debug("Loading the parsefile module")
-            theconfig = parsefile.parse_file(fpath)
+            self.config = parsefile.parse_file(fpath)
         else:
             logit.debug("file provided")
             assert isinstance(file, parsefile.ConfigParser), \
                              "The file must be a ConfigParser object"
-            theconfig = file
+            self.config = file
         
-        location = theconfig.get("configuration", "location")
-        array = theconfig.get("configuration", "config")
-        n_spec_ch = theconfig.getint("photon", "n_spectral_science")
+        self.location = self.config.get("configuration", "location")
+        self.array_config = self.config.get("configuration", "config")
+        raw_array = eval("kernuller.%s"%(self.array_config))
+        self.order = self.config.getarray("configuration", "order").astype(np.int16)
+        self.array = raw_array[self.order]
+        self.n_spec_ch = self.config.getint("photon", "n_spectral_science")
         
         # Defining the target
-        mode = theconfig.get("target", "mode")
+        mode = self.config.get("target", "mode")
         if "name" in mode:
-            tarname = theconfig.get("target", "target")
-            tarpos = sf.observatory.astroplan.FixedTarget.from_name(tarname)
+            self.tarname = self.config.get("target", "target")
+            self.tarpos = sf.observatory.astroplan.FixedTarget.from_name(self.tarname)
         else:
             raise NotImplementedError("Some day we will be able to do it by RADEC position")
+            
+        self.multi_dish = self.config.getboolean("configuration", "multi_dish")
         
+
+        #self.obs = sf.observatory.observatory(self.array, location=location)
         
-        obj = cls(location=location, array=array,
-                 tarname=tarname, tarpos=tarpos, n_spec_ch=n_spec_ch)
-        obj.config = theconfig
-        return obj
+        self.sequence = None
+        
+    def prepare_observatory(self, file=None, fpath=None):
+        """
+        Preprare the observatory object for the simulator.
+        """
+        if file is not None:
+            theconfig = file
+        elif fpath is not None:
+            theconfig = parsefile.parse_file(fpath)
+        else:
+            logit.warning("Using the config file of the simulator for the observatory")
+            theconfig = self.config
+        self.obs = sf.observatory.observatory(config=theconfig)
+        
+        logit.warning("Undecided whether to store array in simulator or observatory")
+        assert np.allclose(self.obs.statlocs, self.array)
+        
+
     
     
     

@@ -2,6 +2,8 @@
 import numpy as np
 import sympy as sp
 
+import kernuller
+
 
 from astropy.time import Time
 import astropy.units as u
@@ -31,7 +33,7 @@ class observatory(object):
     """
     This class help define the properties of the observatory infrastructure, especially the uv coverage.
     """
-    def __init__(self, statlocs, location=None, verbose=False, multi_dish=True):
+    def __init__(self, statlocs=None, location=None, verbose=False, multi_dish=True, config=None):
         """
         statlocs : The station locations 
                     (east, north) for each aperture shape is (Na, 2)
@@ -39,11 +41,18 @@ class observatory(object):
                     example: myloc = astroplan.Observer.at_site("Paranal", timezone="UTC")
         """
         self.verbose = verbose
+        self.config = config
         if location is None:
-            self.observatory_location = astroplan.Observer.at_site("Paranal", timezone="UTC")
+            location = self.config.get("configuration", "location")
+            self.observatory_location = astroplan.Observer.at_site(location, timezone="UTC")
         else :
             self.observatory_location = astroplan.Observer.at_site(location, timezone="UTC")
-        self.statlocs = statlocs
+        
+        
+        self.array_config = self.config.get("configuration", "config")
+        raw_array = eval("kernuller.%s"%(self.array_config))
+        self.order = self.config.getarray("configuration", "order").astype(np.int16)
+        self.statlocs = raw_array[self.order]
         
         self.theta = sp.symbols("self.theta")
         #R handles the azimuthal rotation
