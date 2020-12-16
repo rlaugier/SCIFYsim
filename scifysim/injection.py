@@ -864,7 +864,7 @@ class injector(object):
                                       fill_value="extrapolate")\
                                                             for i in range(self.ntelescopes)]
             yield self.all_inj_phasors
-            
+        
     def compute_best_injection(self,interpolation):
         """
         This one will yield the method that interpolates all the injection phasors
@@ -885,6 +885,39 @@ class injector(object):
                                   self.injected[i,:],kind=interpolation,
                                   fill_value="extrapolate")\
                                                         for i in range(self.ntelescopes)]
+        
+        
+    def compute_injection_function(self, interpolation="linear", tilt_res=50, tilt_range=2.):
+        """
+        Computes an interpolation of the injection as a function of a tip-tilt
+        
+        injector.injection_abs(wl [m], offset [lambda/D])
+        """
+        from scipy.interpolate import interp2d
+        
+        meanwl = np.mean(self.lambda_range)
+        # tilt_vector goes for 1 lambda/D
+        tilt_vector = np.linspace(-meanwl/2*1e6, meanwl/2*1e6,
+                                  self.phscreensz)[None,:] * np.ones(self.phscreensz)[:,None]
+        offset = np.linspace(0., tilt_range, tilt_res)
+        injecteds = []
+        for k, theoffset in enumerate(offset):
+            thescreen = theoffset * tilt_vector
+            focal_planes = []
+            for i, scope in enumerate(self.focal_plane):
+                focal_wl = []
+                for fiberwl in scope:
+                    focal_wl.append(fiberwl.getimage(thescreen))
+                focal_planes.append(focal_wl)
+            focal_planes = np.array(focal_planes)
+            injected = np.sum(focal_planes*self.lpmap[None,:,:,:], axis=(2,3))[0]
+            #print(injected.dtype)
+            injecteds.append(injected)
+        injecteds = np.array(injecteds)
+        
+        self.injection_abs = interp2d(self.lambda_range, offset, np.abs(injecteds), kind=interpolation)
+        self.injection_arg = interp2d(self.lambda_range, offset, np.angle(injecteds), kind=interpolation)
+        return
             
 
 from scipy.special import j0, k0

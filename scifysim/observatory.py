@@ -66,6 +66,12 @@ class observatory(object):
         #C handles the piston due to elevation.
         self.Cs = sp.Matrix([[0, sp.cos(self.theta)]])
         self.C = sp.lambdify(self.theta, self.Cs, modules="numpy")
+        
+    def point(self, time, target):
+        self.altaz = self.observatory_location.altaz(target=target,
+                                                   time=obstimes)
+        self.PA = self.observatory_location.parallactic_angle(time, target=target)
+        
 
         
     def build_observing_sequence(self, times=None,

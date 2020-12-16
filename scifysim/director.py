@@ -139,7 +139,8 @@ class simulator(object):
         """
         self.n_subexps = int(texp/t_co)
         #taraltaz = self.obs.observatory_location.altaz(time, target=self.target)
-        taraltaz, tarPA = self.obs.get_position(self.target, time)
+        #taraltaz, tarPA = self.obs.get_position(self.target, time)
+        self.obs.point()
         array = self.obs.get_projected_array(taraltaz, PA=tarPA)
         integrator = sf.spectrograph.integrator()
         for i in tqdm(range(self.n_subexps)):

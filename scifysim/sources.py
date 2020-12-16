@@ -4,55 +4,141 @@ import sympy as sp
 from sympy.functions.elementary.piecewise import Piecewise
 from kernuller import mas2rad, rad2mas
 from . import utilities
+from astropy import constants
+from astropy import units
+import scipy.interpolate as interp
 
-class blackbody(object):
-    def __init__(self, modules="numexpr", mode=["nu","k","lambda"]):
+class transmission_emission(object):
+    def __init__(self,trans_file="data/MK_trans_sfs.txt", T=285,
+                 airmass=False, observatory=None):
+        """
+        Reproduces a basic behaviour in emission-transmission
+        """
+        self.trans_file = np.loadtxt(trans_file)
+        self.trans = interp.interp1d(self.trans_file[:,0], self.trans_file[:,1],
+                                     kind="linear", bounds_error=False )
+        self.T = T
+        self.airmass = airmass
+        if self.airmass:
+            self.obs = observatory
+        
+        
+    def get_trans_emit(self,wl, bandwidth=None, bright=False, no=False):
+        if isinstance(wl, np.ndarray):
+            if bright:
+                result = np.ones_like(wl)
+            else:
+                result = np.zeros_like(wl)
+        else:
+            if bright:
+                result = 1.
+            else:
+                result = 0.
+        transmission = self.trans(wl)
+        if self.airmass :
+            sky = transmission**self.obs.altaz.secz
+        else :
+            sky = transmission
+        
+        # Determining brightness:
+        if bright:
+            sky = (1-sky) * blackbody.get_B_lamb_Jy(wl, self.T)
+            
+        # Add offset of 3.25e-3 Jy/as² to account fot OH emission lines (see Vanzi & Hainaut)
+        if bright:
+            sky[wl<2.5e-6] = sky[wl<2.5e-6] + 3.25e-3*units.sr.to(units.arcsec**2)
+        
+        return sky
+        
+        
+    def get_mean_trans_emit(self, wl, bandwidth=None, bright=False,n_sub=10):
+        #
+        # Little shortcut when bandwidth is not provided: infer it based
+        # on the band covered by wl
+        if bandwidth is None:
+            if isinstance(wl, np.ndarray):
+                cen_wl = wl.copy()
+                bandwidth = np.gradient(wl)
+            else:
+                bandwidth = np.max(wl) - np.min(wl)
+                cen_wl = np.mean(wl)
+        else:
+            cen_wl = wl
+        
+        lambda_min = wl - bandwidth/2
+        lambda_max = wl + bandwidth/2
+        os_wl = np.linspace(lambda_min, lambda_max, n_sub)
+        sky = self.get_trans_emit(os_wl, bright=bright)
+        mean_sky = np.mean(sky, axis=0)
+        return mean_sky
+    
+    
+#sky_link = transmission_emission()
+
+class _blackbody(object):
+    def __init__(self, modules="numexpr"):
         """
         Builds the spectral radiance as a function of T and \nu, k, and \lambda
-        Call to get the function B = f(lambda , T)
-        self.Bofnu is the function  B = f(nu , T)
-        self.Bofk is the function  B = f(k , T)
-        self.Boflambda is the function  B = f(lambda , T) (same as __call__)
+        Call self.get_Bxxx to get the function B = f(lambda , T)
+        
+           GENIEsim  0         B_lamb_Jy      - result in Jy / sr
+                     1         B_lamb_W       -           W / m^2 / m / sr
+                     2         B_lamb_ph      -           ph / s / m^2 / m / sr
+                     3         B_nu_ph        -           ph / s / m^2 / Hz / sr
         """
         
-        self.mode = mode
         self.h, self.nu, self.c, self.k_b, self.T = sp.symbols("h, nu, c, k_b, T", real=True)
-        self.B = 2*self.h*self.nu**3/self.c**2 * \
-                    1/(sp.exp(self.h*self.nu/(self.k_b*self.T)) -1)
-        self.thesubs = [(self.c, 299792458.),# speed of light
-                       (self.k_b, 1.380649e-23),# Boltzmann constant (J.K^-1)
-                       (self.h, 6.62607015e-34),# Planck constant (J.s)
+        self.lamb = sp.symbols("lambda", real=True)
+        self.k_W2Jy = sp.symbols("k_W2Jy", real=True) #The coefficient to convert from W to Jansky
+        
+        self.thesubs = [(self.c, constants.c.value),# speed of light
+                       (self.k_b, constants.k_B.value),# Boltzmann constant (J.K^-1)
+                       (self.h, constants.h.value),# Planck constant (J.s)
+                       (self.k_W2Jy, 1e26)
                        ]
-        if "nu" in self.mode:
-            #fprint(self.B.subs(self.thesubs).simplify(), r"B(\nu, T) = ")
-            self.Bofnu = utilities.ee(self.B.subs(self.thesubs))
-            self.Bofnu.lambdify((self.nu, self.T), modules=modules)
-            pass
-        if "k" in self.mode:
-            self.k, self.lamb = sp.symbols("k, lambda", real=True)
-            self.ksubs = self.thesubs.copy()
-            self.ksubs.insert(0, (self.lamb, 2*np.pi/self.k))
-            self.ksubs.insert(0, (self.nu, self.c/self.lamb))
-            #fprint(self.B.subs(self.ksubs), r"B(k, T) = ")
-            self.Bofk = utilities.ee(self.B.subs(self.ksubs))
-            self.Bofk.lambdify((self.k, self.T), modules=modules)
-            
-            
-        if "lambda" in self.mode:
-            self.k, self.lamb = sp.symbols("k, lambda", real=True)
-            self.lambsubs = self.thesubs.copy()
-            self.lambsubs.insert(0, (self.nu, self.c/self.lamb))
-            #fprint(self.B.subs(self.lambsubs), r"B(\lambda, T) = ")
-            self.Boflamb = utilities.ee(self.B.subs(self.lambsubs))
-            self.Boflamb.lambdify((self.lamb, self.T), modules=modules)
+        
+        # For Jy / sr
+        self.B_lamb_Jy = self.k_W2Jy*2*self.h*self.c / self.lamb**3 * \
+                    1/(sp.exp(self.h*self.c/(self.lamb*self.k_b*self.T)) -1)
+        self.get_B_lamb_Jy = utilities.ee(self.B_lamb_Jy.subs(self.thesubs))
+        self.get_B_lamb_Jy.lambdify((self.lamb, self.T), modules=modules)
+        self.get_B_lamb_Jy.__doc__ = """f(wavelength[m], T[K]) Computes the Planck law in [Jy / sr]"""
+        
+        # For  W / m^2 / m / sr
+        self.B_lamb_W = 2*self.h*self.c**2 / self.lamb**5 * \
+                    1/(sp.exp(self.h*self.c/(self.lamb*self.k_b*self.T)) -1)
+        self.get_B_lamb_W = utilities.ee(self.B_lamb_W.subs(self.thesubs))
+        self.get_B_lamb_W.lambdify((self.lamb, self.T), modules=modules)
+        self.get_B_lamb_W.__doc__ = """f(wavelength[m], T[K]) Computes the Planck law in [W / m^2 / m / sr]"""
+        
+        # For ph / s / m^2 / m / sr
+        self.B_lamb_ph = 2*self.c / self.lamb**4 * \
+                    1/(sp.exp(self.h*self.c/(self.lamb*self.k_b*self.T)) -1)
+        self.get_B_lamb_ph = utilities.ee(self.B_lamb_ph.subs(self.thesubs))
+        self.get_B_lamb_ph.lambdify((self.lamb, self.T), modules=modules)
+        self.get_B_lamb_ph.__doc__ = """f(wavelength[m], T[K]) Computes the Planck law in [ph / s / m^2 / m / sr]"""
+        
+        # For ph / s / m^2 / Hz / sr
+        self.B_nu_ph = 2/self.lamb**2 / self.lamb**4 * \
+                    1/(sp.exp(self.h*self.c/(self.lamb*self.k_b*self.T)) -1)
+        self.get_B_nu_ph = utilities.ee(self.B_nu_ph.subs(self.thesubs))
+        self.get_B_nu_ph.lambdify((self.lamb, self.T), modules=modules)
+        self.get_B_nu_ph.__doc__ = """f(wavelength[m], T[K]) Computes the Planck law in [ph / s / m^2 / Hz / sr]
+        Nota: wavelength is still input in [m]"""
         
         
-    def __call__(self, nu, T):
+    def Stefan_Boltzmann(self, T, epsilon=1.):
         """
-        Default call is for B(lambda)
+        Quick utility function giving the Stefan-Boltzmann law
         """
-        result = self.Boflamb(nu, T)
-        return result
+        sigma = constants.sigma_sb.value
+        M = sigma * epsilon * T**4
+        return M
+        
+        
+        
+blackbody = _blackbody()
+
 
 class source(object):
     def __init__(self, xx, yy, ss):
