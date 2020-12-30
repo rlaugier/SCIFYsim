@@ -42,7 +42,7 @@ class transmission_emission(object):
         
         # Determining brightness:
         if bright:
-            sky = (1-sky) * blackbody.get_B_lamb_Jy(wl, self.T)
+            sky = (1-sky) * blackbody.get_B_lamb_ph(wl, self.T)
             
         # Add offset of 3.25e-3 Jy/as² to account fot OH emission lines (see Vanzi & Hainaut)
         if bright:
@@ -74,6 +74,7 @@ class transmission_emission(object):
     
     
 #sky_link = transmission_emission()
+
 
 class _blackbody(object):
     def __init__(self, modules="numexpr"):
@@ -138,6 +139,118 @@ class _blackbody(object):
         
         
 blackbody = _blackbody()
+
+def distant_blackbody(lambda_range, T, dist, radius):
+    """
+    Returns the flux density for a distant blackbody
+    T      : temperature [K]
+    dist   : Distance [pc]
+    
+    """
+    dlambda = np.gradient(lambda_range)
+    flux_density = blackbody.get_B_lamb_ph(lambda_range, T)*dlambda \
+                    * np.pi * ((radius * constants.R_sun) / (dist * constants.pc))**2
+    return flux_density
+
+
+class resolved_source(object):
+    def __init__(self, lambda_range, distance, radius, T,
+                 angular_res=10, radial_res=15, offset=(0.,0.),
+                 build_map=True, resolved=True):
+        """
+        distance             : Distance of the source [pc]
+        radius             : The radius of the source [R_sun]
+        T                    : Blackbody temperature [K]
+        angular_res          : Number of bins in position angle
+        radial_res           : Number of bins in radius
+        offset               : Offset of the source radial ([mas], [deg])
+        build_map            : Whether to precompute a mapped spectrum 
+        resolved             : If false, computes a single point-source
+        
+        
+        After building the map, self.ss (wl, pos_x, pos_y) contains the map
+        of flux density corresponding to positions self.xx, self.yy
+        """
+        self.lambda_range = lambda_range
+        self.T = T
+        self.distance = distance
+        self.radius = radius
+        self.offset = offset
+        self.ang_radius = self.radius / (self.distance*units.pc.to(units.R_sun))
+        total_surface = np.pi * self.ang_radius**2 # disk section [sr]
+        self.total_flux_density = self.distant_blackbody()/ total_surface # [ph / s / m^2]
+        
+        if resolved:
+            self.build_grid(angular_res, radial_res)
+        else: 
+            self.build_point()
+        if build_map:
+            self.build_spectrum_map()
+            
+            
+    def build_point(self,):
+        """
+        Routine used to construct unresolved source:
+        Creates self.xx, self.yy, self.ds, self.theta [rad], self.r [rad]
+        Shapes of xx, yy are preserved, but they will contain a single element
+        corresponding to the unresolved point source.
+        
+        """
+        
+        self.theta, self.r = np.array([[0.]]), np.array([[0.]])
+        # Angular positions referenced East of North
+        self.xx = -self.r*np.sin(self.theta)*units.rad.to(units.mas) \
+                    - self.offset[0]*np.sin(self.offset[1]*units.deg.to(units.rad))
+        self.yy =  self.r*np.cos(self.theta)*units.rad.to(units.mas) \
+                    + self.offset[0]*np.cos(self.offset[1]*units.deg.to(units.rad))
+        
+        self.ds = np.array([[np.pi * self.ang_radius**2]])
+        
+    def build_grid(self, angular_res, radial_res):
+        """
+        Routine used to construct resolved source:
+        Creates self.xx, self.yy, self.ds, self.theta, self.r
+        
+        """
+        
+        self.theta, self.r = np.meshgrid( np.linspace(0., 2*np.pi, angular_res, endpoint=False), np.linspace(0., self.ang_radius, radial_res, endpoint=False) )
+        # Angular positions referenced East of North
+        self.xx = -self.r*np.sin(self.theta)*units.rad.to(units.mas) \
+                    - self.offset[0]*np.sin(self.offset[1]*units.deg.to(units.rad))
+        self.yy =  self.r*np.cos(self.theta)*units.rad.to(units.mas) \
+                    + self.offset[0]*np.cos(self.offset[1]*units.deg.to(units.rad))
+        
+        self.dr = np.gradient(self.r)[0]
+        self.dtheta = np.gradient(self.theta)[1]
+        self.ds = self.r*self.dr*self.dtheta
+        
+    def get_spectrum_map(self):
+        """
+        Maps self.total_flux_density
+        """
+        themap =  self.total_flux_density[:,None,None]*self.ds[None,:,:,] #self.r[None,:,:]*self.dr[None,:,:]*self.dtheta[None,:,:]
+        return themap
+    
+    def build_spectrum_map(self):
+        """
+        The map is saved in a flat shape
+        xx_f and yy_f are created to be flat versions of the coordinates.
+        """
+        self.ss = self.get_spectrum_map()
+        self.ss = self.ss.reshape(self.ss.shape[0], self.ss.shape[1]*self.ss.shape[2])
+        self.xx_f = self.xx.flatten()
+        self.yy_f = self.yy.flatten()
+        
+    def distant_blackbody(self):
+        """
+        Returns the flux density for a distant blackbody
+
+        """
+        dlambda = np.gradient(self.lambda_range)
+        flux_density = blackbody.get_B_lamb_ph(self.lambda_range, self.T)*dlambda \
+                        * np.pi * ((self.radius * constants.R_sun) / (self.distance * constants.pc))**2
+        return flux_density
+        
 
 
 class source(object):

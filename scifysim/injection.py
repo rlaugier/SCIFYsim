@@ -21,6 +21,8 @@ import numpy as np
 import threading
 import time
 from pathlib import Path
+
+from scipy.interpolate import interp2d
 # amto_screen is now provided in house to provide seed
 #from xaosim import wavefront as wft
 
@@ -502,7 +504,7 @@ class focuser(object):
         - atmo    : (optional) atmospheric phase screen
         - qstatic : (optional) a quasi-static aberration
         ------------------------------------------------------------------- '''
-
+        from pdb import set_trace
         # nothing to do? skip the computation!
 
         mu2phase = 4.0 * np.pi / self.wl / 1e6  # convert microns to phase
@@ -513,7 +515,6 @@ class focuser(object):
             phs += phscreen
             
         wf = np.exp(1j*phs*mu2phase)
-
         wf *= np.sqrt(self.signal / self.pupil.sum())  # signal scaling
         wf *= self.pupil                               # apply the pupil mask
         self._phs = phs * self.pupil                   # store total phase
@@ -583,7 +584,7 @@ class focuser(object):
             
 class injector(object):
     def __init__(self,pupil="VLT",
-                 pdiam=8., ntelescopes=4, tt_correction=None,
+                 pdiam=8.,odiam=1., ntelescopes=4, tt_correction=None,
                  no_piston=False, lambda_range=None,
                  NA = 0.23,
                  a = 4.25e-6,
@@ -623,6 +624,8 @@ class injector(object):
             self.lambda_range = lambda_range
         self.ntelescopes = ntelescopes
         self.pdiam = pdiam
+        self.odiam = odiam
+        self.collecting = np.pi/4*(self.pdiam**2 - self.odiam**2)
         
         self.atmo_config = atmo_config
         
@@ -725,6 +728,8 @@ class injector(object):
         
         pdiams = theconfig.getarray("configuration","diam")
         pdiam = pdiams[0]
+        odiams = theconfig.getarray("configuration", "cen_obs")
+        odiam = odiams[0]
         
         separate_atmo_file = theconfig.getboolean("appendix","use_atmo")
         if separate_atmo_file:
@@ -752,8 +757,8 @@ class injector(object):
         logit.warning("focal_hrange=20.0e-6,  pscale = 4.5")
         # Focal scale and range
         focal_res = focal_res
-        focal_hrange = 20.0e-6
-        pscale = 4.5
+        focal_hrange = theconfig.getfloat("fiber", "focal_hrange")
+        pscale = theconfig.getfloat("fiber", "pscale")
         logit.warning("Needs a nice way to build pupils in here")
         if pupil is None:
             pres = theconfig.getint("atmo", "pup_res")
@@ -765,7 +770,8 @@ class injector(object):
             raise NotImplementedError("Currently only supports 4 telescopes")
             
         obj = cls(pupil=pupil,
-                 pdiam=pdiam, ntelescopes=ntelescopes, tt_correction=None,
+                 pdiam=pdiam, odiam=odiam,
+                 ntelescopes=ntelescopes, tt_correction=None,
                  no_piston=False, lambda_range=lambda_range,
                  atmo_config=atmo_config,
                  NA=NA,
@@ -915,10 +921,22 @@ class injector(object):
             injecteds.append(injected)
         injecteds = np.array(injecteds)
         
-        self.injection_abs = interp2d(self.lambda_range, offset, np.abs(injecteds), kind=interpolation)
-        self.injection_arg = interp2d(self.lambda_range, offset, np.angle(injecteds), kind=interpolation)
+        self.injection_rate = unsorted_interp2d(self.lambda_range, offset, np.abs(injecteds)**2, kind=interpolation)
+        self.injection_rate.__doc__ = """rate(wavelength[m], offset[lambda/D])"""
+        self.injection_arg = unsorted_interp2d(self.lambda_range, offset, np.angle(injecteds), kind=interpolation)
+        self.injection_arg.__doc__ = """phase(wavelength[m], offset[lambda/D])"""
         return
-            
+    
+class unsorted_interp2d(interp2d):
+    def __call__(self, x, y, dx=0, dy=0):
+        if (len(x) is 1) and (len(y) is 1):
+            return interp2d.__call__(self, x, y, dx=dx, dy=dy, assume_sorted=True)
+        asx = np.argsort(x)
+        usx = np.argsort(asx)
+        asy = np.argsort(y)
+        usy = np.argsort(asy)
+        
+        return interp2d.__call__(self, x[asx], y[asy], dx=dx, dy=dy, assume_sorted=True)[usy,:][:,usx]
 
 from scipy.special import j0, k0
 from scipy.constants import mu_0, epsilon_0
@@ -1025,6 +1043,48 @@ class fiber_head(object):
         amap = self.Hy_xy_full(xx[None,:,:], yy[None,:,:], lambs[:,None,None])
         self.map = amap / np.sqrt(np.sum(np.abs(amap)**2, axis=(1,2)))[:,None,None]
         return self.map
+
+
+import astropy.units as units
+class injection_vigneting(object):
+    """
+    A shortcut to injection simulation in the case of diffuse sources
+    injector     : an injector object to emulate
+    res          : 
+    """
+    def __init__(self, injector, res, crop=1.):
+        # First build a grid of coordinates
+        
+        lambond = (np.mean(injector.lambda_range) / injector.pdiam)*units.rad.to(units.mas)
+        self.mas2lambond = 1/lambond
+        
+        hskyextent = (injector.focal_hrange/injector.focal_length)*units.rad.to(units.mas)
+        hskyextent = hskyextent*crop
+        self.resol = res #injector.focal_res
+        xx, yy = np.meshgrid(
+                            np.linspace(-hskyextent, hskyextent, self.resol),
+                            np.linspace(-hskyextent, hskyextent, self.resol))
+        self.collecting = np.pi/4*(injector.pdiam**2 - injector.odiam**2)
+        self.ds = np.mean(np.gradient(xx)[1]) * np.mean(np.gradient(yy)[0]) #In mas
+        self.xx = xx.flatten()
+        self.yy = yy.flatten()
+        self.rr = np.sqrt(self.xx**2 + self.yy**2)
+        self.rr_lambdaond =  self.rr*self.mas2lambond
+        
+        print(self.mas2lambond)
+        
+        if not hasattr(injector, "injection_rate"):
+            injector.compute_injection_function("linear", tilt_range=1.)
+        self.vig = injector.injection_rate(injector.lambda_range, self.rr_lambdaond)
+        self.vig_func = injector.injection_rate
+        self.norm = 1/np.max(self.vig)
+    def vigneted_spectrum(self, spectrum, lambda_range, exptime):
+        """
+        spectrum   : Flux density in ph/s/sr/m^2
+        """
+        factor = self.collecting * self.ds*(units.mas**2).to(units.sr) * exptime
+        vigneted_spectrum = self.vig_func(lambda_range, self.rr_lambdaond) * (spectrum * factor)[None,:]
+        return vigneted_spectrum
         
     
 def test_fiber():
@@ -1236,3 +1296,21 @@ def tel_pupil(n,m, radius, file=None, pdiam=None,
                             between_pix=between_pix)
 
     return apupil
+def test_injection_function(asim):
+    import matplotlib.pyplot as plt
+    asim.injector.compute_injection_function("linear", tilt_range=1.)
+    os = np.linspace(0,1., 500)
+    plt.figure()
+    wl = np.linspace(3e-6, 4e-6, 8)
+    rates = asim.injector.injection_rate(wl, os)
+    args = asim.injector.injection_arg(wl, os)
+    for i, awl in enumerate(wl) :
+        plt.plot(os, rates[:,i], label=r"%.1f $\mu m$"%(awl*1e6))
+    plt.legend()
+    plt.show()
+
+    plt.figure()
+    for i, awl in enumerate(wl) :
+        plt.plot(os, args[:,i], label=r"%.1f $\mu m$"%(awl*1e6))
+    plt.legend()
+    plt.show()

@@ -84,6 +84,8 @@ class simulator(object):
                  focal_res=None,
                  pscale=None,
                  interpolation=None,
+                 res = 50,
+                 crop = 1.,
                  injector=None, seed=None):
         """
         Either: 
@@ -112,6 +114,10 @@ class simulator(object):
         self.lambda_science_range = np.linspace(self.injector.lambda_range[0],
                                                self.injector.lambda_range[-1],
                                                self.n_spec_ch)
+        
+        # Peparing the vigneting function for the field of view and diffuse sources
+        self.injector.vigneting = sf.injection.injection_vigneting(self.injector, res, crop)
+        
         pass
     
     
@@ -156,6 +162,80 @@ class simulator(object):
             integrator.accumulate(combined)
         mean, std = integrator.compute_stats()
         return integrator
+    
+    def make_metrologic_exposure(self, interest, star, diffuse, texp=1., t_co=2.0e-3, time=None):
+        """
+        Simulate an exposure
+        texp      : Exposure time (seconds)
+        t_co      : Coherence time (seconds) 
+        """
+        self.n_subexps = int(texp/t_co)
+        #taraltaz = self.obs.observatory_location.altaz(time, target=self.target)
+        #taraltaz, tarPA = self.obs.get_position(self.target, time)
+        
+        #Pointing should be done already
+        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        integrator = sf.spectrograph.integrator()
+        
+        integrator.static_xx = self.injector.vigneting.xx
+        integrator.static_yy = self.injector.vigneting.yy
+        integrator.static =  []
+        for asource in diffuse:
+            aspectrum = asource.get_downstream_absorbtion(self.lambda_science_range) \
+                            * asource.get_own_brightness(self.lambda_science_range)
+            # Collecting surface appears here
+            vigneted_spectrum = self.injector.collecting \
+                            * self.injector.vigneting.vigneted_spectrum(aspectrum,
+                                                            self.lambda_science_range,
+                                                            t_co)
+            static_output = np.array([self.combiner.encaps(mas2rad(self.injector.vigneting.xx), mas2rad(self.injector.vigneting.yy),
+                                    array.flatten(), 2*np.pi/thelambda, np.ones(self.ntelescopes, dtype=np.complex128))
+                                     for m, thelambda in enumerate(self.lambda_science_range)])
+            #print(static_output.shape)
+            static_output = static_output.swapaxes(0,2) * vigneted_spectrum[:,None,:]
+            static_output = np.sum(np.abs(static_output*np.conjugate(static_output)), axis=0)
+            integrator.static.append(static_output)
+                
+        
+        logit.warning("Currently no vigneting (requires a normalization of vigneting)")
+        filtered_starlight = diffuse[0].get_downstream_absorbtion(self.lambda_science_range)
+        # collected will convert from [ph / s /m^2] to [ph]
+        collected = filtered_starlight * self.injector.collecting * t_co
+        integrator.starlight = []
+        integrator.planetlight = []
+        for i in tqdm(range(self.n_subexps)):
+            injected = next(self.injector.get_efunc)(self.lambda_science_range)
+            # lambdified argument order matters! This should remain synchronous
+            # with the lambdify call
+            thexx = star.xx_f
+            theyy = star.yy_f
+            
+            combined_starlight = np.array([self.combiner.encaps(mas2rad(thexx), mas2rad(theyy),
+                                    array.flatten(), 2*np.pi/thelambda, injected[:,m])
+                                     for m, thelambda in enumerate(self.lambda_science_range)])
+            # getting a number of photons
+            combined_starlight = combined_starlight * star.ss[:,None,:] * collected[:,None,None]
+            combined_starlight = np.sum(np.abs(combined_starlight*np.conjugate(combined_starlight)), axis=(2))
+            integrator.starlight.append(combined_starlight)
+            
+            combined_planetlight = np.array([self.combiner.encaps(mas2rad(interest.xx_f), mas2rad(interest.yy_f),
+                                    array.flatten(), 2*np.pi/thelambda, injected[:,m])
+                                     for m, thelambda in enumerate(self.lambda_science_range)])
+            # getting a number of photons
+            combined_planetlight = combined_planetlight * interest.ss[:,None,:] * collected[:,None,None]
+            combined_planetlight = np.sum(np.abs(combined_planetlight*np.conjugate(combined_planetlight)), axis=(2))
+            integrator.planetlight.append(combined_planetlight)
+            
+            # incoherently combining over sources
+            # Warning: modifying the array
+            #combined = np.sum(np.abs(combined*np.conjugate(combined)), axis=(2))
+            #integrator.accumulate(combined)
+            
+        #mean, std = integrator.compute_stats()
+        integrator.starlight = np.array(integrator.starlight)
+        integrator.planetlight = np.array(integrator.planetlight)
+        return integrator
+    
     def prepare_sequence(self, file=None, times=None, n_points=20, remove_daytime=False):
         """
         Prepare an observing sequence
