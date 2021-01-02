@@ -23,6 +23,7 @@ class transmission_emission(object):
             self.obs = observatory
         
         
+        
     def get_trans_emit(self,wl, bandwidth=None, bright=False, no=False):
         if isinstance(wl, np.ndarray):
             if bright:
@@ -72,8 +73,52 @@ class transmission_emission(object):
         mean_sky = np.mean(sky, axis=0)
         return mean_sky
     
-    
+    def get_own_brightness(self, wl):
+        result = self.get_mean_trans_emit(wl, bright=True)
+        return result
+
+    def get_upstream_brightness(self, wl):
+        if self.upstream is None:
+            result = np.zeros_like(wl)
+        else :
+            result = self.upstream.get_total_brightness(wl)
+        return result
+
+    def get_total_brightness(self, wl):
+        result = self.get_own_brightness(wl) + self.get_own_absorbtion(wl) * self.get_upstream_brightness(wl)
+        return result
+
+    def get_own_absorbtion(self, wl):
+        result = self.get_mean_trans_emit(wl)
+        return result
+
+    def get_downstream_absorbtion(self, wl):
+        if self.downstream is None:
+            result = self.get_own_absorbtion(wl)
+        else:
+            result = self.get_own_absorbtion(wl) * self.downstream.get_downstream_absorbtion(wl)
+        return result
 #sky_link = transmission_emission()
+
+def chain(A, B):
+    """
+    This function helps define which occulting / emitting source
+    is in front ro behind which. 
+    A       : An upstream transmission_emission object
+    B       : A downstream transmission_emission object.
+    """
+    A.downstream = B
+    B.upstream = A
+def set_source(A):
+    """
+    Defines A as the first element in the chain.
+    """
+    A.upstream = None
+def set_sink(A):
+    """
+    Defines B as the last element in the chain.
+    """
+    A.downstream = None
 
 
 class _blackbody(object):

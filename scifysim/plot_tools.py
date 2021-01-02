@@ -169,15 +169,8 @@ def plot_projected_pupil(asim, seq_index,
                     grid=projected_grid)
     
     return fig
-    
-    
-    
 
-def plot_injection(theinjector):
-    """
-    Provides a view of the injector status.
-    Plots the phase screen for each pupil.
-    """
+def plot_phasescreen(theinjector):
     import matplotlib.pyplot as plt
     import scifysim as sf
     if not isinstance(theinjector, sf.injection.injector):
@@ -192,6 +185,20 @@ def plot_injection(theinjector):
         plt.imshow((theinjector.focal_plane[i][0]._phs/theinjector.focal_plane[i][0].pupil),
                            cmap=current_cmap)
     plt.show()
+    
+    
+
+def plot_injection(theinjector):
+    """
+    Provides a view of the injector status.
+    Plots the phase screen for each pupil.
+    """
+    import matplotlib.pyplot as plt
+    import scifysim as sf
+    if not isinstance(theinjector, sf.injection.injector):
+        raise ValueError("Expects an injector module")
+    # Showing the wavefronts
+    plot_phasescreen(theinjector)
     # Showing the injection profiles
     plt.show()
     plt.figure(figsize=(2*theinjector.ntelescopes,2*2),dpi=100)

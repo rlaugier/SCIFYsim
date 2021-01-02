@@ -89,6 +89,7 @@ class atmo(object):
                  psz=200,
                  lsz=8.0, r0=0.2, L0=10.0,
                  fc=24.5, correc=1.0, seed=None,
+                 wind_speed = 1., step_time = 0.01,
                  pdiam=8.0, config=None):
 
         ''' Kolmogorov type atmosphere + qstatic error
@@ -102,6 +103,8 @@ class atmo(object):
         - lsz   : the screen linear size (in meters)
         - r0    : the Fried parameter (in meters)
         - L0    : the outer scale parameter (in meters)
+        - wind_speed : the speed of the phas screen in m/s
+        - step_time : the time resolution of the simulation
         -----------------------------------------------------
         '''
 
@@ -110,6 +113,9 @@ class atmo(object):
             self.psz     = psz
             self.lsz     = lsz
             self.pdiam   = pdiam
+            self.ppscale = self.pdiam/self.psz
+            self.wind_speed = wind_speed
+            self.step_time = step_time
             self.r0      = r0
             self.L0      = L0
 
@@ -125,10 +131,15 @@ class atmo(object):
             r0 = self.config.getfloat("atmo", "r0")
             L0 = self.config.getfloat("atmo", "Lout")
             correc = self.config.getfloat("atmo", "correc")
+            wind_speed = self.config.getfloat("atmo", "vwind")
+            step_time = self.config.getfloat("atmo", "step_time")
             
             self.csz     = int(pres*screen_oversize)
             self.psz     = pres
             self.pdiam   = pdiam
+            self.ppscale = self.pdiam/self.psz
+            self.wind_speed = wind_speed
+            self.step_time = step_time
             self.lsz     = self.pdiam*screen_oversize
             self.r0      = r0
             self.L0      = L0
@@ -146,10 +157,10 @@ class atmo(object):
         #self.kolm2   = self.kolm2[:self.sz+self.pdiam,:self.sz+self.pdiam]
 
 
-
-        self.offx = 0 # x-offset on the "large" phase screen array
-        self.offy = 0 # y-offset on the "large" phase screen array
-
+        self.offx = 0. # x-offset on the "large" phase screen array
+        self.offy = 0. # y-offset on the "large" phase screen array
+        self.t = 0.
+        self.update_step_vector()
         self.ttc     = False   # Tip-tilt correction flag
         
         # auxilliary array (for tip-tilt correction)
@@ -162,6 +173,23 @@ class atmo(object):
     
 
     # ==============================================================
+    
+    def update_step_vector(self,wind_angle=0.1, wind_speed=None, step_time=None):
+        """
+        Refresh the step vector that will be applied
+        wind_angle : the angle of incience of the wind
+        """
+        if wind_speed is not None:
+            self.wind_speed = wind_speed
+        if step_time is not None:
+            self.step_time = step_time
+        shift_length = self.wind_speed*self.step_time/self.ppscale
+        xstep, ystep = shift_length*np.cos(wind_angle), shift_length*np.sin(wind_angle)
+        self.step_vector = np.array((ystep, xstep))
+        
+        
+        
+    
     def set_qstatic(self, qstatic=None):
         if qstatic is not None:
             if qstatic.shape == (self.csz, self.csz):
@@ -216,19 +244,27 @@ class atmo(object):
     def give(self):
         ''' ------------------------------------------
         Main loop: frozen screen slid over the aperture
+        
+        This returns a iterator that yelds the phase screen
+        for one aperture.
+        
+        use: a = atmo.give()
+             phscreen = next(a)
+             phscreen = next(a)
 
         Options:
         ---------
         -----------------------------------------  '''
 
         while True:
-            self.offx += 2
-            self.offy += 1
-            self.offx = self.offx % self.csz
-            self.offy = self.offy % self.csz
+            self.offx += self.step_vector[1] #2
+            self.offy += self.step_vector[0] #1
+            self.t += self.step_time
+            self.intoffx = int(np.round(self.offx % self.csz))
+            self.intoffy = int(np.round(self.offy % self.csz))
 
-            subk = self.kolm2[self.offx:self.offx+self.psz,
-                              self.offy:self.offy+self.psz].copy()
+            subk = self.kolm2[self.intoffx:self.intoffx+self.psz,
+                              self.intoffy:self.intoffy+self.psz].copy()
 
             if self.ttc is True:
                 ttx = np.sum(subk*self.xx) / self.xxnorm2
@@ -337,7 +373,7 @@ class focuser(object):
 
     # =========================================================================
     def __init__(self, name="SCExAO_chuck", csz=200, ysz=256, xsz=256,
-                 pupil=None,screen=None,
+                 pupil=None,screen=None, rm_inj_piston=False,
                  pdiam=7.92, pscale=10.0, wl=1.6e-6):
         ''' Default instantiation of a cam object:
 
@@ -379,6 +415,8 @@ class focuser(object):
         self.phot_noise = False            # photon noise flag
         self.signal     = 1e6              # default # of photons in frame
         self.corono     = False            # if True: perfect coronagraph
+        self.remove_injection_piston = rm_inj_piston
+        self.npix = np.count_nonzero(self.pupil)
       
         # final tune-up
         self.update_cam()
@@ -512,7 +550,10 @@ class focuser(object):
         phs = np.zeros((self.csz, self.csz), dtype=np.float64)  # phase map
         
         if phscreen is not None:  # a phase screen was provided
-            phs += phscreen
+            if self.remove_injection_piston:
+                phs += phscreen - np.mean(phscreen[self.pupil])
+            else:
+                phs += phscreen
             
         wf = np.exp(1j*phs*mu2phase)
         wf *= np.sqrt(self.signal / self.pupil.sum())  # signal scaling
@@ -593,6 +634,7 @@ class injector(object):
                  focal_res=50,
                  pscale = 4.5,
                  interpolation=None,
+                 rm_inj_piston=False,
                  seed=None,
                  atmo_config=None):
         """
@@ -643,6 +685,7 @@ class injector(object):
         #Now calling the common part of the config
         self.pupil = pupil
         self.interpolation = interpolation
+        self.rm_inj_piston = rm_inj_piston
         self._setup(seed=seed)
         # Preparing iterators
         self.it = self.give_fiber()
@@ -768,7 +811,8 @@ class injector(object):
         ntelescopes = theconfig.getint("configuration", "n_dish")
         if ntelescopes is not 4:
             raise NotImplementedError("Currently only supports 4 telescopes")
-            
+        rm_inj_piston = theconfig.getboolean("atmo", "remove_injection_piston")
+        
         obj = cls(pupil=pupil,
                  pdiam=pdiam, odiam=odiam,
                  ntelescopes=ntelescopes, tt_correction=None,
@@ -781,6 +825,7 @@ class injector(object):
                  focal_res=focal_res,
                  pscale=pscale,
                  interpolation=interpolation,
+                 rm_inj_piston=rm_inj_piston,
                  seed=seed)
         obj.config = theconfig
         return obj
@@ -805,7 +850,7 @@ class injector(object):
                                     seed=theseed))
             self.focal_plane.append([focuser(csz=self.phscreensz,
                                              xsz=self.focal_res, ysz=self.focal_res, pupil=self.pupil,
-                                             pscale=self.pscale, wl=wl) for wl in self.lambda_range])
+                                             pscale=self.pscale, wl=wl, rm_inj_piston=self.rm_inj_piston) for wl in self.lambda_range])
             self.fiber = fiber_head()
         # Caluclating the focal length of the focuser
         self.focal_length = self.focal_hrange/utilities.mas2rad(self.focal_plane[0][0].fov/2)
@@ -1041,7 +1086,10 @@ class fiber_head(object):
         xx, yy = np.meshgrid(np.linspace(-half_range, half_range, nsamples),
                                       np.linspace(-half_range, half_range, nsamples))
         amap = self.Hy_xy_full(xx[None,:,:], yy[None,:,:], lambs[:,None,None])
-        self.map = amap / np.sqrt(np.sum(np.abs(amap)**2, axis=(1,2)))[:,None,None]
+        map_total = np.sqrt(np.sum(np.abs(amap)**2, axis=(1,2)))
+        self.map = amap / map_total[:,None,None]
+        #from pdb import set_trace
+        #set_trace()
         return self.map
 
 

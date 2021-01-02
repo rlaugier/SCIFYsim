@@ -137,12 +137,13 @@ class simulator(object):
         pass
     
         
-    def make_exposure(self, injection_gen , texp=1., t_co=2.0e-3, time=None):
+    def make_exposure(self, injection_gen , texp=1., time=None):
         """
         Simulate an exposure
         texp      : Exposure time (seconds)
         t_co      : Coherence time (seconds) 
         """
+        t_co = self.injector.atmo.step_time
         self.n_subexps = int(texp/t_co)
         #taraltaz = self.obs.observatory_location.altaz(time, target=self.target)
         #taraltaz, tarPA = self.obs.get_position(self.target, time)
