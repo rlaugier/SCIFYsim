@@ -26,6 +26,7 @@ The following packages are required:
  - numexpr
  - matplotlib
  - tqdm
+ - lmfit
  - kernuller # https://github.com/rlaugier/kernuller
  - astropy==4.0
  - astroplan>=0.6
