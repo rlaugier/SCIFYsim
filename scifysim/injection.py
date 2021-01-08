@@ -22,7 +22,8 @@ import threading
 import time
 from pathlib import Path
 
-from scipy.interpolate import interp2d
+from scipy.interpolate import interp2d, interp1d
+
 # amto_screen is now provided in house to provide seed
 #from xaosim import wavefront as wft
 
@@ -971,6 +972,161 @@ class injector(object):
         self.injection_arg = unsorted_interp2d(self.lambda_range, offset, np.angle(injecteds), kind=interpolation)
         self.injection_arg.__doc__ = """phase(wavelength[m], offset[lambda/D])"""
         return
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+class fringe_tracker(object):
+    def __init__(self, theconfig, seed=None, precompute=False):
+        """
+        Creates the module that simulates the OPD residual from fring tracker performance
+        theconfig    : A parsed config file
+        seed         : Seed for the generation of random OPDs
+        """
+        self.config = theconfig
+        self.seed = seed
+        self.precompute = precompute
+        self.reference_file = self.config.get("fringe tracker", "reference_file")
+        self.wet_atmosphere = self.config.getboolean("fringe tracker", "wet_atmosphere")
+        self.dry_scaling = self.config.getfloat("fringe tracker", "dry_scaling")
+        self.wet_scaling = self.config.getfloat("fringe tracker", "wet_scaling")
+        self.static_bias_scaling = self.config.getfloat("fringe tracker", "static_bias_scaling")
+        logit.warning("Loading keyword n_dish from [configuration] in fringe_tracking")
+        self.n_tel = self.config.getint("configuration","n_dish")
+        data = np.loadtxt(self.reference_file, comments="#")
+        self.ref_freqs = data[:,0]
+        self.ref_ps_phase = data[:,1]
+        self.ref_ps_disp = data[:,2]
+        self.ref_dt = 1/(2*np.max(self.ref_freqs))
+        # timestep: the one that will be used in the simulator
+        logit.warning("Loading keyword step_time from [atmo] in fringe_tracking")
+        self.timestep = self.config.getfloat("atmo", "step_time")
+        
+        
+        
+    def prepare_time_series(self,lamb, duration=10, replace=True):
+        """
+        Call to refresh the time series to use
+        duration        : The duration of the time series to prepare
+        replace         : Replace the time series (otherwise append)
+        """
+        logit.warning("Preparing a fringe tracking residual time series")
+        element_duration = self.ref_dt * self.ref_ps_phase.shape[0]
+        elements_needed = int(duration/element_duration) + 1
+        dryps = []
+        disps = []
+        for k in range(self.n_tel):
+            #Building up to the required length
+            dryp = None
+            disp = None
+            for i in range(elements_needed + 1):
+                dryp = utilities.random_series_fft(self.ref_ps_disp, matchto=dryp, keepall=True, seed=self.seed)
+                dryp = dryp -(1-self.static_bias_scaling)*np.mean(dryp)
+                # Make sure to increment the seed every use
+                if self.seed is not None:
+                    self.seed = self.seed+1
+                disp = utilities.random_series_fft(self.ref_ps_disp, matchto=disp, keepall=True, seed=self.seed)
+                if self.seed is not None:
+                    self.seed = self.seed+1
+            dryps.append(dryp)
+            disps.append(disp)
+        # Assumbling into an array of columns
+        dryps = np.array(dryps).T * self.dry_scaling
+        disps = np.array(disps).T * self.wet_scaling
+        logit.warning("Dry pistons and dispersion residuals scaling refreshed")
+        
+        self.ref_sample_times = np.arange(0, self.ref_dt * dryps.shape[0], self.ref_dt)
+        #desired_sample_times = np.arange(0, duration, self.timestep)
+        
+        if replace or ():
+            self.dry_piston_series = dryps
+            self.dispersion_series = disps
+        else:
+            self.dry_piston_series = np.concatenate((self.dry_piston_series, self.dry_piston_series), axis=0)
+            self.dispersion_series = np.concatenate((self.dispersion_series, self.dispersion_series), axis=0)
+        self.prepare_interpolation()
+        self.phasor = self.iterator(lamb)
+        
+    def iterator(self, lamb):
+        """
+        Iterator that yields the phasors of fringe tracker residuals
+        The iterator sets for precomputed or direct interpolation depending on the configuration.
+        It also sets for wet or dry computation depending on the configuration.
+        """
+        if not self.precompute:
+            available = int(np.max(self.ref_sample_times)/self.timestep)
+            if not self.wet_atmosphere:
+                for i in range(available):
+                    yield self.get_phasor_dry(i, lamb)
+            else:
+                logit.error("Wet atmosphere not implemented")
+                raise NotImplementedError("Wet atmosphere not implemented")
+        else:
+            self.interpolate_batch(np.max(self.ref_sample_times))
+            if not self.wet_atmosphere:
+                for i in range(self.precomputed_series_piston.shape[0]):
+                    yield self.get_phasor_precomputed_dry(i,lamb)
+            else:
+                logit.error("Wet atmosphere not implemented")
+                raise NotImplementedError("Wet atmosphere not implemented")
+        
+    def prepare_interpolation(self):
+        """
+        Mandatory
+        Computes the interpolation functions to be used later
+        save:
+        self.piston_interpolation()
+        self.dispersion_interpolation
+        """
+        self.piston_interpolation = interp1d(self.ref_sample_times, self.dry_piston_series, axis=0, kind="linear")
+        self.dispersion_interpolation = interp1d(self.ref_sample_times, self.dispersion_series, axis=0, kind="linear")
+
+    
+    def interpolate_batch(self, duration):
+        """
+        optional:
+        Prepares lookup tables for direct lookup of piston values
+        """
+        desired_sample_times = np.arange(0, duration, self.timestep)
+        self.precomputed_series_piston = self.piston_interpolation(desired_sample_times)
+        self.precomputed_series_dispersion = self.dispersion_interpolation(desired_sample_times)
+    
+    def get_phasor_precomputed_dry(self, i, lamb):
+        """
+        Precomputed computation are recommended for longer time series when trying to factor-in long timescale effects.
+        One can prepare the "low" resolution series, and dump the original dataset.
+        """
+        phase = self.precomputed_series_dispersion[i,:][:,None] *2*np.pi / lamb[None,:]
+        return np.ones_like(phase) * np.exp(1j*phase)
+    def get_phasor_dry(self, i, lamb):
+        phase = self.piston_interpolation(i*self.timestep)[:,None] * 2 * np.pi / lamb[None,:]
+        return np.ones_like(phase) * np.exp(1j*phase)
+    
+                                                    
+    
+        
+        
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+
+        
     
 class unsorted_interp2d(interp2d):
     def __call__(self, x, y, dx=0, dy=0):
@@ -1113,12 +1269,12 @@ class injection_vigneting(object):
                             np.linspace(-hskyextent, hskyextent, self.resol),
                             np.linspace(-hskyextent, hskyextent, self.resol))
         self.collecting = np.pi/4*(injector.pdiam**2 - injector.odiam**2)
-        self.ds = np.mean(np.gradient(xx)[1]) * np.mean(np.gradient(yy)[0]) #In mas
+        self.ds = np.mean(np.gradient(xx)[1]) * np.mean(np.gradient(yy)[0]) #In mas^2
+        self.ds_sr = (self.ds*units.mas**2).to(units.sr).value # In sr
         self.xx = xx.flatten()
         self.yy = yy.flatten()
         self.rr = np.sqrt(self.xx**2 + self.yy**2)
         self.rr_lambdaond =  self.rr*self.mas2lambond
-        
         print(self.mas2lambond)
         
         if not hasattr(injector, "injection_rate"):

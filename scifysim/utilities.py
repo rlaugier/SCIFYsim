@@ -150,3 +150,173 @@ def profileit(func):
         return retval
 
     return wrapper
+
+def random_series_fft(ps, matchto=None, matchlength=10, keepall=False, seed=None):
+    """
+    Returns a new series of data based on the provided power spectrum.
+    If matchto is provided, the new series is adjusted for continuity 
+    to that data.
+    Parameters:
+    ps       : A power spectrum
+    matchto  : np.ndarray of preceding series. The mean of the first
+                n (matchlength) values of the new series are matched
+                to the mean of the last n values of this array.
+    matchlength : integer. The number of values to match 
+    keepall  : Boolean. If true, will return the concatenation of the
+                new array with the old. If False, will return only the
+                new array.
+    
+    
+    output:
+    a numpy ndarray of the time series
+    """
+    rng = np.random.default_rng(np.random.SeedSequence(seed))
+    newphi = rng.uniform(low=-np.pi, high=np.pi, size=ps.shape[0])
+    #newphi = np.random.uniform(low=-np.pi, high=+np.pi, size=ps.shape[0])
+    newspectrum = np.sqrt(ps)*np.exp(1j*newphi)
+    series = np.fft.ifft(newspectrum).real
+    if matchto is not None:
+        adj0 = matchto[-matchlength:].mean()
+        adj1 = series[:matchlength].mean()
+        series = series - adj1 + adj0
+        if keepall:
+            return np.concatenate((matchto, series))
+        else:
+            return series
+    else:
+        return series
+    
+def matchseries(a, b, nmatch=10):
+    """
+    Matches series b with series a with the nmatch last samples of a and
+    the nmatch first samples of b.
+    Returns the concatenation.
+    
+    a        : 1D array the root of the series
+    b        : 1D array the tail of the series 
+    nmatch   : integer  The number of samples used to match the mean 
+    """
+    adj0 = a[-nmatch:].mean()
+    adj1 = b[:nmatch].mean()
+    b2 = b - adj1 + adj0
+    return np.concatenate((a,b2))
+        
+
+
+
+def test_random_series(seed=None):
+    
+    import matplotlib.pyplot as plt
+    # Creating an initial time series with an interesting spectrum.
+    s = 20
+    a = np.random.uniform(low=0, high=1., size=200)
+    b = np.convolve(a, np.ones(s)/s,mode="full")
+    # Extracting the power spectrum
+    
+    psb = np.abs(np.fft.fft(b))**2
+    
+    # Looping to concatenate time series
+    bnew = None
+    for i in range(3):
+        if seed is not None:
+            seed = seed+1
+        bnew = random_series_fft(psb, matchto=bnew, keepall=True, seed=seed)
+
+    plt.figure()
+    plt.plot(b, label="Original")
+    plt.plot(bnew, label="Random")
+    plt.legend()
+    plt.title("Original and random time series")
+    plt.xlabel("Time [arbitrary]")
+    plt.show()
+    #print(np.fft.fftfreq(b.shape[0]))
+    freqs = np.fft.fftfreq(b.shape[0])
+    freqsnew = np.fft.fftfreq(bnew.shape[0],)
+    plt.figure()
+    plt.plot(freqs, psb, label="Original")
+    plt.plot(freqsnew, np.abs(np.fft.fft(bnew))**2, label="New")
+    plt.yscale("log")
+    plt.xlim(-0.2, 0.2)
+    plt.legend()
+    plt.title("Power spectrum")
+    plt.xlabel("Frequency")
+    plt.show()
+
+    
+# Function courtesy of Philippe Berio (OCA)
+# this function returns a vector containing the timestaps of the GRAVITY measurements,
+# an array containing the group delay and an array containing the phase delay [nFrame,nBase]
+def loadGRA4MAT(filename):
+    from astropy.time import Time
+    from astropy.io import fits
+    hdu = fits.open(filename)
+    acqstart = hdu[0].header['HIERARCH ESO PCR ACQ START']
+    t = Time(acqstart)
+    time = t.mjd + hdu['IMAGING_DATA_FT'].data['TIME'] * 1E-6 / 86400.
+    time = time *24*3600
+    #gd = hdu['IMAGING_DATA_FT'].data['GD'] * 2.15 * 25 / (2. * np.pi)
+    #pd = hdu['IMAGING_DATA_FT'].data['PD'] * 2.15 / (2. * np.pi)
+    coherence = hdu['IMAGING_DATA_FT'].data['COHERENCE']
+    header = hdu[0].header
+    hdu.close
+    array_properties = get_header_bl_data(header)
+    nframeGRA4MAT=np.shape(coherence)[0]
+    nChanGRA4MAT=4
+    nBaseGRA4MAT=6
+    gdc=np.zeros((nframeGRA4MAT,nBaseGRA4MAT),dtype=np.float)
+    pdc=np.zeros((nframeGRA4MAT,nBaseGRA4MAT),dtype=np.float)
+    foo1=np.zeros(nframeGRA4MAT,dtype=np.complex)
+    foo2=np.zeros(nframeGRA4MAT,dtype=np.complex)
+    lambGRA4MAT=[(2.07767+2.06029)/2.,(2.17257+2.15652)/2.,(2.27180+2.26070)/2.,(2.35531+2.35021)/2.]
+    factor1=1./(2*np.pi*((1/lambGRA4MAT[0])-(1/lambGRA4MAT[3]))/3.)
+    factor2=np.mean(lambGRA4MAT)/(2.*np.pi)
+    for iBase in range(nBaseGRA4MAT):
+        foo1[:]=0.
+        foo2[:]=0.
+        for iChan in range(nChanGRA4MAT):
+            if (iChan < nChanGRA4MAT-1):
+                foo1[:,]+=(coherence[:,4+iBase+iChan*16]+1J*coherence[:,10+iBase+iChan*16])*\
+                         (coherence[:,4+iBase+(iChan+1)*16]-1J*coherence[:,10+iBase+(iChan+1)*16])
+            foo2[:] += (coherence[:, 4 + iBase + iChan*16] + 1J * coherence[:, 10 + iBase + iChan*16])
+        
+        pdc[:, iBase]=np.angle(foo2[:]*np.conjugate(np.median(foo2)))*factor2 #2.15 / (2. * np.pi)
+        gdc[:, iBase]=np.angle(foo1[:])*factor1 #2.15 * 25./ (2. * np.pi)
+    #return time,gd,pd, array_properties 
+    return time, gdc, pdc, array_properties
+def get_header_bl_data(header):
+    """
+    Pulls the baseline infomation from the header 
+    """
+    idx = np.arange(1,4+1)
+    print("Extracting array information")
+    tnames = []
+    tstas = []
+    stalocs = []
+    for i in idx:
+        tnames.append(header["HIERARCH ESO ISS CONF T%dNAME"%i])
+        tstas.append(header["HIERARCH ESO ISS CONF STATION%d"%i])
+        stalocs.append(np.array((header["HIERARCH ESO ISS CONF T%dX"%i], header["HIERARCH ESO ISS CONF T%dY"%i])))
+    stalocs = np.array(stalocs)
+    A = A_GRAVITY
+    blengths = []
+    for i in range(A.shape[0]):
+        print("Baseline %d"%i)
+        t1 = np.squeeze(np.argwhere(A[i]==1))
+        t2 = np.squeeze(np.argwhere(A[i]==-1))
+        sta1, sta2 = (tstas[t1], tstas[t2])
+        locA = stalocs
+        print("From %s at %s (%.3f, %.3f) to %s at %s (%.3f, %.3f)"%(tnames[t1], tstas[t1], stalocs[t1][0], stalocs[t1][1], tnames[t2], tstas[t2], stalocs[t2][0], stalocs[t2][1]))
+        blength = np.sqrt((stalocs[t2][0]-stalocs[t1][0])**2 + (stalocs[t2][1]-stalocs[t1][1])**2)
+        blengths.append(blength)
+        print("Length %.1f m"%(blength))
+        print()
+    blengths = np.array(blengths)
+    array_properties = {"tnames":tnames, "tstas":tstas, "stalocs":stalocs, "blengths":blengths}
+    return array_properties
+# The baseline matrix for GRAVITY data
+A_GRAVITY = np.array([[1.0, -1.0, 0.0, 0.0],
+                     [1.0, 0.0, -1.0, 0.0],
+                     [1.0, 0.0, 0.0, -1.0],
+                     [0.0, 1.0, -1.0, 0.0],
+                     [0.0, 1.0, 0.0, -1.0],
+                     [0.0, 0.0, 1.0, -1.0]])

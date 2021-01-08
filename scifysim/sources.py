@@ -23,8 +23,9 @@ class transmission_emission(object):
             self.obs = observatory
         
         
-        
     def get_trans_emit(self,wl, bandwidth=None, bright=False, no=False):
+        """
+        """
         if isinstance(wl, np.ndarray):
             if bright:
                 result = np.ones_like(wl)
@@ -37,22 +38,28 @@ class transmission_emission(object):
                 result = 0.
         transmission = self.trans(wl)
         if self.airmass :
-            sky = transmission**self.obs.altaz.secz
+            sky = transmission**self.obs.altaz.secz.value
         else :
             sky = transmission
         
         # Determining brightness:
+        import pdb
         if bright:
-            sky = (1-sky) * blackbody.get_B_lamb_ph(wl, self.T)
+            #pdb.set_trace()
+            sky = (1-sky) * blackbody.get_B_lamb_ph(wl, self.T) * np.gradient(wl[0,:])
             
         # Add offset of 3.25e-3 Jy/as² to account fot OH emission lines (see Vanzi & Hainaut)
-        if bright:
-            sky[wl<2.5e-6] = sky[wl<2.5e-6] + 3.25e-3*units.sr.to(units.arcsec**2)
+        #if bright:
+        #    sky[wl<2.5e-6] = sky[wl<2.5e-6] + 3.25e-3*units.sr.to(units.arcsec**2)
+        if np.any(wl<2.5e-6):
+            raise NotImplementedError("Must account for OH emisison lines")
         
         return sky
         
         
     def get_mean_trans_emit(self, wl, bandwidth=None, bright=False,n_sub=10):
+        """
+        """
         #
         # Little shortcut when bandwidth is not provided: infer it based
         # on the band covered by wl
@@ -196,6 +203,13 @@ def distant_blackbody(lambda_range, T, dist, radius):
     flux_density = blackbody.get_B_lamb_ph(lambda_range, T)*dlambda \
                     * np.pi * ((radius * constants.R_sun) / (dist * constants.pc))**2
     return flux_density
+
+class group(object):
+    """
+    Just a simple object to structure some data.
+    """
+    def __init__(self):
+        pass
 
 
 class resolved_source(object):

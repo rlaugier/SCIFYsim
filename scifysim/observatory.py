@@ -9,6 +9,7 @@ from astropy.time import Time
 import astropy.units as u
 
 import astroplan
+from astroplan import plots
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz, get_sun
 
 import logging

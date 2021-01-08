@@ -1,0 +1,8 @@
+include README.rst
+include scifysim/data/gravity_piston_ps.csv
+include scifysim/data/MK_trans_sfs.txt
+include scifysim/data/n_mathar.dat
+include scifysim/data/VLTI_AT_trans_sfs.txt
+include scifysim/data/VLTI_UT_trans_sfs.txt
+include scifysim/config/logger.ini
+include scifysim/config/default_new_4T.ini
