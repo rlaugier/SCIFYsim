@@ -161,7 +161,7 @@ def set_source(A):
     A.upstream = None
 def set_sink(A):
     """
-    Defines B as the last element in the chain.
+    Defines A as the last element in the chain.
     """
     A.downstream = None
 
