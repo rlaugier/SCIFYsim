@@ -215,8 +215,11 @@ class atmo(object):
 
         if fc is not None:
             self.fc = fc
-            
-        self.kolm    = atmo_screen(
+        
+        # Converting to a piston screen in microns at this point
+        # r0 is expected at the hard-coded wavelength of 3.5 mum
+        logit.warning("Update the way the phase screen is converted to a piston screen")
+        self.kolm    = 3.5 / (2*np.pi) * atmo_screen(
             self.csz, self.lsz, self.r0, self.L0, self.fc, self.correc, seed=seed).real
 
         self.kolm2   = np.tile(self.kolm, (2,2))
@@ -537,8 +540,8 @@ class focuser(object):
         - phscreen: 
         ------------------------------------------------------------------- '''
         from pdb import set_trace
-        # TODO Check this line: something is off.
-        mu2phase = 4.0 * np.pi / self.wl / 1e6  # convert microns to phase
+        # Here 
+        mu2phase = 2.0 * np.pi / self.wl / 1e6  # convert microns to phase
 
         phs = np.zeros((self.csz, self.csz), dtype=np.float64)  # phase map
         
