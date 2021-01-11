@@ -40,6 +40,14 @@ class observatory(object):
                     (east, north) for each aperture shape is (Na, 2)
         location : An astropy.coordinatEarthLocation (default = Paranal)
                     example: myloc = astroplan.Observer.at_site("Paranal", timezone="UTC")
+        multi_dish : When True, the geometry of the pupil varies depending on the relative position
+                        of the target, expecially in terms of projection of the pupil on the plane
+                        orthogonal to the line of sight.
+                        When False, (not implemented yet) the array is expected to be always facing
+                        the line of sight, as is the case for example with a systme like GLINT. 
+        config    : A parsed config object.
+        verbose  : Activate verbosity in the log
+        
         """
         self.verbose = verbose
         self.config = config
@@ -69,6 +77,15 @@ class observatory(object):
         self.C = sp.lambdify(self.theta, self.Cs, modules="numpy")
         
     def point(self, obstime, target):
+        """
+        Points the array towards the target, updating its position angle (PA) and altaz (used for airmass).
+        These are later used by other methods to compute the projection of the array.
+        
+        obstime   : The astropy.time.Time object corresponding to the moment of observation
+                    (usually picked from the sequence provided by self.build_observing_sequence())
+        target    : The astroplan.FixedTarget object of interest. Usually resolved in the 
+                    self.build_observign_sequence() routine with astroplan.FixedTarget.from_name()
+        """
         self.altaz = self.observatory_location.altaz(target=target,
                                                    time=obstime)
         self.PA = self.observatory_location.parallactic_angle(obstime, target=target)
@@ -192,6 +209,14 @@ class observatory(object):
 def test_observatory(tarname="Tau cet",
                      startend=["2020-10-20T00:00:00", "2020-10-20T10:00:00"],
                      nblocs=20):
+    
+    """
+    Runs some test for the core functions of observatory
+    tarname    : The name of the target to use
+    startend   : A list or tuple of two time strings inspressed in UTC matching the format:
+                    "2020-10-20T00:00:00"
+    nblocs     : The number of observing blocs to compute
+    """
     from kernuller import VLTI
     from . import plot_tools as pt
     

@@ -38,27 +38,6 @@ logit = logging.getLogger(__name__)
 
 from . import utilities
 
-def seed_numpy(myseed):
-    rs = np.random.RandomState(myseed)
-    
-
-def seeing_to_r0(seeing, wl):
-    """
-    seeing : seeing in arcseconds
-    wl     : wl in m
-    """
-    r0 = wl / (seeing/3600*np.pi/180) 
-    return r0
-    
-
-# ===========================================================
-# ===========================================================
-
-
-
-
-
-
 
 
 class atmo(object):
@@ -104,12 +83,18 @@ class atmo(object):
         - lsz   : the screen linear size (in meters)
         - r0    : the Fried parameter (in meters)
         - L0    : the outer scale parameter (in meters)
-        - wind_speed : the speed of the phas screen in m/s
-        - step_time : the time resolution of the simulation
+        - fc    : the cutoff frequency [lambda/D] defined by the 
+                    number of actuators
+        - correc : the correction factor to apply to controlled
+                    spatial frequencies.
+        - wind_speed : the speed of the phas screen in [m/s]
+        - step_time : the time resolution of the simulation [s]
+        - config : a parsed config file 
         -----------------------------------------------------
         '''
 
         if config is None:
+            # Deprecated the use of config is preferred
             self.csz     = csz
             self.psz     = psz
             self.lsz     = lsz
@@ -178,7 +163,10 @@ class atmo(object):
     def update_step_vector(self,wind_angle=0.1, wind_speed=None, step_time=None):
         """
         Refresh the step vector that will be applied
-        wind_angle : the angle of incience of the wind
+        wind_angle : the angle of incience of the wind (values around 0.1 rad
+                        are favoured since they provide long series before repeating)
+        wind_speed : The speed of the moving phase screen.
+        step_time  : The time step of the simulation [s]
         """
         if wind_speed is not None:
             self.wind_speed = wind_speed
@@ -192,6 +180,10 @@ class atmo(object):
         
     
     def set_qstatic(self, qstatic=None):
+        """
+        Defines some quasistatic errors in the wavefront
+        qstatic    : A static phase screen
+        """
         if qstatic is not None:
             if qstatic.shape == (self.csz, self.csz):
                 self.qstatic = qstatic
@@ -208,7 +200,9 @@ class atmo(object):
     def update_screen(self, correc=None, fc=None, r0=None, L0=None, seed=None):
         ''' ------------------------------------------------
         Generic update of the properties of the phase-screen
-        
+        correc   : The correction factor for the control region
+        fc       : The 
+        r0       : r0 of the initial phase screen
         ------------------------------------------------ '''
         if r0 is not None:
             self.r0 = r0
@@ -540,12 +534,10 @@ class focuser(object):
 
         Parameters:
         ----------
-        - atmo    : (optional) atmospheric phase screen
-        - qstatic : (optional) a quasi-static aberration
+        - phscreen: 
         ------------------------------------------------------------------- '''
         from pdb import set_trace
-        # nothing to do? skip the computation!
-
+        # TODO Check this line: something is off.
         mu2phase = 4.0 * np.pi / self.wl / 1e6  # convert microns to phase
 
         phs = np.zeros((self.csz, self.csz), dtype=np.float64)  # phase map
@@ -569,6 +561,7 @@ class focuser(object):
     def nogive(self, dm_shm=None, atmo_shm=None):
 
         ''' ----------------------------------------
+        DEPRECATED
         Thread (infinite loop) that monitors changes
         to the DM, atmo, and qstatic data structures
         and updates the camera image.
@@ -1518,3 +1511,17 @@ def test_injection_function(asim):
         plt.plot(os, args[:,i], label=r"%.1f $\mu m$"%(awl*1e6))
     plt.legend()
     plt.show()
+    
+    
+
+def seeing_to_r0(seeing, wl):
+    """
+    seeing : seeing in arcseconds
+    wl     : wl in m
+    """
+    r0 = wl / (seeing/3600*np.pi/180) 
+    return r0
+    
+
+# ===========================================================
+# ===========================================================

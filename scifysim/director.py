@@ -200,7 +200,7 @@ class simulator(object):
         integrator.static_yy = self.injector.vigneting.yy
         integrator.static =  []
         for asource in diffuse:
-            aspectrum = asource.get_downstream_absorbtion(self.lambda_science_range) \
+            aspectrum = asource.get_downstream_transmission(self.lambda_science_range) \
                             * asource.get_own_brightness(self.lambda_science_range) \
             # Collecting surface appears here
             vigneted_spectrum = self.injector.collecting \
@@ -218,7 +218,7 @@ class simulator(object):
                 
         
         logit.warning("Currently no vigneting (requires a normalization of vigneting)")
-        filtered_starlight = diffuse[0].get_downstream_absorbtion(self.lambda_science_range)
+        filtered_starlight = diffuse[0].get_downstream_transmission(self.lambda_science_range)
         # collected will convert from [ph / s /m^2] to [ph]
         collected = filtered_starlight * self.injector.collecting * t_co
         integrator.starlight = []

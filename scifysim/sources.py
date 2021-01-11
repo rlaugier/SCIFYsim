@@ -12,7 +12,13 @@ class transmission_emission(object):
     def __init__(self,trans_file="data/MK_trans_sfs.txt", T=285,
                  airmass=False, observatory=None):
         """
-        Reproduces a basic behaviour in emission-transmission
+        Reproduces a basic behaviour in emission-transmission of a medium in the optical
+        path. Inspired by the geniesim 
+        
+        trans_file    : The path to a transmission data file
+        T             : Temperature of the medium used for emission
+        airmass       : When True, scales the effect with the airmass provided by the observatory object
+        observatory   : The observatory object used to provided the airmass.
         """
         self.trans_file = np.loadtxt(trans_file)
         self.trans = interp.interp1d(self.trans_file[:,0], self.trans_file[:,1],
@@ -23,8 +29,12 @@ class transmission_emission(object):
             self.obs = observatory
         
         
-    def get_trans_emit(self,wl, bandwidth=None, bright=False, no=False):
+    def get_trans_emit(self,wl, bright=False, no=False):
         """
+        Return the transmission or brightness of the object depending on th bright keyword
+        wl            : The wavelength channels to compute [m]
+        bright        : If True: compute the brightness
+                        if False: compute the transmission
         """
         if isinstance(wl, np.ndarray):
             if bright:
@@ -59,6 +69,13 @@ class transmission_emission(object):
         
     def get_mean_trans_emit(self, wl, bandwidth=None, bright=False,n_sub=10):
         """
+        Similar begaviour as get_trans_emit() but averages the effect over each spectral channel.
+        wl            : The center of each wavelength channel. If bandwidth is not provided
+                        (prefered situation) the width of each channel will be set as the spacing
+                        between them (through np.gradient())
+        bandwidth     : (deprecated) array of floats providing the width of each spectral channe.
+        n_sub         : The number of sub-channel to compute for the calculation. A minimum of 10 is recommended.
+                        
         """
         #
         # Little shortcut when bandwidth is not provided: infer it based
@@ -81,10 +98,19 @@ class transmission_emission(object):
         return mean_sky
     
     def get_own_brightness(self, wl):
+        """
+        Used when chaining different media.
+        Returns the brightness of the object.
+        """
         result = self.get_mean_trans_emit(wl, bright=True)
         return result
 
     def get_upstream_brightness(self, wl):
+        """
+        Used when chaining different media.
+        Returns the brightness upstream of the current object (exclusively),
+        including the transmission by the upstream objects (exclusively)
+        """
         if self.upstream is None:
             result = np.zeros_like(wl)
         else :
@@ -92,18 +118,30 @@ class transmission_emission(object):
         return result
 
     def get_total_brightness(self, wl):
-        result = self.get_own_brightness(wl) + self.get_own_absorbtion(wl) * self.get_upstream_brightness(wl)
+        """
+        Used when chaining different media.
+        Returns the total filtered brightness downstream of the object (inclusively)
+        """
+        result = self.get_own_brightness(wl) + self.get_own_transmission(wl) * self.get_upstream_brightness(wl)
         return result
 
-    def get_own_absorbtion(self, wl):
+    def get_own_transmission(self, wl):
+        """
+        Used when chaining different media.
+        Returns the transmission function of the object.
+        """
         result = self.get_mean_trans_emit(wl)
         return result
 
-    def get_downstream_absorbtion(self, wl):
+    def get_downstream_transmission(self, wl):
+        """
+        Used when chaining different media.
+        Returns the total of the transmission function of the chain downstream of the object (inclusively)
+        """
         if self.downstream is None:
-            result = self.get_own_absorbtion(wl)
+            result = self.get_own_transmission(wl)
         else:
-            result = self.get_own_absorbtion(wl) * self.downstream.get_downstream_absorbtion(wl)
+            result = self.get_own_transmission(wl) * self.downstream.get_downstream_transmission(wl)
         return result
 #sky_link = transmission_emission()
 
@@ -313,7 +351,13 @@ class resolved_source(object):
 
 
 class source(object):
+    """
+    DEPRECATED: use resolved_source for all source modelisation purposes
+    """
     def __init__(self, xx, yy, ss):
+        """
+        DEPRECATED: use resolved_source for all source modelisation purposes
+        """
         self.xx = xx
         self.yy = yy
         self.ss = ss
@@ -328,7 +372,7 @@ class source(object):
     @classmethod
     def sky_bg(cls, injector, res,  T, lamb_range, crop=1.):
         """
-        Builds the sky background for a given injector
+        DEPRECATED: a transmission_emission object for the sky background
         """
         # First build a grid of coordinates
         hskyextent = rad2mas(injector.focal_hrange/injector.focal_length)
@@ -377,8 +421,3 @@ class src_extended(object):
         #                   (0, self.r>radius))
 
         
-        
-class sky_bg(object):
-    def __init__(self, temp, ):
-        pass
-    
