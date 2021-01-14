@@ -300,17 +300,66 @@ class simulator(object):
         Run an observing sequence
         """
         pass
-    def build_map(self):
+    def build_all_maps(self, mapres=200, mapcrop=1.):
+        """
+        Builds the transmission maps for the combiner for all the pointings
+        on self.target at the times of self.target
+        mapres        : The resolution of the map in pixels
+        mapcrop       : Adjusts the extent of the map
+
+        Returns (also stored in self.map) a transmission map of shape:
+        [n_sequence,
+        n_wl_chanels,
+        n_outputs,
+        mapres,
+        mapres]
+        """
+        vigneting_map = sf.injection.injection_vigneting(self.injector, mapres, mapcrop)
+        maps = []
+        for i, time in enumerate(self.sequence):
+            self.obs.point(self.sequence[10], self.target)
+            amap = self.make_map(i, vigneting_map)
+            maps.append(amap)
+        maps = np.array(maps)
+        mapshape = (len(self.sequence),
+                    self.lambda_science_range.shape[0],
+                    maps.shape[2],
+                    mapres,
+                    mapres)
+        self.maps = maps.reshape(mapshape)
+        extent = [np.min(vigneting_map.xx),
+                  np.max(vigneting_map.xx),
+                  np.min(vigneting_map.yy),
+                  np.max(vigneting_map.yy)]
+        self.map_extent = extent
+        
+        
+    def make_map(self, blockindex, vigneting_map):
         """
         Create sensitivity map
+        blockindex : The index in the observing sequence to create the map
+        vigneting_map : The vigneting map drawn used for resolution
         """
-        seq_exists = hasattr(self, sequence)
-        if not seq_exists:
-            # If no sequence was prepared, build the map for observations at zenith
-            pass
-        else:
-            # Build the series of maps
-            pass
+        self.obs.point(self.sequence[blockindex], self.target)
+        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        injected = self.injector.best_injection(self.lambda_science_range)
+        vigneted_spectrum = \
+                vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
+                                                  self.lambda_science_range, 1.)
+        # Caution: line is not idempotent!
+        vigneted_spectrum = np.swapaxes(vigneted_spectrum, 0,1)
+        static_output = np.array([self.combiner.encaps(mas2rad(vigneting_map.xx),
+                                        mas2rad(vigneting_map.yy),
+                                        array.flatten(), 2*np.pi/thelambda,
+                                        np.ones(self.ntelescopes, dtype=np.complex128)) \
+                                         for m, thelambda in enumerate(self.lambda_science_range)])
+        static_output = static_output * vigneted_spectrum[:,None,:]
+        # lambdified argument order matters! This should remain synchronous
+        # with the lambdify call
+        # incoherently combining over sources
+        # Warning: modifying the array
+        combined = np.abs(static_output*np.conjugate(static_output))
+        return combined
         
     def __call__(self):
         pass

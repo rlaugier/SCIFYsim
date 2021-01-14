@@ -6,6 +6,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
+from tqdm import tqdm
 
 logit = logging.getLogger(__name__)
 
@@ -232,3 +233,58 @@ def plot_injection(theinjector):
     plt.ylabel("Injection phase (radians)")
     plt.title("Injection phase for each telescope by WL")
     plt.show()
+    
+def plot_response_map(asim, outputs=None,
+                      wavelength=None,
+                      sequence_index=None,
+                      show=True,
+                      save=False,
+                      figsize=(12,3),
+                      dpi=100,
+                      **kwargs):
+    """
+    Plot the response map of the instrument for the target and sequence
+    wavelength   : np.ndarray containing wl indices (if None: use all the wavelength channels)
+    sequence_index : The indices of the sequence to plot
+    show         : Whether to call plt.show() for each plot
+    save         : either False or a string containing the root of a path like "maps/figures_"
+    figsize      : 2 tuple to pass to plt.figure()
+    dpi          : The dpi for the maps
+    **kwargs     : Additional kwargs to pass to imshow
+    """
+    if sequence_index is None:
+        sequence_index = range(len(asim.sequence))
+    if wavelength is None:
+        sumall = True
+    else:
+        sumall = False
+    n_outputs = asim.maps.shape[2]
+    if outputs is None:
+        outputs = np.arange(n_outputs)
+    figs = []
+    for i in tqdm(sequence_index):
+        fig = plt.figure(figsize=figsize, dpi=dpi)
+        for oi, o in enumerate(outputs):
+            seqmap = asim.maps[i,:,o,:,:]
+            plt.subplot(1,outputs.shape[0], oi+1)
+            #outmap = seqmap[:,:,:]
+            if sumall:
+                themap = seqmap.sum(axis=0)
+            else :
+                themap = seqmap[wavelength,:,:]
+            plt.imshow(themap, extent=asim.map_extent, **kwargs)
+            plt.title("Output %d"%(o))
+            plt.xlabel("Position [mas]")
+        if sumall:
+            plt.suptitle("The compound maps for all wavelengths %.1f to %.1f $\mu m$ for block %d"%\
+                        (np.min(asim.lambda_science_range)*1e6,
+                         np.max(asim.lambda_science_range)*1e6,
+                         i))
+        else:
+            plt.suptitle(r"The maps at %.2f $\mu m$"%(asim.lambda_science_range[wavelength]*1e6))
+
+        plt.tight_layout()
+        if save is not False:
+            plt.savefig(save+"Compound_maps_%04d.png"%(i), dpi=dpi)
+        if show:
+            plt.show()
