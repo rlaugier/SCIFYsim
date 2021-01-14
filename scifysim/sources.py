@@ -249,6 +249,46 @@ class group(object):
     def __init__(self):
         pass
 
+class star_planet_target(object):
+    def __init__(self, config, director):
+        self.config = config
+        self.T_star = self.config.getfloat("target", "star_temperature")
+        self.R_star = self.config.getfloat("target", "star_radius")
+        self.resolved_star = self.config.getboolean("target", "star_resolved")
+        self.T_planet = self.config.getfloat("target", "star_temperature")
+        self.R_planet = self.config.getfloat("target", "planet_radius") * units.Rjup.to(units.Rsun)
+        self.distance = self.config.getfloat("target", "star_distance")
+        self.planet_separation = self.config.getfloat("target", "planet_sep")
+        self.planet_position_angle = self.config.getfloat("target", "planet_pa")
+        self.planet_offsetx = -self.planet_separation*np.sin(self.planet_position_angle * np.pi/180)
+        self.planet_offsety =  self.planet_separation*np.cos(self.planet_position_angle * np.pi/180)
+        self.planet_offset = (self.planet_offsetx, self.planet_offsety)
+        print("sep = ", self.planet_separation)
+        print("pa = ", self.planet_position_angle)
+        print("offset = ", self.planet_offset)
+
+        # Building the transmission chain
+        self.t_sky = self.config.getfloat("atmo", "t_sky")
+        self.t_vlti = self.config.getfloat("vlti", "T_vlti")
+        
+        
+        # Creating absorbtion / emission chain:
+        self.sky = transmission_emission(trans_file="data/MK_trans_sfs.txt",
+                                                    T=self.t_sky, airmass=True, observatory=director.obs)
+        self.UT = transmission_emission(trans_file="data/VLTI_UT_trans_sfs.txt", T=self.t_vlti)
+        chain(self.sky, self.UT)
+        self.UT.downstream = None
+        self.sky.upstream = None
+        
+        # Create the star and planet source objects
+        self.star = resolved_source(director.lambda_science_range,
+                                           distance=self.distance, radius=self.R_star, T=self.T_star,
+                                           resolved=self.resolved_star)
+        self.planet = resolved_source(director.lambda_science_range,
+                                             distance=self.distance, radius=self.R_planet, T=self.T_planet,
+                                             resolved=False, offset=self.planet_offset)
+        
+
 
 class resolved_source(object):
     def __init__(self, lambda_range, distance, radius, T,
@@ -273,6 +313,7 @@ class resolved_source(object):
         self.distance = distance
         self.radius = radius
         self.offset = offset
+        # self.ang_radius is in radians
         self.ang_radius = self.radius / (self.distance*units.pc.to(units.R_sun))
         total_surface = np.pi * self.ang_radius**2 # disk section [sr]
         self.total_flux_density = self.distant_blackbody()/ total_surface # [ph / s / m^2]

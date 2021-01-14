@@ -137,6 +137,14 @@ class simulator(object):
         if file is None:
             file = self.config
         self.fringe_tracker = sf.injection.fringe_tracker(file, seed=seed)
+    def prepare_sources(self, file=None):
+        """
+        Prepares a src object containing star, planet, sky and UT.
+        file     : A parsed config file (default: None will reuse the config file in self.)
+        """
+        if file is None:
+            file = self.config
+        self.src = sf.sources.star_planet_target(file, self)
         
     def prepare_spectrograph(self, file):
         pass
