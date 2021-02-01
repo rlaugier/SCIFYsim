@@ -255,7 +255,7 @@ class star_planet_target(object):
         self.T_star = self.config.getfloat("target", "star_temperature")
         self.R_star = self.config.getfloat("target", "star_radius")
         self.resolved_star = self.config.getboolean("target", "star_resolved")
-        self.T_planet = self.config.getfloat("target", "star_temperature")
+        self.T_planet = self.config.getfloat("target", "planet_temperature")
         self.R_planet = self.config.getfloat("target", "planet_radius") * units.Rjup.to(units.Rsun)
         self.distance = self.config.getfloat("target", "star_distance")
         self.planet_separation = self.config.getfloat("target", "planet_sep")
