@@ -7,10 +7,16 @@ import logging
 logit = logging.getLogger(__name__)
 
 class combiner(object):
-    def __init__(self,expr, thesubs):
+    def __init__(self,expr, thesubs,
+                 mask_bright=None,
+                 mask_dark=None,
+                 mask_photometric=None):
         
         self.Na = expr.shape[1]
         self.M = expr
+        self.bright = mask_bright
+        self.dark = mask_dark
+        self.photometric = mask_photometric
         
         #X = sp.MatrixSymbol('X', 2, 4)
         X = sp.Matrix(sp.symbols('X:{}'.format(self.Na), real=True))
@@ -49,8 +55,8 @@ class combiner(object):
     @classmethod
     def angel_woolf(cls, file, ph_shifters=(0,sp.pi/2)):
         
-        M = sf.combiners.angel_woolf_ph(ph_shifters=ph_shifters)
-        
+        M, bright, dark, photo = sf.combiners.angel_woolf_ph(ph_shifters=ph_shifters,
+                                                            include_masks=True)
         #Photometric tap
         logit.warning("Here, forced to assume I have only one symbol: sigma")
         for symbol in M.free_symbols:
@@ -58,7 +64,63 @@ class combiner(object):
         
         thesigma = file.getfloat("configuration", "photometric_tap")
         thesubs = [(sigma, thesigma)]
-        obj = cls(M, thesubs)
+        obj = cls(M, thesubs,
+                  mask_bright=bright,
+                  mask_dark=dark,
+                  mask_photometric=photo)
+        return obj
+    @classmethod
+    def from_config(cls, file, ph_shifters=(0,sp.pi/2)):
+        """
+        Accepted combiners:
+        angel_woolf_ph, VIKiNG, GLINT, GRAVITY, bracewell_ph, bracewell
+        """
+        hasph = False
+        thesubs = []
+        combiner_type = file.get("configuration", "combiner")
+        # Switch on combiner type
+        if "angel_woolf_ph" in combiner_type:
+            hasph = True
+            M, bright, dark, photo = sf.combiners.angel_woolf_ph(ph_shifters=ph_shifters,
+                                                            include_masks=True)
+        elif "GLINT" in combiner_type:
+            hasph = True
+            M, bright, dark, photo = sf.combiners.GLINT(include_masks=True)
+        elif "VIKiNG" in combiner_type:
+            hasph = True
+            M, bright, dark, photo = sf.combiners.VIKiNG(include_masks=True)
+        elif "bracewell_ph" in combiner_type:
+            hasph = True
+            M, bright, dark, photo = sf.combiners.bracewell_ph(ph_shifters=ph_shifters,
+                                                            include_masks=True)
+        elif "bracewell" in combiner_type:
+            logit.error("Simple bracewell not implemented yet")
+            raise NotImplementedError("")
+            pass
+        elif "GRAVITY" in combiner_type:
+            hasph = False
+            M = sf.combiners.GRAVITY()
+        else:
+            logit.error("Nuller type not recognized")
+            raise KeyError("Nuller type not found")
+        
+        if hasph:
+            # Configure the subsitution of the photometric tap
+            thesigma = file.getfloat("configuration", "photometric_tap")
+            #Photometric tap
+            logit.info("Here, forced to assume I have only one symbol: sigma")
+            for symbol in M.free_symbols:
+                sigma = symbol
+            thesubs = [(sigma, thesigma)]
+        else:
+            bright = None
+            dark = None
+            photo = None
+        
+        obj = cls(M, thesubs,
+                 mask_bright=bright,
+                 mask_dark=dark,
+                 mask_photometric=photo)
         return obj
 def test_combiner(combiner, nwl=10):
     hr = kernuller.mas2rad(16)
