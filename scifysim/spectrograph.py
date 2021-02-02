@@ -9,9 +9,7 @@ import logging
 logit = logging.getLogger(__name__)
 
 class integrator():
-    def __init__(self, keepall=True, eta=0.7,
-                 ron=0., ENF=1., mgain=1.,
-                 well=np.inf, n_sources=4):
+    def __init__(self, config=None, keepall=True, n_sources=4):
         """
         Contains the pixel model of the detector.
         Currently it does not implement a system gain (1ADU = 1photoelectron)
@@ -26,13 +24,27 @@ class integrator():
         
         
         """
-        self.keepall = True
-        self.eta = eta
-        self.ron = ron
-        self.ENF = ENF
-        self.mgain = mgain
-        self.well = well
+        
+        self.keepall = keepall
         self.n_sources = n_sources
+        if config is None:
+            self.eta=0.7
+            self.ron=0.
+            self.dark=0.05
+            self.ENF=1.
+            self.mgain=1.
+            self.well=np.inf
+        else:
+            self.eta = config.getfloat("detector", "eta")
+            self.ron = config.getfloat("detector", "ron")
+            self.dark = config.getfloat("detector", "dark")
+            self.ENF = config.getfloat("detector", "ENF")
+            self.mgain = config.getfloat("detector", "mgain")
+            well = config.getfloat("detector", "well")
+            if np.isclose(well, 0.):
+                self.well = np.inf
+            else:
+                self.well = well
         self.reset()
         
     def accumulate(self,value):
@@ -53,17 +65,27 @@ class integrator():
     def compute_noised(self):
         logit.warning("Noises not implemented yet")
         raise NotImplementedError("Noises not implemented yet")
-    def get_total(self):
+    def get_total(self, spectrograph=None, t_exp=None):
         """
-        Made a little bit complicated bye the ability to simulate CRED1 camera
+        Made a little bit complicated by the ability to simulate CRED1 camera
+        spectrograph  : A spectrograph object to map the spectra on
+                    a 2D detector
+        t_exp         : [s]  Integration time to take into account dark current
         """
-        electrons = self.acc * self.eta * self.mgain
+        obtained_dark = self.dark * t_exp * self.mgain
+        if spectrograph is not None:
+            acc = spectrograph.get_spectrum_image(self.acc)
+        else:
+            acc = self.acc
+        electrons = acc * self.eta * self.mgain
+        electrons = electrons + obtained_dark
         expectancy = electrons.copy()
         electrons = np.random.poisson(lam=electrons*self.ENF)/self.ENF
         electrons = np.clip(electrons, 0, self.well)
         read = electrons + np.random.normal(size=electrons.shape, scale=self.ron)
-        self.forensics = {"Expectancy": expectancy, 
-                         "Read noise": self.ron}
+        self.forensics = {"Expectancy": expectancy,
+                         "Read noise": self.ron,
+                         "Dark signal": obtained_dark}
         return read
     def reset(self,):
         self.vals = []
@@ -123,6 +145,7 @@ class spectrograph(object):
                 anoutput[:,None,None],
                 self.lamb_range[:,None,None],
                 i)
+            
             image += np.sum(cube, axis=0)
         return image
             

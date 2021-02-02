@@ -17,6 +17,7 @@ class combiner(object):
         self.bright = mask_bright
         self.dark = mask_dark
         self.photometric = mask_photometric
+        self.baseline_subs = thesubs
         
         #X = sp.MatrixSymbol('X', 2, 4)
         X = sp.Matrix(sp.symbols('X:{}'.format(self.Na), real=True))

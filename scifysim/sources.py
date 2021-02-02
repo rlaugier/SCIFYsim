@@ -374,7 +374,7 @@ class resolved_source(object):
         The map is saved in a flat shape
         xx_f and yy_f are created to be flat versions of the coordinates.
         """
-        self.ss = self.get_spectrum_map()
+        self.ss = self.get_spectrum_map().value # Fixing a bug that appears in the spectrograph?
         self.ss = self.ss.reshape(self.ss.shape[0], self.ss.shape[1]*self.ss.shape[2])
         self.xx_f = self.xx.flatten()
         self.yy_f = self.yy.flatten()

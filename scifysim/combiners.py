@@ -197,46 +197,69 @@ def GLINT(include_masks=False):
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
-    b_nuller = bracewell_ph()
+    b_nuller = kernuller.xcoupler
     tricoupler = sp.Matrix([1/sp.sqrt(3) for i in range(3)])
-    A = sp.diag(tricoupler, tricoupler, tricoupler, tricoupler)
-    B = sp.diag(sp.eye(5), b_nuller, sp.eye(5))
-    C = sp.diag(sp.eye(2), kernuller.crossover, kernuller.crossover, sp.eye(2),
-                kernuller.crossover,kernuller.crossover, sp.eye(2))
-    D = sp.diag(1, kernuller.crossover,kernuller.crossover,
-               kernuller.crossover,kernuller.crossover,
-               kernuller.crossover,kernuller.crossover, 1)
-    E = sp.diag(sp.eye(2), kernuller.crossover,kernuller.crossover,
-               kernuller.crossover,kernuller.crossover,
-               kernuller.crossover, sp.eye(2))
-    F = sp.diag(sp.eye(3), kernuller.crossover,kernuller.crossover,
-                kernuller.crossover,kernuller.crossover, sp.eye(3))
-    G = sp.diag(b_nuller, sp.eye(2), b_nuller,b_nuller,b_nuller, sp.eye(2), b_nuller)
-    GLINT = G@F@E@D@C@B@A
+    sigma = sp.symbols("sigma", real=True)
+    phi = sp.Matrix(sp.symbols('phi0:{}'.format(2), real=True))
+    psplitter1 = sp.Matrix([[sp.sqrt(sigma)],
+                            [sp.sqrt(1-sigma)]])
+    psplitter2 = kernuller.crossover@psplitter1
+    # Ap The section that gives the photometric taps
+    Ap1 = sp.diag(psplitter1, psplitter1, psplitter2, psplitter2)
+    Ap2 = sp.diag(1, kernuller.crossover, sp.eye(2), kernuller.crossover, 1)
+    Ap = Ap2@Ap1
+    
+    A = sp.diag(sp.eye(2), tricoupler, tricoupler, tricoupler, tricoupler, sp.eye(2))
+    B = sp.diag(sp.eye(7), b_nuller, sp.eye(7))
+    C = sp.diag(sp.eye(4), kernuller.crossover, kernuller.crossover,
+                kernuller.crossover,kernuller.crossover, sp.eye(4))
+    D = sp.diag(sp.eye(3), kernuller.crossover,sp.eye(6),kernuller.crossover, sp.eye(3))
+    E = sp.diag(sp.eye(5), kernuller.crossover,kernuller.crossover,
+               kernuller.crossover, sp.eye(5))
+    F = sp.diag(sp.eye(4), kernuller.crossover, kernuller.crossover,
+                kernuller.crossover,kernuller.crossover, sp.eye(4))
+    G = sp.diag(sp.eye(2),b_nuller, 1,
+                b_nuller,b_nuller,b_nuller,
+                1, b_nuller, sp.eye(2))
+    print(Ap.shape, "Ap")
+    print(A.shape, "A")
+    print(B.shape, "B")
+    print(C.shape, "C")
+    print(D.shape, "D")
+    print(E.shape, "E")
+    print(F.shape, "F")
+    print(G.shape, "G")
+    GLINT = G@F@E@D@C@B@A@Ap
     if include_masks:
-        bright = np.array([False, True, False, False, # Combination 0-1
-                          False, True,                # Combination 1-2
-                          False, True, False, False,  # Combination 0-2
-                          False, True, False, False,  # Combination 0-3
-                          False, True, False, False,  # Combination 1-3
-                          False, False,               # Combination 1-2
-                          False, True, False, False,  # Combination 2-3
+        bright = np.array([False, False,# Photometries 0 and 1
+                          True, False,  # Combination 0-1
+                          True,         # Combination 1-2
+                          True, False,  # Combination 0-2
+                          True, False,  # Combination 0-3
+                          True, False,  # Combination 1-3
+                          False,        # Combination 1-2
+                          True, False,  # Combination 2-3
+                          False, False  # Photometries 2 and 3
                           ])
-        dark = np.array([False, False, True, False, # Combination 0-1
-                          False, False,                # Combination 1-2
-                          False, False, True, False,  # Combination 0-2
-                          False, False, True, False,  # Combination 0-3
-                          False, False, True, False,  # Combination 1-3
-                          True, False,               # Combination 1-2
-                          False, False, True, False,  # Combination 2-3
+        dark = np.array([False, False,  # Photometries 0 and 1
+                          False, True,  # Combination 0-1
+                          False,        # Combination 1-2
+                          False, True,  # Combination 0-2
+                          False, True,  # Combination 0-3
+                          False, True,  # Combination 1-3
+                          True,         # Combination 1-2
+                          False, True,  # Combination 2-3
+                          False, False  # Photometries 2 and 3
                           ])
-        photometric = np.array([True, False, False, True, # Combination 0-1
-                          True, False,                # Combination 1-2
-                          True, False, False, True,  # Combination 0-2
-                          True, False, False, True,  # Combination 0-3
-                          True, False, False, True,  # Combination 1-3
-                          False, True,               # Combination 1-2
-                          True, False, False, True,  # Combination 2-3
+        photometric = np.array([True, True, # Photometries 0 and 1
+                          False, False,   # Combination 0-1
+                          False,          # Combination 1-2
+                          False, False,   # Combination 0-2
+                          False, False,   # Combination 0-3
+                          False, False,   # Combination 1-3
+                          False,          # Combination 1-2
+                          False, False,   # Combination 2-3
+                          True, True      # Photometries 2 and 3
                           ])
         return GLINT, bright, dark, photometric
     else:
