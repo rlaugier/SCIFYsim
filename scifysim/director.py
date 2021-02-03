@@ -233,6 +233,7 @@ class simulator(object):
         self.integrator.static_xx = self.injector.vigneting.xx
         self.integrator.static_yy = self.injector.vigneting.yy
         self.integrator.static =  []
+        self.integrator.static_list = []
         for asource in diffuse:
             aspectrum = asource.get_downstream_transmission(self.lambda_science_range) \
                             * asource.get_own_brightness(self.lambda_science_range) \
@@ -249,6 +250,7 @@ class simulator(object):
             static_output = (static_output.swapaxes(0,2) * vigneted_spectrum[:,None,:])
             static_output = np.sum(np.abs(static_output*np.conjugate(static_output), dtype=dtype), axis=0)
             self.integrator.static.append(static_output.T)
+            self.integrator.static_list.append(asource.__name__)
                 
         
         logit.warning("Currently no vigneting (requires a normalization of vigneting)")
@@ -335,6 +337,7 @@ class simulator(object):
         array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
         self.integrator.static_xx = self.injector.vigneting.xx
         self.integrator.static_yy = self.injector.vigneting.yy
+        self.integrator.reset()
         self.integrator.static =  []
         for asource in diffuse:
             aspectrum = asource.get_downstream_transmission(self.lambda_science_range) \
@@ -400,9 +403,10 @@ class simulator(object):
             # Warning: modifying the array
             # combined = np.sum(np.abs(combined*np.conjugate(combined)), axis=(2))
             # self.integrator.accumulate(combined)
-            
-            for astatic in self.integrator.static:
+            self.integrator.static_list = []
+            for k, astatic in enumerate(self.integrator.static):
                 self.integrator.accumulate(astatic)
+                self.integrator.static_list.append(diffuse[k].__name__)
             
         #mean, std = self.integrator.compute_stats()
         self.integrator.ft_phase = np.array(self.integrator.ft_phase).astype(dtype)

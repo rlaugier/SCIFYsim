@@ -10,7 +10,7 @@ import scipy.interpolate as interp
 
 class transmission_emission(object):
     def __init__(self,trans_file="data/MK_trans_sfs.txt", T=285,
-                 airmass=False, observatory=None):
+                 airmass=False, observatory=None, name="noname"):
         """
         Reproduces a basic behaviour in emission-transmission of a medium in the optical
         path. Inspired by the geniesim 
@@ -20,7 +20,16 @@ class transmission_emission(object):
         airmass       : When True, scales the effect with the airmass provided by the observatory object
         observatory   : The observatory object used to provided the airmass.
         """
-        self.trans_file = np.loadtxt(trans_file)
+        self.__name__ = name
+        if isinstance(trans_file, float):
+            # Flat value from 1 nm to 50µm
+            self.trans_file = np.array([[1.0e-9, trans_file],
+                                       [50.0e-6, trans_file]])
+        elif isinstance(trans_file, str):
+            self.trans_file = np.loadtxt(trans_file)
+        else:
+            raise ValueError("Requires a float or a file path")
+            
         self.trans = interp.interp1d(self.trans_file[:,0], self.trans_file[:,1],
                                      kind="linear", bounds_error=False )
         self.T = T
@@ -274,10 +283,31 @@ class star_planet_target(object):
         
         # Creating absorbtion / emission chain:
         self.sky = transmission_emission(trans_file="data/MK_trans_sfs.txt",
-                                                    T=self.t_sky, airmass=True, observatory=director.obs)
-        self.UT = transmission_emission(trans_file="data/VLTI_UT_trans_sfs.txt", T=self.t_vlti)
+                                         T=self.t_sky, airmass=True,
+                                         observatory=director.obs,
+                                         name="Sky")
+        self.UT = transmission_emission(trans_file="data/VLTI_UT_trans_sfs.txt", T=self.t_vlti,
+                                       name="UT_optics")
+        
+        n_warm_optics = config.getfloat("optics", "n_warm_optics")
+        throughput_warm_optics = config.getfloat("optics", "throughput_warm_optics")
+        self.transmission_warm_optics = throughput_warm_optics**n_warm_optics
+        self.temp_warm_optics = config.getfloat("optics", "temp_warm_optics")
+        n_cold_optics = config.getfloat("optics", "n_cold_optics")
+        throughput_cold_optics = config.getfloat("optics", "throughput_cold_optics")
+        self.temp_cold_optics = config.getfloat("optics", "temp_cold_optics")
+        self.throughput_combiner_chip = config.getfloat("optics", "throughput_combiner_chip")
+        self.transmission_cold_optics = self.throughput_combiner_chip * throughput_cold_optics**n_cold_optics
+        
+        self.warm_optics = transmission_emission(trans_file=self.transmission_warm_optics,
+                                                T=self.temp_warm_optics, name="Warm Optics")
+        self.cold_optics = transmission_emission(trans_file=self.transmission_cold_optics,
+                                                T=self.temp_cold_optics, name="Cold Optics")
+        
         chain(self.sky, self.UT)
-        self.UT.downstream = None
+        chain(self.UT, self.warm_optics)
+        chain(self.warm_optics, self.cold_optics)
+        self.cold_optics.downstream = None
         self.sky.upstream = None
         
         # Create the star and planet source objects

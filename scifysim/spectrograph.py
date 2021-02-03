@@ -89,9 +89,11 @@ class integrator():
         return read
     def reset(self,):
         self.vals = []
-        self.acc = 0
+        self.acc = 0.
         self.runs = 0
         self.forensics = {}
+        self.mean = None
+        self.std=None
 
 class spectrograph(object):
     def __init__(self, aconfig, lamb_range, n_chan=8):
