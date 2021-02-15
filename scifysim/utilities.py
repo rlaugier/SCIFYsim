@@ -320,3 +320,103 @@ A_GRAVITY = np.array([[1.0, -1.0, 0.0, 0.0],
                      [0.0, 1.0, -1.0, 0.0],
                      [0.0, 1.0, 0.0, -1.0],
                      [0.0, 0.0, 1.0, -1.0]])
+
+
+def get_star_params(star, verbose=True, showtable=False):
+    """
+    Queries GAIA DR2 catalog for distance, radius and 
+    temperature of star:
+    star   : str   the name of the star
+    verbose: Whether to print the details found
+    
+    returns:
+    dist [pc]   : Distance
+    T    [K]    : Effective temperature
+    R    [Rsun] : Radius
+    """
+    from astroquery.vizier import Vizier
+    import astropy.units as u
+    from astropy.coordinates import SkyCoord
+    
+    v = Vizier.query_object(star, catalog=["GAIA"])
+    v["I/345/gaia2"].sort(keys="Gmag")
+    obj = v["I/345/gaia2"][0]
+    dist = (obj["Plx"] * u.mas).to(u.parsec, equivalencies=u.parallax())
+    T = obj["Teff"]
+    Rad = obj["Rad"]
+    if showtable:
+        from IPython.display import display, HTML
+        display(v["I/345/gaia2"])
+    if verbose:
+        print("Dist = ", dist, "[pc]")
+        print("T = ", T, "[K]")
+        print("R = ", Rad, "[R_sun]")
+    return dist, T, Rad
+
+def update_star_params(config, verbose=True):
+    
+    name = config.get("target", "target")
+    dist, T, Rad = get_star_params(name, verbose=False)
+    if verbose:
+        print("Dist set to ", dist, "[pc]")
+        print("T set to ", T, "[K]")
+        print("R set to ", Rad, "[R_sun]")
+    
+    config.set("target", "star_distance", value="%.2f"%dist.value)
+    config.set("target", "star_temperature", value="%.2f"%T)
+    config.set("target", "star_radius", value="%.2f"%Rad)
+    
+def find_best_night(obs, target, showplot=True, duration=None):
+    """
+    duration   [h] : duration of the observing run
+    """
+    import astropy.units
+    from astropy.time import Time, TimeDelta
+    dt = TimeDelta(1*astropy.units.day)
+    t0 = Time("2021-01-01T03:00:00")
+    times = [t0 + k*dt for k in range(365)]
+    poslist = obs.get_positions(target, times)
+    poslist[0]
+    elev_vec = np.array(poslist.altaz.alt.value[0])
+    highest_index = np.argmax(elev_vec)
+    besttime = times[highest_index]
+    if showplot:
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.plot(poslist.altaz.alt.value[0])
+        plt.xlabel("Day of the year")
+        plt.ylabel("Elevation at midnight [deg]")
+        plt.show()
+        print("Best time:", besttime)
+    if duration is None:
+        return besttime
+    else:
+        Tstart = Time(besttime) - TimeDelta((duration/2)*astropy.units.h)
+        Tend = Time(besttime) + TimeDelta((duration/2)*astropy.units.h)
+        return Tstart, Tend
+def update_observing_night(config, time=None, duration=6.,  verbose=True):
+    """
+    config               The parsed config file to modify
+    time      [fits format] (if None, will optimize for elevation)
+    duration  [h] 
+    """
+    from scifysim.observatory import observatory
+    from astroplan import FixedTarget
+    obs = observatory(config=config)
+    tarname = config.get("target", "target")
+    target = FixedTarget.from_name(tarname)
+    if time is None:
+        tstart, tend = find_best_night(obs, target, showplot=verbose, duration=duration)
+        tstart = tstart.value
+        tend = tend.value
+    else : 
+        tstart = time[0]
+        tend = time[1]
+    name = config.get("target", "target")
+    dist, T, Rad = get_star_params(name, verbose=False)
+    if verbose:
+        print("Sequende start set to ", tstart)
+        print("Sequende end set to ", tend)
+    config.set("target", "seq_start", value=tstart)
+    config.set("target", "seq_end", value=tend)
+    
