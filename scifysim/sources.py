@@ -368,9 +368,9 @@ class resolved_source(object):
         self.theta, self.r = np.array([[0.]]), np.array([[0.]])
         # Angular positions referenced East of North
         self.xx = -self.r*np.sin(self.theta)*units.rad.to(units.mas) \
-                    - self.offset[0]*np.sin(self.offset[1]*units.deg.to(units.rad))
+                    - self.offset[0]
         self.yy =  self.r*np.cos(self.theta)*units.rad.to(units.mas) \
-                    + self.offset[0]*np.cos(self.offset[1]*units.deg.to(units.rad))
+                    + self.offset[1]
         
         self.ds = np.array([[np.pi * self.ang_radius**2]])
         
@@ -384,9 +384,9 @@ class resolved_source(object):
         self.theta, self.r = np.meshgrid( np.linspace(0., 2*np.pi, angular_res, endpoint=False), np.linspace(0., self.ang_radius, radial_res, endpoint=False) )
         # Angular positions referenced East of North
         self.xx = -self.r*np.sin(self.theta)*units.rad.to(units.mas) \
-                    - self.offset[0]*np.sin(self.offset[1]*units.deg.to(units.rad))
+                    - self.offset[0]
         self.yy =  self.r*np.cos(self.theta)*units.rad.to(units.mas) \
-                    + self.offset[0]*np.cos(self.offset[1]*units.deg.to(units.rad))
+                    + self.offset[1]
         
         self.dr = np.gradient(self.r)[0]
         self.dtheta = np.gradient(self.theta)[1]

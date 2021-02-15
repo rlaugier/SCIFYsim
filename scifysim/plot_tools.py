@@ -241,6 +241,7 @@ def plot_response_map(asim, outputs=None,
                       save=False,
                       figsize=(12,3),
                       dpi=100,
+                      central_marker=True,
                       **kwargs):
     """
     Plot the response map of the instrument for the target and sequence
@@ -251,7 +252,18 @@ def plot_response_map(asim, outputs=None,
     figsize      : 2 tuple to pass to plt.figure()
     dpi          : The dpi for the maps
     **kwargs     : Additional kwargs to pass to imshow
+    add_central_marker: Add a marker at the 0,0 location
+    central_marker_size: The size parameter to give the central marker
+    central_marker_type: The type of marker to use
     """
+    base_params = {'x':0, 'y':0, 's':10., 'c':"w", 'marker':"*"}
+    if central_marker is True:
+        central_marker = base_params
+    elif isinstance(central_marker, dict):
+        # Update the params with the passed dict
+        for akey in central_marker:
+            base_params[akey] = central_marker[akey]
+        central_marker = base_params
     if sequence_index is None:
         sequence_index = range(len(asim.sequence))
     if wavelength is None:
@@ -262,7 +274,7 @@ def plot_response_map(asim, outputs=None,
     if outputs is None:
         outputs = np.arange(n_outputs)
     figs = []
-    for i in tqdm(sequence_index):
+    for i in sequence_index:
         fig = plt.figure(figsize=figsize, dpi=dpi)
         for oi, o in enumerate(outputs):
             seqmap = asim.maps[i,:,o,:,:]
@@ -273,6 +285,8 @@ def plot_response_map(asim, outputs=None,
             else :
                 themap = seqmap[wavelength,:,:]
             plt.imshow(themap, extent=asim.map_extent, **kwargs)
+            if central_marker is not False:
+                plt.scatter(**central_marker)
             plt.title("Output %d"%(o))
             plt.xlabel("Position [mas]")
         if sumall:

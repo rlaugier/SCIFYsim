@@ -39,14 +39,6 @@ class simulator(object):
         self.array = raw_array[self.order]
         self.n_spec_ch = self.config.getint("photon", "n_spectral_science")
         
-        # Defining the target
-        mode = self.config.get("target", "mode")
-        if "name" in mode:
-            self.tarname = self.config.get("target", "target")
-            self.tarpos = sf.observatory.astroplan.FixedTarget.from_name(self.tarname)
-        else:
-            raise NotImplementedError("Some day we will be able to do it by RADEC position")
-            
         self.multi_dish = self.config.getboolean("configuration", "multi_dish")
         
 
@@ -65,6 +57,15 @@ class simulator(object):
         else:
             logit.warning("Using the config file of the simulator for the observatory")
             theconfig = self.config
+        
+        # Defining the target
+        mode = theconfig.get("target", "mode")
+        if "name" in mode:
+            self.tarname = theconfig.get("target", "target")
+            self.tarpos = sf.observatory.astroplan.FixedTarget.from_name(self.tarname)
+        else:
+            raise NotImplementedError("Some day we will be able to do it by RADEC position")
+            
         self.obs = sf.observatory.observatory(config=theconfig)
         
         logit.warning("Undecided whether to store array in simulator or observatory")
@@ -438,7 +439,8 @@ class simulator(object):
         Run an observing sequence
         """
         pass
-    def build_all_maps(self, mapres=200, mapcrop=1., dtype=np.float32):
+    def build_all_maps(self, mapres=200, mapcrop=1.,
+                       dtype=np.float32):
         """
         Builds the transmission maps for the combiner for all the pointings
         on self.target at the times of self.target

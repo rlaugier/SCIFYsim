@@ -1,6 +1,7 @@
 # This module is designed 
 import sympy as sp
 import numpy as np
+import numexpr as ne
 from kernuller import fprint
 from .utilities import ee
 
@@ -65,24 +66,32 @@ class integrator():
     def compute_noised(self):
         logit.warning("Noises not implemented yet")
         raise NotImplementedError("Noises not implemented yet")
-    def get_total(self, spectrograph=None, t_exp=None):
+    def get_total(self, spectrograph=None, t_exp=None,
+                 n_pixsplit=None):
         """
         Made a little bit complicated by the ability to simulate CRED1 camera
         spectrograph  : A spectrograph object to map the spectra on
                     a 2D detector
         t_exp         : [s]  Integration time to take into account dark current
         """
+        if n_pixsplit is not None: # Splitting the signal over a number pixels
+            thepixels = self.acc.copy()
+            ((thepixels/n_pixsplit)[None,:,:]*np.ones(n_pixsplit)[:,None,None]).sum(axis=0)
+        else:
+            thepixels = self.acc.copy()
         obtained_dark = self.dark * t_exp * self.mgain
         if spectrograph is not None:
-            acc = spectrograph.get_spectrum_image(self.acc)
+            acc = spectrograph.get_spectrum_image(thepixels)
         else:
-            acc = self.acc
+            acc = thepixels
         electrons = acc * self.eta * self.mgain
         electrons = electrons + obtained_dark
         expectancy = electrons.copy()
         electrons = np.random.poisson(lam=electrons*self.ENF)/self.ENF
         electrons = np.clip(electrons, 0, self.well)
         read = electrons + np.random.normal(size=electrons.shape, scale=self.ron)
+        if n_pixsplit is not None: # Binning the pixels again
+            read = np.sum(read, axis=0)
         self.forensics = {"Expectancy": expectancy,
                          "Read noise": self.ron,
                          "Dark signal": obtained_dark}
@@ -94,6 +103,31 @@ class integrator():
         self.forensics = {}
         self.mean = None
         self.std=None
+        
+    def prepare_t_exp_base(self):
+        eta, f_planet, n_pix, f_tot, ron, =  sp.symbols("eta, f_{planet}, n_p, f_{tot}, ron", real=True)
+        n_planet, n_tot, t_exp0, t_exp = sp.symbols("n_{planet}, n_{tot}, t_{esxp0}, t_{exp}", real=True)
+        SNR = sp.symbols("SNR", real=True)
+        mysubs = [(ron, self.ron),
+                 (eta, self.eta),
+                 ]
+        
+        self.expr_snr_t = eta*f_planet*t_exp/(sp.sqrt(eta*f_tot + n_pix*ron**2))
+        self.expr_t_for_snr = sp.solve(self.expr_snr_t - 1, t_exp)[0]
+        self.expr_well_fraction = eta*n_tot/n_pix/self.well
+        self.expr_t_max = self.well/(eta*f_tot/n_pix)
+        self.t_exp_base = sp.lambdify((f_planet, f_tot, n_pix),
+                         self.expr_t_for_snr.subs(mysubs), modules="numpy")
+        fprint(self.expr_snr_t)
+        self.snr_t = sp.lambdify((f_planet, f_tot, t_exp, n_pix),
+                                 self.expr_snr_t.subs(mysubs), modules="numpy")
+        self.well_fraction = sp.lambdify((n_tot, n_pix),
+                                         self.expr_well_fraction.subs(mysubs),
+                                         modules="numpy")
+        self.t_exp_max = sp.lambdify((f_tot, n_pix),
+                                    self.expr_t_max.subs(mysubs),
+                                    modules="numpy")
+        
 
 class spectrograph(object):
     def __init__(self, aconfig, lamb_range, n_chan=8):
@@ -104,13 +138,15 @@ class spectrograph(object):
         """
         self.lamb_range = lamb_range
         
+        over = aconfig.getint("spectrograph", "oversampling")
         val_lamb0 = aconfig.getfloat("spectrograph", "lamb0") # The wl at which psf is parameterized
-        val_sigmax0 = aconfig.getfloat("spectrograph", "sigmax0")
-        val_sigmay0 = aconfig.getfloat("spectrograph", "sigmay0")
-        val_x0 = aconfig.getfloat("spectrograph", "x0")
-        val_y0 = aconfig.getfloat("spectrograph", "y0")
-        val_delta_x = aconfig.getfloat("spectrograph", "delta_x")
+        val_sigmax0 = over*aconfig.getfloat("spectrograph", "sigmax0")
+        val_sigmay0 = over*aconfig.getfloat("spectrograph", "sigmay0")
+        val_x0 = over*aconfig.getfloat("spectrograph", "x0")
+        val_y0 = over*aconfig.getfloat("spectrograph", "y0")
+        val_delta_x = over*aconfig.getfloat("spectrograph", "delta_x")
         val_dispersion = aconfig.getfloat("spectrograph", "dispersion")
+        self.over = over
         
         
         ssx = 2*val_x0 + (n_chan-1)*val_delta_x
@@ -142,13 +178,16 @@ class spectrograph(object):
         
     def get_spectrum_image(self, signal):
         image = self.blank_sensor.copy()
+        ishape = self.blank_sensor.shape
         for i, anoutput in enumerate(signal.T):
             cube = self.ee(self.xx[None,:,:], self.yy[None,:,:],
                 anoutput[:,None,None],
                 self.lamb_range[:,None,None],
                 i)
-            
             image += np.sum(cube, axis=0)
+        
+        if self.over is not 1:
+            image = image.reshape(self.over, ishape[0]//self.over, ishape[1]//self.over, self.over).sum(axis=(0,3))
         return image
             
         
