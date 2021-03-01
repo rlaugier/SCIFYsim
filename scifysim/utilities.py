@@ -352,17 +352,51 @@ def get_star_params(star, verbose=True, showtable=False):
         print("T = ", T, "[K]")
         print("R = ", Rad, "[R_sun]")
     return dist, T, Rad
+def get_star_params_GAIA_JMMC(star, verbose=True, showtable=False):
+    """
+    Queries GAIA DR2 catalog for distance, radius and 
+    temperature of star:
+    star   : str   the name of the star
+    verbose: Whether to print the details found
+    
+    returns:
+    dist [pc]   : Distance
+    T    [K]    : Effective temperature
+    R    [Rsun] : Radius
+    """
+    from astroquery.vizier import Vizier
+    import astropy.units as u
+    from astropy.coordinates import SkyCoord
+    
+    v = Vizier.query_object(star, catalog=["GAIA"])
+    j = Vizier.query_object(star, catalog=["JMMC"])
+    v["I/345/gaia2"].sort(keys="Gmag")
+    obj = v["I/345/gaia2"][0]
+    j["II/300/jsdc"].sort(keys="Vmag")
+    objj = j["II/300/jsdc"][0]
+    dist = (obj["Plx"] * u.mas).to(u.parsec, equivalencies=u.parallax()).value
+    T = objj["Teff"]
+    Rad = objj["UDDK"]*u.mas.to(u.rad)/2*dist*u.pc.to(u.Rsun)
+    if showtable:
+        from IPython.display import display, HTML
+        display(v["I/345/gaia2"])
+        display(j["II/300/jsdc"])
+    if verbose:
+        print("Dist = ", dist, "[pc]")
+        print("T = ", T, "[K]")
+        print("R = ", Rad, "[R_sun]")
+    return dist, T, Rad
 
 def update_star_params(config, verbose=True):
     
     name = config.get("target", "target")
-    dist, T, Rad = get_star_params(name, verbose=False)
+    dist, T, Rad = get_star_params_GAIA_JMMC(name, verbose=False)
     if verbose:
         print("Dist set to ", dist, "[pc]")
         print("T set to ", T, "[K]")
         print("R set to ", Rad, "[R_sun]")
     
-    config.set("target", "star_distance", value="%.2f"%dist.value)
+    config.set("target", "star_distance", value="%.2f"%dist)
     config.set("target", "star_temperature", value="%.2f"%T)
     config.set("target", "star_radius", value="%.2f"%Rad)
     
@@ -419,4 +453,24 @@ def update_observing_night(config, time=None, duration=6.,  verbose=True):
         print("Sequende end set to ", tend)
     config.set("target", "seq_start", value=tstart)
     config.set("target", "seq_end", value=tend)
+    
+def get_location(simple_map, map_extent=None,
+                 search_function=np.argmax, mode="polar"):
+    frac = np.array(np.unravel_index(np.argmax(simple_map), simple_map.shape))/np.array(simple_map.shape) 
+    if map_extent is not None:
+        gain = np.array(map_extent[1]-map_extent[0], map_extent[3]-map_extent[2])
+        offset = np.array(map_extent[0], map_extent[2])
+    else :
+        gain = np.array([simple_map.shape[-2] , simple_map.shape[-1]])
+        offset = np.array([-simple_map.shape[-2]/2, -simple_map.shape[-1]/2])# order?
+    pos = frac*gain+offset
+    print("cartesian:", pos)
+    cpform = pos[0] - 1j*pos[1]
+    r = np.abs(cpform)
+    theta = np.angle(cpform)
+    print("r, theta", r, theta)
+    if "polar" in mode:
+        return r, theta
+    else :
+        return pos
     
