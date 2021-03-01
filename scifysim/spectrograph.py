@@ -10,7 +10,10 @@ import logging
 logit = logging.getLogger(__name__)
 
 class integrator():
-    def __init__(self, config=None, keepall=True, n_sources=4):
+    def __init__(self, config=None,
+                 keepall=True,
+                 n_sources=4,
+                 infinite_well=False):
         """
         Contains the pixel model of the detector.
         Currently it does not implement a system gain (1ADU = 1photoelectron)
@@ -42,8 +45,8 @@ class integrator():
             self.ENF = config.getfloat("detector", "ENF")
             self.mgain = config.getfloat("detector", "mgain")
             well = config.getfloat("detector", "well")
-            if np.isclose(well, 0.):
-                self.well = np.inf
+            if np.isclose(well, 0.) or infinite_well:
+                self.well = np.float32(1.e20) #np.inf
             else:
                 self.well = well
         self.reset()
@@ -76,7 +79,7 @@ class integrator():
         """
         if n_pixsplit is not None: # Splitting the signal over a number pixels
             thepixels = self.acc.copy()
-            ((thepixels/n_pixsplit)[None,:,:]*np.ones(n_pixsplit)[:,None,None]).sum(axis=0)
+            thepixels = ((thepixels/n_pixsplit)[None,:,:]*np.ones(n_pixsplit)[:,None,None])
         else:
             thepixels = self.acc.copy()
         obtained_dark = self.dark * t_exp * self.mgain
@@ -112,7 +115,7 @@ class integrator():
                  (eta, self.eta),
                  ]
         
-        self.expr_snr_t = eta*f_planet*t_exp/(sp.sqrt(eta*f_tot + n_pix*ron**2))
+        self.expr_snr_t = eta*f_planet*t_exp/(sp.sqrt(eta*f_tot*t_exp + n_pix*ron**2))
         self.expr_t_for_snr = sp.solve(self.expr_snr_t - 1, t_exp)[0]
         self.expr_well_fraction = eta*n_tot/n_pix/self.well
         self.expr_t_max = self.well/(eta*f_tot/n_pix)

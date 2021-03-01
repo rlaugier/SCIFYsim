@@ -297,7 +297,10 @@ class star_planet_target(object):
         throughput_cold_optics = config.getfloat("optics", "throughput_cold_optics")
         self.temp_cold_optics = config.getfloat("optics", "temp_cold_optics")
         self.throughput_combiner_chip = config.getfloat("optics", "throughput_combiner_chip")
-        self.transmission_cold_optics = self.throughput_combiner_chip * throughput_cold_optics**n_cold_optics
+        self.throughput_disp_elmnt = config.getfloat("optics", "throughput_disp_elmnt")
+        self.transmission_cold_optics = self.throughput_combiner_chip\
+                                        * self.throughput_disp_elmnt\
+                                        * throughput_cold_optics**n_cold_optics
         
         self.warm_optics = transmission_emission(trans_file=self.transmission_warm_optics,
                                                 T=self.temp_warm_optics, name="Warm Optics")
@@ -317,6 +320,11 @@ class star_planet_target(object):
         self.planet = resolved_source(director.lambda_science_range,
                                              distance=self.distance, radius=self.R_planet, T=self.T_planet,
                                              resolved=False, offset=self.planet_offset)
+    @property
+    def physical_separation(self):
+        """The physical separation between the planet and star (AU)"""
+        psep = self.planet_separation*units.mas.to(units.rad)*self.distance*units.pc.to(units.AU)
+        return psep
         
 
 
