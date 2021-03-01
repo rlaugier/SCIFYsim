@@ -145,7 +145,8 @@ class simulator(object):
         if file is None:
             file = self.config
         self.src = sf.sources.star_planet_target(file, self)
-    def prepare_integrator(self, config=None, keepall=False, n_sources=4):
+    def prepare_integrator(self, config=None, keepall=False,
+                           n_sources=4, infinite_well=False):
         """
         Prepares the integraro object that rules the pixel properties
         of the detector.
@@ -159,7 +160,8 @@ class simulator(object):
             config = self.config
         self.integrator = sf.spectrograph.integrator(config=config,
                                                      keepall=keepall,
-                                                     n_sources=n_sources)
+                                                     n_sources=n_sources,
+                                                     infinite_well=infinite_well)
         
         
     def prepare_spectrograph(self, config=None, n_chan=None):
@@ -225,6 +227,7 @@ class simulator(object):
         """
         t_co = self.injector.screen[0].step_time
         self.n_subexps = int(texp/t_co)
+        self.integrator.n_subexps = self.n_subexps
         #taraltaz = self.obs.observatory_location.altaz(time, target=self.target)
         #taraltaz, tarPA = self.obs.get_position(self.target, time)
         
@@ -233,6 +236,7 @@ class simulator(object):
         
         self.integrator.static_xx = self.injector.vigneting.xx
         self.integrator.static_yy = self.injector.vigneting.yy
+        self.integrator.reset()
         self.integrator.static =  []
         self.integrator.static_list = []
         for asource in diffuse:

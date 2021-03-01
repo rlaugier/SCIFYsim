@@ -238,7 +238,10 @@ class atmo(object):
             self.rms_i = subk.std()
             self.shm_phs = subk + self.qstatic
 
-
+    def reset(self):
+        self.offx = 0.
+        self.offy = 0.
+        
     def give(self):
         ''' ------------------------------------------
         Main loop: frozen screen slid over the aperture
@@ -863,6 +866,10 @@ class injector(object):
         for i, amap in enumerate(self.lpmap):
             quartiles.append([i*np.max(amap)/4 for i in range(4)])
         self.map_quartiles = np.array(quartiles)
+    
+    def reset_screen(self):
+        for ascreen in self.screen:
+            ascreen.reset()
         
     def give_fiber(self,):
         while True:
