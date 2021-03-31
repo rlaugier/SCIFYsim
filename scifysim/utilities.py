@@ -9,6 +9,10 @@ import logging
 logit = logging.getLogger(__name__)
 
 def vec2diag(vec):
+    """
+    Replictes in sympy the np.diag functionnality to create a
+    diagonal matrix from a 1D vector
+    """
     thelen = vec.shape[0]
     A = sp.eye(thelen)
     for i in range(thelen):
@@ -18,6 +22,10 @@ def vec2diag(vec):
 
 
 class ee(object):
+    """
+    Additional functionnality needed:
+    see comments starting 2021/02/24 https://github.com/sympy/sympy/issues/5642 .
+    """
     def __init__(self, expression):
         """
         ee is for Executable expression
@@ -71,6 +79,37 @@ class ee(object):
     def fprint(self):
         fprint(self.expr)
     
+
+def prepare_all(afile, thetarget=None, update_params=False,
+               instrumental_errors=True, seed=None):
+    """
+    A shortcut to prepare a simulator object
+    """
+    from scifysim import director
+    asim = director.simulator(fpath=afile)
+    #asim.config = loaded_config
+    if thetarget is not None:
+        asim.config.set("target", "target", value=thetarget)
+    if update_params:
+        update_star_params(config=asim.config)
+    update_observing_night(config=asim.config)
+    asim.prepare_observatory(file=asim.config)
+    if not instrumental_errors:
+        asim.config.set("fringe tracker", "dry_scaling", "0.0001")
+        asim.config.set("fringe tracker", "wet_scaling", "0.0001")
+        asim.config.set("atmo", "correc", "300.")
+    asim.prepare_injector(file=asim.config, seed=seed)
+    asim.prepare_combiner(asim.config)
+    asim.prepare_sequence(asim.config)
+    asim.prepare_fringe_tracker(asim.config, seed=seed)
+    asim.fringe_tracker.prepare_time_series(asim.lambda_science_range, duration=10, replace=True)
+    asim.prepare_integrator(config=asim.config, keepall=False, infinite_well=True)
+    asim.prepare_spectrograph(config=asim.config)
+    asim.prepare_sources()
+    asim.obs.point(asim.sequence[3], asim.target)
+    return asim
+    
+
 def test_ex():
     x, y = sp.symbols("x y")
     f1 = x**2 + y**2
@@ -370,17 +409,31 @@ def get_star_params_GAIA_JMMC(star, verbose=True, showtable=False):
     
     v = Vizier.query_object(star, catalog=["GAIA"])
     j = Vizier.query_object(star, catalog=["JMMC"])
-    v["I/345/gaia2"].sort(keys="Gmag")
-    obj = v["I/345/gaia2"][0]
-    j["II/300/jsdc"].sort(keys="Vmag")
-    objj = j["II/300/jsdc"][0]
+    catav = v["I/345/gaia2"]
+    catav.sort(keys="Gmag")
+    obj = catav[0]
     dist = (obj["Plx"] * u.mas).to(u.parsec, equivalencies=u.parallax()).value
-    T = objj["Teff"]
-    Rad = objj["UDDK"]*u.mas.to(u.rad)/2*dist*u.pc.to(u.Rsun)
+    try:
+        cataj = j["II/346/jsdc2"]
+        cataj.sort(keys="Vmag")
+        objj = cataj[0]
+        T = objj["Teff"]
+        Rad = objj["UDDK"]*u.mas.to(u.rad)/2*dist*u.pc.to(u.Rsun)
+    except:
+        try:
+            cataj = j["II/300/jsdc"]
+            cataj.sort(keys="Vmag")
+            objj = cataj[0]
+            T = objj["Teff"]
+            Rad = objj["UDDK"]*u.mas.to(u.rad)/2*dist*u.pc.to(u.Rsun)
+        except:
+            T = obj["Teff"]
+            Rad = obj["Rad"]
+            logit.error("Couldn't find the entry in JSDC catalog")
     if showtable:
         from IPython.display import display, HTML
-        display(v["I/345/gaia2"])
-        display(j["II/300/jsdc"])
+        display(catav)
+        display(cataj)
     if verbose:
         print("Dist = ", dist, "[pc]")
         print("T = ", T, "[K]")
@@ -449,8 +502,8 @@ def update_observing_night(config, time=None, duration=6.,  verbose=True):
     name = config.get("target", "target")
     dist, T, Rad = get_star_params(name, verbose=False)
     if verbose:
-        print("Sequende start set to ", tstart)
-        print("Sequende end set to ", tend)
+        print("Sequence start set to ", tstart)
+        print("Sequence end set to ", tend)
     config.set("target", "seq_start", value=tstart)
     config.set("target", "seq_end", value=tend)
     
@@ -473,4 +526,3 @@ def get_location(simple_map, map_extent=None,
         return r, theta
     else :
         return pos
-    

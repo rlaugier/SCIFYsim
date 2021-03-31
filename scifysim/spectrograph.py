@@ -130,6 +130,22 @@ class integrator():
         self.t_exp_max = sp.lambdify((f_tot, n_pix),
                                     self.expr_t_max.subs(mysubs),
                                     modules="numpy")
+    def consolidate_metrologic(self, ):
+        self.nsamples = self.n_subexps
+        sumstatic = np.sum(self.static, axis=0)
+        self.summed_signal = sumstatic[None,:,:]+self.starlight+\
+                            self.planetlight
+        self.total_summed_signal = self.summed_signal.sum(axis=0)
+
+        self.sums = []
+        self.source_labels = []
+        for i, astatic in enumerate(self.static):
+            self.source_labels.append(self.static_list[i])
+            self.sums.append(astatic * self.nsamples)
+        self.sums.append(self.starlight.sum(axis=0))
+        self.source_labels.append("Starlight")
+        self.sums.append(self.planetlight.sum(axis=0))
+        self.source_labels.append("Planet")
         
 
 class spectrograph(object):

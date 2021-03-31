@@ -382,10 +382,12 @@ class simulator(object):
             # Warning: modifying the array
             # combined = np.sum(np.abs(combined*np.conjugate(combined)), axis=(2))
             # self.integrator.accumulate(combined)
-            self.integrator.static_list = []
             for k, astatic in enumerate(self.integrator.static):
                 self.integrator.accumulate(astatic)
-                self.integrator.static_list.append(diffuse[k].__name__)
+        
+        self.integrator.static_list = []
+        for k, astatic in enumerate(self.integrator.static):
+            self.integrator.static_list.append(diffuse[k].__name__)
             
         #mean, std = self.integrator.compute_stats()
         self.integrator.ft_phase = np.array(self.integrator.ft_phase).astype(dtype)
@@ -424,27 +426,33 @@ class simulator(object):
         on self.target at the times of self.target
         mapres        : The resolution of the map in pixels
         mapcrop       : Adjusts the extent of the map
-
         Returns (also stored in self.map) a transmission map of shape:
         [n_sequence,
         n_wl_chanels,
         n_outputs,
         mapres,
         mapres]
+        
+        To get final flux of a point source :
+        Map/ds_sr * p.ss * DIT
+        ds_sr can be found in director.vigneting_map
         """
         vigneting_map = sf.injection.injection_vigneting(self.injector, mapres, mapcrop)
+        # Warning: this vigneting map for the maps are in the simulator.vigneting_map
+        # not to be confused with simulator.injector.vigneting
+        self.vigneting_map = vigneting_map
         maps = []
         for i, time in enumerate(self.sequence):
             self.obs.point(self.sequence[i], self.target)
             amap = self.make_map(i, vigneting_map, dtype=dtype)
             maps.append(amap)
         maps = np.array(maps)
-        mapshape = (len(self.sequence),
+        self.mapshape = (len(self.sequence),
                     self.lambda_science_range.shape[0],
                     maps.shape[2],
                     mapres,
                     mapres)
-        self.maps = maps.reshape(mapshape)
+        self.maps = maps.reshape(self.mapshape)
         extent = [np.min(vigneting_map.xx),
                   np.max(vigneting_map.xx),
                   np.min(vigneting_map.yy),
@@ -454,13 +462,15 @@ class simulator(object):
         
     def make_map(self, blockindex, vigneting_map, dtype=np.float32):
         """
-        Create sensitivity map
+        Create sensitivity map in ph/s/sr per spectral channel.
+        To get final flux of a point source :
+        Map/ds_sr * p.ss * DIT
         blockindex : The index in the observing sequence to create the map
         vigneting_map : The vigneting map drawn used for resolution
         """
         self.obs.point(self.sequence[blockindex], self.target)
         array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
-        injected = self.injector.best_injection(self.lambda_science_range)
+        #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
                 vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
                                                   self.lambda_science_range, 1.)
@@ -471,7 +481,7 @@ class simulator(object):
                                         array.flatten(), 2*np.pi/thelambda,
                                         np.ones(self.ntelescopes, dtype=np.complex128)) \
                                          for m, thelambda in enumerate(self.lambda_science_range)])
-        static_output = static_output * vigneted_spectrum[:,None,:]
+        static_output = static_output * np.sqrt(vigneted_spectrum[:,None,:])
         # lambdified argument order matters! This should remain synchronous
         # with the lambdify call
         # incoherently combining over sources

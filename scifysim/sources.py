@@ -411,6 +411,7 @@ class resolved_source(object):
         """
         The map is saved in a flat shape
         xx_f and yy_f are created to be flat versions of the coordinates.
+        ss is a total flux (ph/s/m^2) at the entrance of earth atmosphere.
         """
         self.ss = self.get_spectrum_map().value # Fixing a bug that appears in the spectrograph?
         self.ss = self.ss.reshape(self.ss.shape[0], self.ss.shape[1]*self.ss.shape[2])

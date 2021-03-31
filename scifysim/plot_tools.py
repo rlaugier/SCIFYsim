@@ -302,3 +302,49 @@ def plot_response_map(asim, outputs=None,
             plt.savefig(save+"Compound_maps_%04d.png"%(i), dpi=dpi)
         if show:
             plt.show()
+            
+def plot_opds(integ, step_time):
+    """
+    Plots the phase error information collected by 
+    the integrator object.
+    """
+    # I should profide an easier access to this time step
+    integration_step = step_time
+    t = np.arange(integ.summed_signal.shape[0])*integration_step
+    plt.figure()
+    pup = 1
+    plt.plot(t, integ.ft_phase[:,pup], label="Fringe tracker phase")
+    plt.plot(t, integ.inj_phase[:,:], label="Injection phase")
+    #plt.plot(asim.fringe_tracker.ref_sample_times[:1000],
+    #         2*np.pi/3.5e-6*asim.fringe_tracker.dry_piston_series[:1000,pup],
+    #        label= "Sample", alpha=0.3)
+    plt.title("Residual phase for pupil %d"%(pup))
+    plt.xlabel("Time [s]")
+    plt.ylabel("Phase [rad]")
+    plt.legend()
+    plt.show()
+
+    plt.figure()
+    plt.plot(t, integ.inj_amp[:]**2, label="Injection rate")
+    #plt.plot(asim.fringe_tracker.ref_sample_times[:1000],
+    #         2*np.pi/3.5e-6*asim.fringe_tracker.dry_piston_series[:1000,pup],
+    #        label= "Sample", alpha=0.3)
+    plt.title("Residual coupling rate")
+    plt.xlabel("Time [s]")
+    plt.ylabel("Coupling ")
+    plt.ylim(0,0.8)
+    plt.legend()
+    plt.show()
+
+    plt.figure()
+    pup = 1
+    plt.plot(t, integ.summed_signal.sum(axis=1)[:,3:5], label="Dark output signal")
+    plt.plot(t, integ.summed_signal.sum(axis=1)[:,3] - integ.summed_signal.sum(axis=1)[:,4], label="Kernel signal")
+    #plt.plot(asim.fringe_tracker.ref_sample_times[:1000],
+    #         2*np.pi/3.5e-6*asim.fringe_tracker.dry_piston_series[:1000,pup],
+    #        label= "Sample", alpha=0.3)
+    plt.title("Individual and differential outputs")
+    plt.xlabel("Time [s]")
+    plt.ylabel("Photons")
+    plt.legend()
+    plt.show()
