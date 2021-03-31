@@ -1289,7 +1289,7 @@ class injection_vigneting(object):
         """
         spectrum   : Flux density in ph/s/sr/m^2
         """
-        factor = self.collecting * self.ds*(units.mas**2).to(units.sr) * exptime
+        factor = self.collecting * self.ds_sr * exptime
         vigneted_spectrum = self.vig_func(lambda_range, self.rr_lambdaond) * (spectrum * factor)[None,:]
         return vigneted_spectrum
         

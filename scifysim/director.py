@@ -180,32 +180,6 @@ class simulator(object):
                                                  n_chan=n_chan)
         
     
-        
-    def make_exposure(self, injection_gen, texp=1., time=None):
-        """
-        Simulate an exposure
-        texp      : Exposure time (seconds)
-        t_co      : Coherence time (seconds) 
-        """
-        t_co = self.injector.screen[0].step_time
-        self.n_subexps = int(texp/t_co)
-        #taraltaz = self.obs.observatory_location.altaz(time, target=self.target)
-        #taraltaz, tarPA = self.obs.get_position(self.target, time)
-        #self.obs.point()
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
-        for i in tqdm(range(self.n_subexps)):
-            injected = next(self.injector.get_efunc)(self.lambda_science_range)
-            # lambdified argument order matters! This should remain synchronous
-            # with the lambdify call
-            combined = np.array([self.combiner.encaps(self.source.xx, self.source.yy,
-                                    array.flatten(), 2*np.pi/thelambda, injected[:,m])
-                                     for m, thelambda in enumerate(self.lambda_science_range)])
-            # incoherently combining over sources
-            # Warning: modifying the array
-            combined = np.sum(np.abs(combined*np.conjugate(combined)), axis=(2))
-            self.integrator.accumulate(combined)
-        mean, std = self.integrator.compute_stats()
-        return self.integrator
     
     def make_metrologic_exposure(self, interest, star, diffuse,
                                  texp=1., t_co=2.0e-3, time=None,
@@ -252,7 +226,7 @@ class simulator(object):
                                     array.flatten(), 2*np.pi/thelambda, np.ones(self.ntelescopes, dtype=np.complex128))
                                      for m, thelambda in enumerate(self.lambda_science_range)])
             #print(static_output.shape)
-            static_output = (static_output.swapaxes(0,2) * vigneted_spectrum[:,None,:])
+            static_output = (static_output.swapaxes(0,2) * np.sqrt(vigneted_spectrum[:,None,:]))
             static_output = np.sum(np.abs(static_output*np.conjugate(static_output), dtype=dtype), axis=0)
             self.integrator.static.append(static_output.T)
             self.integrator.static_list.append(asource.__name__)
@@ -285,7 +259,7 @@ class simulator(object):
                                     array.flatten(), 2*np.pi/thelambda, injected[:,m])
                                      for m, thelambda in enumerate(self.lambda_science_range)])
             # getting a number of photons
-            combined_starlight = combined_starlight * star.ss[:,None,:] * collected[:,None,None]
+            combined_starlight = combined_starlight * np.sqrt(star.ss[:,None,:] * collected[:,None,None])
             combined_starlight = np.sum(np.abs(combined_starlight*np.conjugate(combined_starlight), dtype=dtype), axis=(2))
             self.integrator.starlight.append(combined_starlight)
             
@@ -293,7 +267,7 @@ class simulator(object):
                                     array.flatten(), 2*np.pi/thelambda, injected[:,m])
                                      for m, thelambda in enumerate(self.lambda_science_range)])
             # getting a number of photons
-            combined_planetlight = combined_planetlight * interest.ss[:,None,:] * collected[:,None,None]
+            combined_planetlight = combined_planetlight * np.sqrt(interest.ss[:,None,:] * collected[:,None,None])
             combined_planetlight = np.sum(np.abs(combined_planetlight*np.conjugate(combined_planetlight), dtype=dtype), axis=(2))
             self.integrator.planetlight.append(combined_planetlight)
             
@@ -357,7 +331,7 @@ class simulator(object):
                                     array.flatten(), 2*np.pi/thelambda, np.ones(self.ntelescopes, dtype=np.complex128))
                                      for m, thelambda in enumerate(self.lambda_science_range)])
             #print(static_output.shape)
-            static_output = (static_output.swapaxes(0,2) * vigneted_spectrum[:,None,:])
+            static_output = (static_output.swapaxes(0,2) * np.sqrt(vigneted_spectrum[:,None,:]))
             static_output = np.sum(np.abs(static_output*np.conjugate(static_output), dtype=dtype), axis=0)
             self.integrator.static.append(static_output.T)
         
@@ -390,7 +364,7 @@ class simulator(object):
                                     array.flatten(), 2*np.pi/thelambda, injected[:,m])
                                      for m, thelambda in enumerate(self.lambda_science_range)])
             # getting a number of photons
-            combined_starlight = combined_starlight * star.ss[:,None,:] * collected[:,None,None]
+            combined_starlight = combined_starlight * np.sqrt(star.ss[:,None,:] * collected[:,None,None])
             combined_starlight = np.sum(np.abs(combined_starlight*np.conjugate(combined_starlight), dtype=dtype), axis=(2))
             if spectro is not None:
                 self.integrator.accumulate(combined_starlight)
@@ -399,7 +373,7 @@ class simulator(object):
                                     array.flatten(), 2*np.pi/thelambda, injected[:,m])
                                      for m, thelambda in enumerate(self.lambda_science_range)])
             # getting a number of photons
-            combined_planetlight = combined_planetlight * interest.ss[:,None,:] * collected[:,None,None]
+            combined_planetlight = combined_planetlight * np.sqrt(interest.ss[:,None,:] * collected[:,None,None])
             combined_planetlight = np.sum(np.abs(combined_planetlight*np.conjugate(combined_planetlight), dtype=dtype), axis=(2))
             if spectro is not None:
                 self.integrator.accumulate(combined_planetlight)
