@@ -314,26 +314,28 @@ class simulator(object):
         
         #Pointing should be done already
         array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
-        self.integrator.static_xx = self.injector.vigneting.xx
-        self.integrator.static_yy = self.injector.vigneting.yy
+        self.computed_static_xx = self.injector.vigneting.xx
+        self.computed_static_yy = self.injector.vigneting.yy
         self.integrator.reset()
-        self.integrator.static =  []
-        for asource in diffuse:
-            aspectrum = asource.get_downstream_transmission(self.lambda_science_range) \
-                            * asource.get_own_brightness(self.lambda_science_range) \
-            # Collecting surface appears here
-            vigneted_spectrum = self.injector.collecting \
-                            * self.injector.vigneting.vigneted_spectrum(aspectrum,
-                                                            self.lambda_science_range,
-                                                            t_co)
-            # vigneted_spectrum also handles the integration in time and space
-            static_output = np.array([self.combiner.encaps(mas2rad(self.injector.vigneting.xx), mas2rad(self.injector.vigneting.yy),
-                                    array.flatten(), 2*np.pi/thelambda, np.ones(self.ntelescopes, dtype=np.complex128))
-                                     for m, thelambda in enumerate(self.lambda_science_range)])
-            #print(static_output.shape)
-            static_output = (static_output.swapaxes(0,2) * np.sqrt(vigneted_spectrum[:,None,:]))
-            static_output = np.sum(np.abs(static_output*np.conjugate(static_output), dtype=dtype), axis=0)
-            self.integrator.static.append(static_output.T)
+        # Check existence of pre-computed static signal: This part should remain static per pointing
+        if not hasattr(self, "computed_static"): # Pointings should delete this attribute
+            self.computed_static =  []
+            for asource in diffuse:
+                aspectrum = asource.get_downstream_transmission(self.lambda_science_range) \
+                                * asource.get_own_brightness(self.lambda_science_range) \
+                # Collecting surface appears here
+                vigneted_spectrum = self.injector.collecting \
+                                * self.injector.vigneting.vigneted_spectrum(aspectrum,
+                                                                self.lambda_science_range,
+                                                                t_co)
+                # vigneted_spectrum also handles the integration in time and space
+                static_output = np.array([self.combiner.encaps(mas2rad(self.injector.vigneting.xx), mas2rad(self.injector.vigneting.yy),
+                                        array.flatten(), 2*np.pi/thelambda, np.ones(self.ntelescopes, dtype=np.complex128))
+                                         for m, thelambda in enumerate(self.lambda_science_range)])
+                #print(static_output.shape)
+                static_output = (static_output.swapaxes(0,2) * np.sqrt(vigneted_spectrum[:,None,:]))
+                static_output = np.sum(np.abs(static_output*np.conjugate(static_output), dtype=dtype), axis=0)
+                self.computed_static.append(static_output.T)
         
         logit.warning("Currently no vigneting (requires a normalization of vigneting)")
         filtered_starlight = diffuse[0].get_downstream_transmission(self.lambda_science_range)
@@ -382,11 +384,11 @@ class simulator(object):
             # Warning: modifying the array
             # combined = np.sum(np.abs(combined*np.conjugate(combined)), axis=(2))
             # self.integrator.accumulate(combined)
-            for k, astatic in enumerate(self.integrator.static):
+            for k, astatic in enumerate(self.computed_static):
                 self.integrator.accumulate(astatic)
         
         self.integrator.static_list = []
-        for k, astatic in enumerate(self.integrator.static):
+        for k, astatic in enumerate(self.computed_static):
             self.integrator.static_list.append(diffuse[k].__name__)
             
         #mean, std = self.integrator.compute_stats()
@@ -395,7 +397,8 @@ class simulator(object):
         self.integrator.inj_amp = np.array(self.integrator.inj_amp).astype(dtype)
         return self.integrator
     
-    def prepare_sequence(self, file=None, times=None, remove_daytime=False):
+    def prepare_sequence(self, file=None, times=None, remove_daytime=False,
+                        coordinates=None):
         """
         Prepare an observing sequence
         """
@@ -444,6 +447,7 @@ class simulator(object):
         maps = []
         for i, time in enumerate(self.sequence):
             self.obs.point(self.sequence[i], self.target)
+            self.reset_static()
             amap = self.make_map(i, vigneting_map, dtype=dtype)
             maps.append(amap)
         maps = np.array(maps)
@@ -469,6 +473,7 @@ class simulator(object):
         vigneting_map : The vigneting map drawn used for resolution
         """
         self.obs.point(self.sequence[blockindex], self.target)
+        self.reset_static()
         array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
         #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
