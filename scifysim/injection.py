@@ -970,9 +970,9 @@ class injector(object):
             injecteds.append(injected)
         injecteds = np.array(injecteds)
         
-        self.injection_rate = unsorted_interp2d(self.lambda_range, offset, np.abs(injecteds)**2, kind=interpolation)
+        self.injection_rate = unsorted_interp2d(self.lambda_range, offset, np.abs(injecteds)**2, kind=interpolation,fill_value=0.)
         self.injection_rate.__doc__ = """rate(wavelength[m], offset[lambda/D])"""
-        self.injection_arg = unsorted_interp2d(self.lambda_range, offset, np.angle(injecteds), kind=interpolation)
+        self.injection_arg = unsorted_interp2d(self.lambda_range, offset, np.angle(injecteds), kind=interpolation, fill_value=0.)
         self.injection_arg.__doc__ = """phase(wavelength[m], offset[lambda/D])"""
         return
 
