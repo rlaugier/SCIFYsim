@@ -6,6 +6,7 @@ from tqdm import tqdm
 import logging
 
 from kernuller import mas2rad, rad2mas
+from astropy import units
 
 logit = logging.getLogger(__name__)
 
@@ -63,8 +64,13 @@ class simulator(object):
         if "name" in mode:
             self.tarname = theconfig.get("target", "target")
             self.tarpos = sf.observatory.astroplan.FixedTarget.from_name(self.tarname)
-        else:
-            raise NotImplementedError("Some day we will be able to do it by RADEC position")
+        elif "coords" in theconfig.get("target", "mode"):
+            self.tarname = theconfig.get("target", "target")
+            mycoords = sf.observatory.SkyCoord(self.tarname, unit=units.deg)
+            self.target = sf.observatory.astroplan.FixedTarget(mycoords)
+        else :
+            logit.error("Did not understand the mode for target")
+            raise ValueError("Provide a valid mode for the target creation")
             
         self.obs = sf.observatory.observatory(config=theconfig)
         
@@ -401,20 +407,46 @@ class simulator(object):
                         coordinates=None):
         """
         Prepare an observing sequence
+        
+        coordinates  : read from file by default
+                        if skycoord object provided, then use that.
         """
         if file is not None:
             logit.info("Building sequence from new config file")
             pass
         else:
             logit.info("Building sequence from main config file")
-            file = self.file
+            file = self.config
+        if coordinates is not None:
+            file.set("target", "mode", "coords")
         
         self.seq_start_string = file.get("target", "seq_start")
         self.seq_end_string = file.get("target", "seq_end")
         n_points = file.getint("target", "n_points")
         self.sequence = self.obs.build_observing_sequence(times=[self.seq_start_string, self.seq_end_string],
                             npoints=n_points, remove_daytime=remove_daytime)
-        self.target = sf.observatory.astroplan.FixedTarget.from_name(self.tarname)
+        condition = (coordinates is not None) and (not hasattr(self, "target"))
+        if coordinates is None:
+            self.target = sf.observatory.astroplan.FixedTarget.from_name(self.tarname)
+        elif condition:
+            logit.error("Forced to define target name and position. This should have been done by prepare_observatory.")
+            if "name" in file.get("target", "mode"):
+                self.target = sf.observatory.astroplan.FixedTarget.from_name(self.tarname)
+            elif "coords" in file.get("target", "mode"):
+                self.tarname = file.get("target", "target")
+                self.target = sf.observatory.astroplan.FixedTarget(self.target)
+            else :
+                logit.error("Did not understand the mode for target")
+                raise ValueError("Provide a valid mode for the target creation")
+        else:
+            if isinstance(coordinates, sf.observatory.SkyCoord):
+                self.tarnmae = "from_skycoord"
+                self.target = sf.observatory.astroplan.FixedTarget(coordinates)
+            elif isinstance(coordinates, str):
+                self.tarname = "from_string"
+                self.target = sf.observatory.astroplan.FixedTarget(coordinates)
+        
+                
             
         pass
     def make_sequence(self):
@@ -496,6 +528,9 @@ class simulator(object):
         
     def __call__(self):
         pass
+    def reset_static(self):
+        if hasattr(self, "computed_static"):
+            del self.computed_static
     
 def test_director():
     logit.warning("hard path in the test")

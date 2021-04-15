@@ -81,7 +81,8 @@ class ee(object):
     
 
 def prepare_all(afile, thetarget=None, update_params=False,
-               instrumental_errors=True, seed=None):
+               instrumental_errors=True, seed=None,
+               crop=1., target_coords=None):
     """
     A shortcut to prepare a simulator object
     """
@@ -92,13 +93,13 @@ def prepare_all(afile, thetarget=None, update_params=False,
         asim.config.set("target", "target", value=thetarget)
     if update_params:
         update_star_params(config=asim.config)
-    update_observing_night(config=asim.config)
+    update_observing_night(config=asim.config, target_coords=target_coords)
     asim.prepare_observatory(file=asim.config)
     if not instrumental_errors:
         asim.config.set("fringe tracker", "dry_scaling", "0.0001")
         asim.config.set("fringe tracker", "wet_scaling", "0.0001")
         asim.config.set("atmo", "correc", "300.")
-    asim.prepare_injector(file=asim.config, seed=seed)
+    asim.prepare_injector(file=asim.config, seed=seed, crop=crop)
     asim.prepare_combiner(asim.config)
     asim.prepare_sequence(asim.config)
     asim.prepare_fringe_tracker(asim.config, seed=seed)
@@ -106,7 +107,9 @@ def prepare_all(afile, thetarget=None, update_params=False,
     asim.prepare_integrator(config=asim.config, keepall=False, infinite_well=True)
     asim.prepare_spectrograph(config=asim.config)
     asim.prepare_sources()
-    asim.obs.point(asim.sequence[3], asim.target)
+    highest = len(asim.sequence)//2
+    asim.obs.point(asim.sequence[highest], asim.target)
+    asim.reset_static()
     return asim
     
 
@@ -481,7 +484,8 @@ def find_best_night(obs, target, showplot=True, duration=None):
         Tstart = Time(besttime) - TimeDelta((duration/2)*astropy.units.h)
         Tend = Time(besttime) + TimeDelta((duration/2)*astropy.units.h)
         return Tstart, Tend
-def update_observing_night(config, time=None, duration=6.,  verbose=True):
+def update_observing_night(config, time=None, duration=6.,  verbose=True,
+                          target_coords=None):
     """
     config               The parsed config file to modify
     time      [fits format] (if None, will optimize for elevation)
@@ -489,9 +493,14 @@ def update_observing_night(config, time=None, duration=6.,  verbose=True):
     """
     from scifysim.observatory import observatory
     from astroplan import FixedTarget
+    from astropy.coordinates import SkyCoord
     obs = observatory(config=config)
-    tarname = config.get("target", "target")
-    target = FixedTarget.from_name(tarname)
+    if target_coords is None:
+        tarname = config.get("target", "target")
+        target = FixedTarget.from_name(tarname)
+    else:
+        tarname = "from coords"
+        target = FixedTarget(target_coords)
     if time is None:
         tstart, tend = find_best_night(obs, target, showplot=verbose, duration=duration)
         tstart = tstart.value
