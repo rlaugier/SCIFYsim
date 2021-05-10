@@ -69,7 +69,9 @@ class atmo(object):
                  psz=200,
                  lsz=8.0, r0=0.2, L0=10.0,
                  fc=24.5, correc=1.0, seed=None,
-                 wind_speed = 1., step_time = 0.01,
+                 wind_speed = 1., 
+                 wind_angle = 0.1,
+                 step_time = 0.01,
                  pdiam=8.0, config=None):
 
         ''' Kolmogorov type atmosphere + qstatic error
@@ -146,7 +148,7 @@ class atmo(object):
         self.offx = 0. # x-offset on the "large" phase screen array
         self.offy = 0. # y-offset on the "large" phase screen array
         self.t = 0.
-        self.update_step_vector()
+        self.update_step_vector(wind_angle=wind_angle)
         self.ttc     = False   # Tip-tilt correction flag
         
         # auxilliary array (for tip-tilt correction)
@@ -847,7 +849,8 @@ class injector(object):
             else: 
                 theseed = seed
             self.screen.append(atmo(config=self.atmo_config,
-                                    seed=theseed))
+                                    seed=theseed,
+                                    wind_angle=0.08+0.01*i))
             self.focal_plane.append([focuser(csz=self.phscreensz,
                                              xsz=self.focal_res, ysz=self.focal_res, pupil=self.pupil,
                                              pscale=self.pscale, wl=wl, rm_inj_piston=self.rm_inj_piston) for wl in self.lambda_range])
@@ -1066,16 +1069,28 @@ class fringe_tracker(object):
         if not self.precompute:
             available = int(np.max(self.ref_sample_times)/self.timestep)
             if not self.wet_atmosphere:
-                for i in range(available):
+                i = 0
+                while True:
+                    if i>=available:
+                        i = 0
+                        self.prepare_time_series(lamb, duration=10, replace=True)
                     yield self.get_phasor_dry(i, lamb)
+                    i += 1
             else:
                 logit.error("Wet atmosphere not implemented")
                 raise NotImplementedError("Wet atmosphere not implemented")
         else:
             self.interpolate_batch(np.max(self.ref_sample_times))
             if not self.wet_atmosphere:
-                for i in range(self.precomputed_series_piston.shape[0]):
+                precomp_length = self.precomputed_series_piston.shape[0]
+                i = 0
+                while True:
+                    if i>=precomp_length:
+                        i = 0
+                        self.prepare_time_series(lamb, duration=10, replace=True)
                     yield self.get_phasor_precomputed_dry(i,lamb)
+                    i += 1
+                    
             else:
                 logit.error("Wet atmosphere not implemented")
                 raise NotImplementedError("Wet atmosphere not implemented")
