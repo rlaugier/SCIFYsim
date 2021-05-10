@@ -220,11 +220,10 @@ class simulator(object):
         self.integrator.static =  []
         self.integrator.static_list = []
         for asource in diffuse:
-            aspectrum = asource.get_downstream_transmission(self.lambda_science_range) \
+            aspectrum = asource.get_downstream_transmission(self.lambda_science_range, inclusive=False) \
                             * asource.get_own_brightness(self.lambda_science_range) \
             # Collecting surface appears here
-            vigneted_spectrum = self.injector.collecting \
-                            * self.injector.vigneting.vigneted_spectrum(aspectrum,
+            vigneted_spectrum = self.injector.vigneting.vigneted_spectrum(aspectrum,
                                                             self.lambda_science_range,
                                                             t_co)
             # vigneted_spectrum also handles the integration in time and space
@@ -327,11 +326,10 @@ class simulator(object):
         if not hasattr(self, "computed_static"): # Pointings should delete this attribute
             self.computed_static =  []
             for asource in diffuse:
-                aspectrum = asource.get_downstream_transmission(self.lambda_science_range) \
+                aspectrum = asource.get_downstream_transmission(self.lambda_science_range, inclusive=False) \
                                 * asource.get_own_brightness(self.lambda_science_range) \
                 # Collecting surface appears here
-                vigneted_spectrum = self.injector.collecting \
-                                * self.injector.vigneting.vigneted_spectrum(aspectrum,
+                vigneted_spectrum = self.injector.vigneting.vigneted_spectrum(aspectrum,
                                                                 self.lambda_science_range,
                                                                 t_co)
                 # vigneted_spectrum also handles the integration in time and space

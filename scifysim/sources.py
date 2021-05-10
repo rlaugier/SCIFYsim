@@ -109,7 +109,7 @@ class transmission_emission(object):
     def get_own_brightness(self, wl):
         """
         Used when chaining different media.
-        Returns the brightness of the object.
+        Returns the flux density per solid angle of the object in each wl channel. [ph/m2/sr]
         """
         result = self.get_mean_trans_emit(wl, bright=True)
         return result
@@ -117,7 +117,8 @@ class transmission_emission(object):
     def get_upstream_brightness(self, wl):
         """
         Used when chaining different media.
-        Returns the brightness upstream of the current object (exclusively),
+        Returns the flux density per solid angle of the object in each wl channel [ph/m2/sr],
+        upstream of the current object (exclusively),
         including the transmission by the upstream objects (exclusively)
         """
         if self.upstream is None:
@@ -129,7 +130,9 @@ class transmission_emission(object):
     def get_total_brightness(self, wl):
         """
         Used when chaining different media.
-        Returns the total filtered brightness downstream of the object (inclusively)
+        Returns the total filtered
+        flux density per solid angle of the
+        object in each wl channel. [ph/m2/sr] downstream of the object (inclusively)
         """
         result = self.get_own_brightness(wl) + self.get_own_transmission(wl) * self.get_upstream_brightness(wl)
         return result
@@ -142,15 +145,22 @@ class transmission_emission(object):
         result = self.get_mean_trans_emit(wl)
         return result
 
-    def get_downstream_transmission(self, wl):
+    def get_downstream_transmission(self, wl, inclusive=True):
         """
         Used when chaining different media.
-        Returns the total of the transmission function of the chain downstream of the object (inclusively)
+        Returns the total of the transmission function of the chain downstream of the object.
+        wl   : The wavelengths to be computed
+        inclusive: Whether to includ the transmission of the object itself
         """
+        if inclusive:
+            own_trans = self.get_own_transmission(wl)
+        else :
+            # For exclusive transmission, the object's own transmission is set to 1
+            own_trans = 1.
         if self.downstream is None:
-            result = self.get_own_transmission(wl)
+            result = own_trans
         else:
-            result = self.get_own_transmission(wl) * self.downstream.get_downstream_transmission(wl)
+            result = own_trans * self.downstream.get_downstream_transmission(wl,inclusive=True)
         return result
 #sky_link = transmission_emission()
 
@@ -296,20 +306,23 @@ class star_planet_target(object):
         n_cold_optics = config.getfloat("optics", "n_cold_optics")
         throughput_cold_optics = config.getfloat("optics", "throughput_cold_optics")
         self.temp_cold_optics = config.getfloat("optics", "temp_cold_optics")
+        self.temp_combiner = config.getfloat("optics", "temp_combiner")
         self.throughput_combiner_chip = config.getfloat("optics", "throughput_combiner_chip")
         self.throughput_disp_elmnt = config.getfloat("optics", "throughput_disp_elmnt")
-        self.transmission_cold_optics = self.throughput_combiner_chip\
-                                        * self.throughput_disp_elmnt\
+        self.transmission_cold_optics = self.throughput_disp_elmnt\
                                         * throughput_cold_optics**n_cold_optics
         
         self.warm_optics = transmission_emission(trans_file=self.transmission_warm_optics,
                                                 T=self.temp_warm_optics, name="Warm Optics")
+        self.combiner = transmission_emission(trans_file=self.throughput_combiner_chip,
+                                                T=self.temp_combiner, name="Combiner")
         self.cold_optics = transmission_emission(trans_file=self.transmission_cold_optics,
                                                 T=self.temp_cold_optics, name="Cold Optics")
         
         chain(self.sky, self.UT)
         chain(self.UT, self.warm_optics)
-        chain(self.warm_optics, self.cold_optics)
+        chain(self.warm_optics, self.combiner)
+        chain(self.combiner, self.cold_optics)
         self.cold_optics.downstream = None
         self.sky.upstream = None
         
@@ -353,8 +366,8 @@ class resolved_source(object):
         self.offset = offset
         # self.ang_radius is in radians
         self.ang_radius = self.radius / (self.distance*units.pc.to(units.R_sun))
-        total_surface = np.pi * self.ang_radius**2 # disk section [sr]
-        self.total_flux_density = self.distant_blackbody()/ total_surface # [ph / s / m^2]
+        total_solid_angle = np.pi * self.ang_radius**2 # disk section [sr]
+        self.total_flux_density = self.distant_blackbody()/ total_solid_angle # [ph / s / m^2 / sr]
         
         if resolved:
             self.build_grid(angular_res, radial_res)
@@ -403,6 +416,7 @@ class resolved_source(object):
     def get_spectrum_map(self):
         """
         Maps self.total_flux_density
+        This produces numerical integration over solid angle elements
         """
         themap =  self.total_flux_density[:,None,None]*self.ds[None,:,:,] #self.r[None,:,:]*self.dr[None,:,:]*self.dtheta[None,:,:]
         return themap
@@ -421,11 +435,12 @@ class resolved_source(object):
     def distant_blackbody(self):
         """
         Returns the flux density for a distant blackbody
-
+        It is a total in ph/s/m2
         """
         dlambda = np.gradient(self.lambda_range)
+        #Discretization by spectral bins
         flux_density = blackbody.get_B_lamb_ph(self.lambda_range, self.T)*dlambda \
-                        * np.pi * ((self.radius * constants.R_sun) / (self.distance * constants.pc))**2
+                        * np.pi * ((self.radius * constants.R_sun) / (self.distance * constants.pc))**2#That gives the scaling of the flux density by the distance
         return flux_density
         
 
