@@ -19,6 +19,10 @@ class transmission_emission(object):
         T             : Temperature of the medium used for emission
         airmass       : When True, scales the effect with the airmass provided by the observatory object
         observatory   : The observatory object used to provided the airmass.
+        
+        WARNING: Unlike for astrophysical sources, when a transmission_emission
+        object contains an ss attribute, it already
+        takes into account the transmission through the insturment.
         """
         self.__name__ = name
         if isinstance(trans_file, float):
@@ -431,6 +435,8 @@ class resolved_source(object):
         self.ss = self.ss.reshape(self.ss.shape[0], self.ss.shape[1]*self.ss.shape[2])
         self.xx_f = self.xx.flatten()
         self.yy_f = self.yy.flatten()
+        self.xx_r = mas2rad(self.xx_f)
+        self.yy_r = mas2rad(self.yy_f)
         
     def distant_blackbody(self):
         """

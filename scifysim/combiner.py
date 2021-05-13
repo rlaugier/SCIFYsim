@@ -6,6 +6,15 @@ import logging
 
 logit = logging.getLogger(__name__)
 
+def lambdifyz(symbols, expr, modules="numpy"):
+    assert isinstance(expr, sp.Matrix)
+    z = sp.symbols("z")
+    thesymbols = list(symbols)
+    thesymbols.append(z)
+    exprz = expr + z*sp.prod(symbols)*sp.ones(expr.shape[0], expr.shape[1])
+    fz = sp.lambdify(thesymbols, exprz, modules=modules)
+    return fz
+
 class combiner(object):
     def __init__(self,expr, thesubs,
                  mask_bright=None,
@@ -52,7 +61,26 @@ class combiner(object):
         self.encaps = sf.utilities.ee(self.T_subs)
         # Here, lambdifying for the parameters
         self.encaps.lambdify((self.alpha, self.beta,self.Xm ,self.k, self.e), modules="numexpr")
-        pass
+        
+    def chromatic_matrix(self, wl):
+        """
+        Work in progress. This helps define the chromatic behaviour of the combiner even
+        when it is define achromatic
+        """
+        # Defining a chromatic version of the matrix
+        sigma, = self.M.free_symbols
+        lamb = sp.symbols("lambda")
+        k = sp.symbols("k")
+        mysubs = [(sigma, 0.1),
+                  (lamb, 2*sp.pi/k)]
+        ks = 2*np.pi/wl
+        self.Mcs = self.M.subs(mysubs)
+        self.Mcl = lambdifyz((k,), self.Mcs, modules="numpy")
+        self.Mcn = np.moveaxis(self.Mcl(ks, 0), 2, 0)
+        logit.warning("Comuputed chromatic combiner matrix with the following shape:")
+        logit.warning(self.Mcn.shape)
+        
+        
     def refresh_array(self, thearray):
         """
         This method recomputes a disposable encapsulated function for the give pointing.
@@ -64,6 +92,7 @@ class combiner(object):
         self.pointed_encaps = sf.utilities.ee(self.T_pointed)
         self.pointed_encaps.lambdify((self.alpha, self.beta, self.k, self.e), modules="numexpr")
         
+                
     @classmethod
     def angel_woolf(cls, file, ph_shifters=(0,sp.pi/2)):
         
