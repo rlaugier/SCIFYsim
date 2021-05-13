@@ -227,8 +227,8 @@ class simulator(object):
                                                             self.lambda_science_range,
                                                             t_co)
             # vigneted_spectrum also handles the integration in time and space
-            static_output = np.array([self.combiner.encaps(mas2rad(self.injector.vigneting.xx), mas2rad(self.injector.vigneting.yy),
-                                    array.flatten(), 2*np.pi/thelambda, np.ones(self.ntelescopes, dtype=np.complex128))
+            static_output = np.array([self.combiner.pointed_encaps(mas2rad(self.injector.vigneting.xx), mas2rad(self.injector.vigneting.yy),
+                                    2*np.pi/thelambda, np.ones(self.ntelescopes, dtype=np.complex128))
                                      for m, thelambda in enumerate(self.lambda_science_range)])
             #print(static_output.shape)
             static_output = (static_output.swapaxes(0,2) * np.sqrt(vigneted_spectrum[:,None,:]))
@@ -260,16 +260,16 @@ class simulator(object):
             thexx = star.xx_f
             theyy = star.yy_f
             
-            combined_starlight = np.array([self.combiner.encaps(mas2rad(thexx), mas2rad(theyy),
-                                    array.flatten(), 2*np.pi/thelambda, injected[:,m])
+            combined_starlight = np.array([self.combiner.pointed_encaps(mas2rad(thexx), mas2rad(theyy),
+                                    2*np.pi/thelambda, injected[:,m])
                                      for m, thelambda in enumerate(self.lambda_science_range)])
             # getting a number of photons
             combined_starlight = combined_starlight * np.sqrt(star.ss[:,None,:] * collected[:,None,None])
             combined_starlight = np.sum(np.abs(combined_starlight*np.conjugate(combined_starlight), dtype=dtype), axis=(2))
             self.integrator.starlight.append(combined_starlight)
             
-            combined_planetlight = np.array([self.combiner.encaps(mas2rad(interest.xx_f), mas2rad(interest.yy_f),
-                                    array.flatten(), 2*np.pi/thelambda, injected[:,m])
+            combined_planetlight = np.array([self.combiner.pointed_encaps(mas2rad(interest.xx_f), mas2rad(interest.yy_f),
+                                    2*np.pi/thelambda, injected[:,m])
                                      for m, thelambda in enumerate(self.lambda_science_range)])
             # getting a number of photons
             combined_planetlight = combined_planetlight * np.sqrt(interest.ss[:,None,:] * collected[:,None,None])
@@ -333,8 +333,8 @@ class simulator(object):
                                                                 self.lambda_science_range,
                                                                 t_co)
                 # vigneted_spectrum also handles the integration in time and space
-                static_output = np.array([self.combiner.encaps(mas2rad(self.injector.vigneting.xx), mas2rad(self.injector.vigneting.yy),
-                                        array.flatten(), 2*np.pi/thelambda, np.ones(self.ntelescopes, dtype=np.complex128))
+                static_output = np.array([self.combiner.pointed_encaps(mas2rad(self.injector.vigneting.xx), mas2rad(self.injector.vigneting.yy),
+                                        2*np.pi/thelambda, np.ones(self.ntelescopes, dtype=np.complex128))
                                          for m, thelambda in enumerate(self.lambda_science_range)])
                 #print(static_output.shape)
                 static_output = (static_output.swapaxes(0,2) * np.sqrt(vigneted_spectrum[:,None,:]))
@@ -366,8 +366,8 @@ class simulator(object):
             thexx = star.xx_f
             theyy = star.yy_f
             
-            combined_starlight = np.array([self.combiner.encaps(mas2rad(thexx), mas2rad(theyy),
-                                    array.flatten(), 2*np.pi/thelambda, injected[:,m])
+            combined_starlight = np.array([self.combiner.pointed_encaps(mas2rad(thexx), mas2rad(theyy),
+                                    2*np.pi/thelambda, injected[:,m])
                                      for m, thelambda in enumerate(self.lambda_science_range)])
             # getting a number of photons
             combined_starlight = combined_starlight * np.sqrt(star.ss[:,None,:] * collected[:,None,None])
@@ -375,8 +375,8 @@ class simulator(object):
             if spectro is not None:
                 self.integrator.accumulate(combined_starlight)
             
-            combined_planetlight = np.array([self.combiner.encaps(mas2rad(interest.xx_f), mas2rad(interest.yy_f),
-                                    array.flatten(), 2*np.pi/thelambda, injected[:,m])
+            combined_planetlight = np.array([self.combiner.pointed_encaps(mas2rad(interest.xx_f), mas2rad(interest.yy_f),
+                                    2*np.pi/thelambda, injected[:,m])
                                      for m, thelambda in enumerate(self.lambda_science_range)])
             # getting a number of photons
             combined_planetlight = combined_planetlight * np.sqrt(interest.ss[:,None,:] * collected[:,None,None])
@@ -452,7 +452,19 @@ class simulator(object):
         Run an observing sequence
         """
         pass
-    def build_all_maps(self, mapres=200, mapcrop=1.,
+    
+    def point(self, time, target):
+        """
+        Points the array towards the target. Updates the 
+        time    : The time to make the observation
+        target  : The skycoord object to point
+        """
+        self.obs.point(time, target)
+        self.reset_static()
+        thearray = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        self.combiner.refresh_array(thearray)
+    
+    def build_all_maps(self, mapres=100, mapcrop=1.,
                        dtype=np.float32):
         """
         Builds the transmission maps for the combiner for all the pointings
@@ -476,8 +488,7 @@ class simulator(object):
         self.vigneting_map = vigneting_map
         maps = []
         for i, time in enumerate(self.sequence):
-            self.obs.point(self.sequence[i], self.target)
-            self.reset_static()
+            self.point(self.sequence[i], self.target)
             amap = self.make_map(i, vigneting_map, dtype=dtype)
             maps.append(amap)
         maps = np.array(maps)
@@ -502,18 +513,16 @@ class simulator(object):
         blockindex : The index in the observing sequence to create the map
         vigneting_map : The vigneting map drawn used for resolution
         """
-        self.obs.point(self.sequence[blockindex], self.target)
-        self.reset_static()
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        self.point(self.sequence[blockindex], self.target)
         #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
                 vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
                                                   self.lambda_science_range, 1.)
         # Caution: line is not idempotent!
         vigneted_spectrum = np.swapaxes(vigneted_spectrum, 0,1)
-        static_output = np.array([self.combiner.encaps(mas2rad(vigneting_map.xx),
+        static_output = np.array([self.combiner.pointed_encaps(mas2rad(vigneting_map.xx),
                                         mas2rad(vigneting_map.yy),
-                                        array.flatten(), 2*np.pi/thelambda,
+                                        2*np.pi/thelambda,
                                         np.ones(self.ntelescopes, dtype=np.complex128)) \
                                          for m, thelambda in enumerate(self.lambda_science_range)])
         static_output = static_output * np.sqrt(vigneted_spectrum[:,None,:])

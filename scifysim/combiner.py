@@ -53,6 +53,17 @@ class combiner(object):
         # Here, lambdifying for the parameters
         self.encaps.lambdify((self.alpha, self.beta,self.Xm ,self.k, self.e), modules="numexpr")
         pass
+    def refresh_array(self, thearray):
+        """
+        This method recomputes a disposable encapsulated function for the give pointing.
+        """
+        thesubs = []
+        for symbol, val in zip(self.Xm, thearray.flatten()):
+            thesubs.append((symbol, val))
+        self.T_pointed = self.T_subs.subs(thesubs)
+        self.pointed_encaps = sf.utilities.ee(self.T_pointed)
+        self.pointed_encaps.lambdify((self.alpha, self.beta, self.k, self.e), modules="numexpr")
+        
     @classmethod
     def angel_woolf(cls, file, ph_shifters=(0,sp.pi/2)):
         
