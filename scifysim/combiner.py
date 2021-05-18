@@ -6,20 +6,13 @@ import logging
 
 logit = logging.getLogger(__name__)
 
-def lambdifyz(symbols, expr, modules="numpy"):
-    assert isinstance(expr, sp.Matrix)
-    z = sp.symbols("z")
-    thesymbols = list(symbols)
-    thesymbols.append(z)
-    exprz = expr + z*sp.prod(symbols)*sp.ones(expr.shape[0], expr.shape[1])
-    fz = sp.lambdify(thesymbols, exprz, modules=modules)
-    return fz
 
 class combiner(object):
     def __init__(self,expr, thesubs,
                  mask_bright=None,
                  mask_dark=None,
-                 mask_photometric=None):
+                 mask_photometric=None,
+                 lamb=None):
         
         self.Na = expr.shape[1]
         self.M = expr
@@ -27,6 +20,7 @@ class combiner(object):
         self.dark = mask_dark
         self.photometric = mask_photometric
         self.baseline_subs = thesubs
+        self.lamb = lamb
         
         #X = sp.MatrixSymbol('X', 2, 4)
         X = sp.Matrix(sp.symbols('X:{}'.format(self.Na), real=True))
@@ -62,7 +56,24 @@ class combiner(object):
         # Here, lambdifying for the parameters
         self.encaps.lambdify((self.alpha, self.beta,self.Xm ,self.k, self.e), modules="numexpr")
         
+        # For the chromatic combiners
+            
     def chromatic_matrix(self, wl):
+        """
+        Work in progress. This helps define the chromatic behaviour of the combiner even
+        when it is define achromatic
+        """
+        # Defining a chromatic version of the matrix
+        k = sp.symbols("k")
+        mysubs = [(self.lamb, 2*sp.pi/k)]
+        ks = 2*np.pi/wl
+        self.Mcs = self.M.subs(mysubs)
+        self.Mcl = sf.utilities.lambdifyz((k,), self.Mcs, modules="numpy")
+        self.Mcn = np.moveaxis(self.Mcl(ks, 0), 2, 0)
+        logit.warning("Comuputed chromatic combiner matrix with the following shape:")
+        logit.warning(self.Mcn.shape)
+        
+    def pseudo_chromatic_matrix(self, wl):
         """
         Work in progress. This helps define the chromatic behaviour of the combiner even
         when it is define achromatic
@@ -75,7 +86,7 @@ class combiner(object):
                   (lamb, 2*sp.pi/k)]
         ks = 2*np.pi/wl
         self.Mcs = self.M.subs(mysubs)
-        self.Mcl = lambdifyz((k,), self.Mcs, modules="numpy")
+        self.Mcl = sf.utilities.lambdifyz((k,), self.Mcs, modules="numpy")
         self.Mcn = np.moveaxis(self.Mcl(ks, 0), 2, 0)
         logit.warning("Comuputed chromatic combiner matrix with the following shape:")
         logit.warning(self.Mcn.shape)
@@ -117,43 +128,44 @@ class combiner(object):
         angel_woolf_ph, VIKiNG, GLINT, GRAVITY, bracewell_ph, bracewell
         """
         hasph = False
+        lamb = None
         thesubs = []
         combiner_type = file.get("configuration", "combiner")
+        tap_ratio = file.getfloat("configuration", "photometric_tap")
         # Switch on combiner type
-        if "angel_woolf_ph" in combiner_type:
+        if combiner_type == "angel_woolf_ph":
             hasph = True
             M, bright, dark, photo = sf.combiners.angel_woolf_ph(ph_shifters=ph_shifters,
-                                                            include_masks=True)
-        elif "GLINT" in combiner_type:
+                                                            include_masks=True, tap_ratio=tap_ratio)
+        elif combiner_type == "angel_woolf_ph_chromatic":
             hasph = True
-            M, bright, dark, photo = sf.combiners.GLINT(include_masks=True)
-        elif "VIKiNG" in combiner_type:
+            M, bright, dark, photo = sf.combiners.angel_woolf_ph_chromatic(ph_shifters=ph_shifters,
+                                                            include_masks=True, tap_ratio=tap_ratio)
+            lamb, = M.free_symbols
+        elif combiner_type == "GLINT":
             hasph = True
-            M, bright, dark, photo = sf.combiners.VIKiNG(include_masks=True)
-        elif "bracewell_ph" in combiner_type:
+            M, bright, dark, photo = sf.combiners.GLINT(include_masks=True,
+                                                        tap_ratio=tap_ratio)
+        elif combiner_type == "VIKiNG":
+            hasph = True
+            M, bright, dark, photo = sf.combiners.VIKiNG(include_masks=True,
+                                                         tap_ratio=tap_ratio)
+        elif combiner_type ==  "bracewell_ph":
             hasph = True
             M, bright, dark, photo = sf.combiners.bracewell_ph(ph_shifters=ph_shifters,
                                                             include_masks=True)
-        elif "bracewell" in combiner_type:
+        elif combiner_type == "bracewell":
             logit.error("Simple bracewell not implemented yet")
             raise NotImplementedError("")
             pass
-        elif "GRAVITY" in combiner_type:
+        elif combiner_type == "GRAVITY":
             hasph = False
             M = sf.combiners.GRAVITY()
         else:
             logit.error("Nuller type not recognized")
             raise KeyError("Nuller type not found")
         
-        if hasph:
-            # Configure the subsitution of the photometric tap
-            thesigma = file.getfloat("configuration", "photometric_tap")
-            #Photometric tap
-            logit.info("Here, forced to assume I have only one symbol: sigma")
-            for symbol in M.free_symbols:
-                sigma = symbol
-            thesubs = [(sigma, thesigma)]
-        else:
+        if not hasph:
             bright = None
             dark = None
             photo = None
@@ -161,7 +173,8 @@ class combiner(object):
         obj = cls(M, thesubs,
                  mask_bright=bright,
                  mask_dark=dark,
-                 mask_photometric=photo)
+                 mask_photometric=photo,
+                 lamb=lamb)
         return obj
 def test_combiner(combiner, nwl=10):
     hr = kernuller.mas2rad(16)

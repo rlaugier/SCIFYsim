@@ -20,6 +20,23 @@ def vec2diag(vec):
     return A
 
 
+def lambdifyz(symbols, expr, modules="numpy"):
+    """
+    Circumvents a bug in lambdify where silent 
+    variables will be simplified and therefore
+    aren't broadcasted. https://github.com/sympy/sympy/issues/5642
+    Use an extra argument = 0 when calling
+    Please, keep the function synchronous with kernuller
+    """
+    assert isinstance(expr, sp.Matrix)
+    z = sp.symbols("z")
+    thesymbols = list(symbols)
+    thesymbols.append(z)
+    exprz = expr + z*sp.prod(symbols)*sp.ones(expr.shape[0], expr.shape[1])
+    fz = sp.lambdify(thesymbols, exprz, modules=modules)
+    return fz
+
+
 
 class ee(object):
     """
