@@ -122,8 +122,11 @@ class combiner(object):
                   mask_photometric=photo)
         return obj
     @classmethod
-    def from_config(cls, file, ph_shifters=(0,sp.pi/2)):
+    def from_config(cls, file, ph_shifters=(0,0)):
         """
+        file         : The config file
+        ph_shifters  : Phase shifters between first and second stage default: (0,0)
+                        These correspond to the "internal modulation"
         Accepted combiners:
         angel_woolf_ph, VIKiNG, GLINT, GRAVITY, bracewell_ph, bracewell
         """
@@ -132,6 +135,36 @@ class combiner(object):
         thesubs = []
         combiner_type = file.get("configuration", "combiner")
         tap_ratio = file.getfloat("configuration", "photometric_tap")
+        phase_offset_type = file.get("configuration", "input_phase_offset")
+        
+        # Type of input phase offset
+        if phase_offset_type == "none":
+            input_offset = 0
+        elif phase_offset_type == "achromatic":
+            input_offset = sp.pi/2
+        elif phase_offset_type == "geometric":
+            wavelength = file.getfloat("photon", "lambda_cen")
+            piston = wavelength/4 # this gives pi/2 for the central wavelength
+            p, lamb, aphi = sf.combiners.p, sf.combiners.lamb, sf.combiners.aphi
+            input_offset = aphi.subs([(p, piston)])
+            #phase = sf.combiners.piston2phase(piston,lamb)
+        else :
+            raise KeyError("Phase shift type not recognized")
+        
+        coupler_techno = file.get("configuration", "coupler_techno")
+        #(KG_MMI, Sharma_asym, Tepper_direct)
+        if coupler_techno == "KG_MMI":
+            Mc = sf.combiners.M_KG
+        elif coupler_techno == "Sharma_asym":
+            Mc = sf.combiners.M_Sharma
+        elif coupler_techno == "Tepper_direct":
+            Mc = sf.combiners.M_Tepper
+        elif coupler_techno == "perfect":
+            Mc = sf.combiners.pcoupler
+        else:
+            logit.error("combiner type not understood")
+        
+            
         # Switch on combiner type
         if combiner_type == "angel_woolf_ph":
             hasph = True
@@ -139,8 +172,9 @@ class combiner(object):
                                                             include_masks=True, tap_ratio=tap_ratio)
         elif combiner_type == "angel_woolf_ph_chromatic":
             hasph = True
-            M, bright, dark, photo = sf.combiners.angel_woolf_ph_chromatic(ph_shifters=ph_shifters,
-                                                            include_masks=True, tap_ratio=tap_ratio)
+            M, bright, dark, photo = sf.combiners.angel_woolf_ph_chromatic(Mc=Mc, ph_shifters=ph_shifters,
+                                                            include_masks=True, tap_ratio=tap_ratio,
+                                                            input_ph_shifters=input_offset*np.array([0,1,0,1]))
             lamb, = M.free_symbols
         elif combiner_type == "GLINT":
             hasph = True
@@ -160,7 +194,7 @@ class combiner(object):
             pass
         elif combiner_type == "GRAVITY":
             hasph = False
-            M = sf.combiners.GRAVITY()
+            M = sf.combiners.GRAVITY(Mc=Mc, ph_shifter_type=phase_offset_type,wl=wavelength)
         else:
             logit.error("Nuller type not recognized")
             raise KeyError("Nuller type not found")

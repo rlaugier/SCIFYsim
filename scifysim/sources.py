@@ -333,6 +333,7 @@ class star_planet_target(object):
         # Create the star and planet source objects
         self.star = resolved_source(director.lambda_science_range,
                                            distance=self.distance, radius=self.R_star, T=self.T_star,
+                                           angular_res=12, radial_res=5,
                                            resolved=self.resolved_star)
         self.planet = resolved_source(director.lambda_science_range,
                                              distance=self.distance, radius=self.R_planet, T=self.T_planet,
@@ -405,8 +406,8 @@ class resolved_source(object):
         Creates self.xx, self.yy, self.ds, self.theta, self.r
         
         """
-        
-        self.theta, self.r = np.meshgrid( np.linspace(0., 2*np.pi, angular_res, endpoint=False), np.linspace(0., self.ang_radius, radial_res, endpoint=False) )
+        radial_step = self.ang_radius/radial_res
+        self.theta, self.r = np.meshgrid( np.linspace(0., 2*np.pi, angular_res, endpoint=False), np.linspace(0.+radial_step/2, self.ang_radius-radial_step/2, radial_res, endpoint=True) )
         # Angular positions referenced East of North
         self.xx = -self.r*np.sin(self.theta)*units.rad.to(units.mas) \
                     - self.offset[0]

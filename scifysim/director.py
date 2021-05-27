@@ -379,7 +379,8 @@ class simulator(object):
         self.integrator.inj_phase = np.array(self.integrator.inj_phase, dtype=dtype)
         self.integrator.inj_amp = np.array(self.integrator.inj_amp, dtype=dtype)
         return self.integrator
-    def combine_light(self, asource, injected, input_array, collected):
+    def combine_light(self, asource, injected, input_array, collected,
+                      dosum=True, dtype=np.float64):
         """
         Computes the combination for a discretized light source object 
         for all the wavelengths of interest.
@@ -391,18 +392,49 @@ class simulator(object):
         input_arra  : The projected geometric configuration of the array
                         use observatory.get_projected_array()
         collected   : The intensity across wavelength and the difference source origins
+        dtype       : The data type to use (use np.float32 for maps)
         """
         # Ideally, this collected operation should be factorized over all subexps
         intensity = asource.ss * collected[:,None]
         amplitude = np.sqrt(intensity)
         b = []
-        for alpha, beta, anamp in zip(asource.xx_r, asource.yy_r, amplitude.T):
-            geom_phasor = self.geometric_phasor(alpha, beta, input_array)
-            c = self.combine(injected, geom_phasor, amplitude=anamp)
-            b.append(c)
+        if dtype is np.float64:
+            for alpha, beta, anamp in zip(asource.xx_r, asource.yy_r, amplitude.T):
+                geom_phasor = self.geometric_phasor(alpha, beta, input_array)
+                c = self.combine(injected, geom_phasor, amplitude=anamp)
+                b.append(c)
+        else:
+            for alpha, beta, anamp in zip(asource.xx_r, asource.yy_r, amplitude.T):
+                geom_phasor = self.geometric_phasor(alpha, beta, input_array)
+                c = self.combine_32(injected, geom_phasor, amplitude=anamp)
+                b.append(c)
         b = np.array(b)
-        outputs = np.sum(np.abs(b)**2, axis=0)
+        if dosum:
+            outputs = np.sum(np.abs(b)**2, axis=0)
+        else:
+            outputs = np.abs(b)**2
         return outputs
+    def combine_32(self, inst_phasor, geom_phasor, amplitude=None,):
+        """
+        Computes the output INTENSITY based on the input AMPLITUDE
+        This version provides a result in np.float32 format for smaller
+        memory footprint (for maps)
+        inst_phasor   : The instrumental phasor to apply to the inputs
+                        dimension (n_wl, n_input)
+        geom_phasor   : The geometric phasor due to source location
+                        dimension (n_wl, n_input)
+        amplitude     : Complex amplitude of the spectrum of the source
+                        dimension (n_wl, n_src)
+        
+        """
+        #from pdb import set_trace
+        if amplitude is None:
+            amplitude = np.ones_like(self.k, dtype=np.float32)
+        myinput = inst_phasor*geom_phasor*amplitude[:,None]
+        output_amps = np.einsum("ijk,ik->ij",self.combiner.Mcn.astype(np.complex64), myinput)
+        #set_trace()
+        pass
+        return output_amps
     def combine(self, inst_phasor, geom_phasor, amplitude=None):
         """
         Computes the output INTENSITY based on the input AMPLITUDE

@@ -38,41 +38,59 @@ def four_photometric(tap_ratio):
     return M
 def ph_shifter(phi):
     return sp.exp(sp.I*phi)
+def piston2phase(p, lamb):
+    phase = (2*sp.pi*p)/lamb
+    return phase
 def geom_ph_shifter(p, lamb):
-    a = sp.exp(sp.I * (2*np.pi*p)/lamb)
+    a = sp.exp(sp.I * piston2phase(p, lamb))
     return a
 
+p, lamb = sp.symbols("p, lambda", real=True)
+aphi = (2*sp.pi*p)/lamb
+
+
+#########################################################
+# A physically meaningful representation of a coupler
+########################################################
+sigma, Delta , a = sp.symbols("sigma, Delta, a", real=True)
+
+ccoupler = sp.sqrt(a)*sp.Matrix([[sp.sqrt(sigma), - sp.sqrt(1-sigma)*sp.exp(-sp.I*(-sp.pi/2 + Delta))],
+                        [sp.sqrt(1-sigma)*sp.exp(sp.I*(-sp.pi/2 + Delta)), sp.sqrt(sigma)]])
+
+
+###########################################
+# A simple achromatic coupler written in a physical way
+# with phasors compatible with the physics
+thesubs = [(sigma, 0.5),
+           (Delta, 0),
+           (a, 1.)]
+
+pcoupler = ccoupler.subs(thesubs)
 
 #########################################################
 # The implementation from H.-D. Kenchington Goldsmith (11)
 #########################################################
-sigma, Delta , a = sp.symbols("sigma, Delta, a", real=True)
-
-ccoupler = sp.sqrt(a)*sp.Matrix([[sp.sqrt(sigma), -sp.sqrt(1-sigma)*sp.exp(-sp.I*Delta)],
-                        [sp.sqrt(1-sigma)*sp.exp(sp.I*Delta), sp.sqrt(sigma)]])
-#sf.combiners.fprint(ccoupler, r"\boldsymbol{M} =")
 ##########################################################
 # The model provided for 4µm MMI couplers
 ##########################################################
-lamb = sp.symbols("lambda")
 
-coupling = 0.1727439475*lamb**6\
+coupling_KG = 0.1727439475*lamb**6\
             - 3.7494749619*lamb**5\
             + 33.3100408411*lamb**4\
             - 155.0153473295*lamb**3\
             + 398.7785099597*lamb**2\
             - 538.7869436749*lamb\
             + 300.7063779033
-coupling = coupling.subs([(lamb, lamb*1e6)])
-loss =  -2.056612*lamb**6\
+coupling_KG = coupling_KG.subs([(lamb, lamb*1e6)])
+loss_KG =  -2.056612*lamb**6\
         + 49.537979*lamb**5\
         - 493.329044*lamb**4\
         + 2599.382569*lamb**3\
         - 7642.251261*lamb**2\
         + 11887.167001*lamb\
         - 7642.937666
-loss = loss.subs([(lamb, lamb*1e6)])
-phase = 1.2036866257*lamb**6\
+loss_KG = loss_KG.subs([(lamb, lamb*1e6)])
+phase_KG = 1.2036866257*lamb**6\
         - 27.3368521128*lamb**5\
         + 200.3471800676*lamb**4\
         - 377.0537163354*lamb**3\
@@ -80,20 +98,58 @@ phase = 1.2036866257*lamb**6\
         + 8385.3602984720*lamb\
         - 9585.2130982070
 ##########################################
-## Convert lambda in µm and phase in deg!!
-phase = phase.subs([(lamb, lamb*1e6)])
-phase = phase * sp.pi/180
+## Convert lambda in µm and phase_KG in deg!!
+phase_KG = phase_KG.subs([(lamb, lamb*1e6)])
+phase_KG = phase_KG * sp.pi/180
+phase_KG = phase_KG - sp.pi/2
 ##########################################
-thesubs = [(sigma, coupling),
-           (Delta, phase),
-           (a, loss),
-           (lamb, lamb+0.08e-6)]
-Mc = ccoupler.subs(thesubs)
-# Needs an adjustment phasor to get the expected matrix
-adjust_phasor = sp.diag(1,sp.exp(-sp.I*sp.pi/2))
-Mc = Mc@adjust_phasor
-###########################################
 
+
+###########################################
+# Implementation of the asymmetric combiner
+# from Sharma et al. 2020
+# Data taken from Fig. 6 (left)
+###########################################
+xk = np.genfromtxt("data/asymetric_coupling_rate_gls.csv", delimiter=",")
+x = xk[1:20,0]*1e-6
+k = xk[1:20,1]
+coefs = np.polyfit(x, k, 6)
+#xs = sp.symbols("x", real=True)
+coupling_Sharma = sp.Add(*[a*lamb**i for i, a in enumerate(np.flip(coefs))])
+#polyn = sp.lambdify((xs), polys, modules="numpy")
+#################################################
+# Implementation of the directional coupler
+# Data from Tepper et al. 2017
+xk = np.genfromtxt("data/directional_coupling_bar.csv", delimiter=",")
+# Here, making the asumption that the combiner 
+x = xk[1:,0]*1e-6 + 0.4e-6 # will be tune for the correct band
+k = xk[1:,1]
+coefs = np.polyfit(x, k, 1)
+coupling_Tepper = sp.Add(*[a*lamb**i for i, a in enumerate(np.flip(coefs))])
+################################################
+# The KG case
+thesubs = [(sigma, coupling_KG),
+           (Delta, phase_KG ),
+           (a, loss_KG),
+           (lamb, lamb+0.08e-6)]
+M_KG = ccoupler.subs(thesubs)
+# Needs an adjustment phasor to get the expected matrix
+#adjust_phasor = sp.diag(1,sp.exp(-sp.I*sp.pi/2))
+#M_KG = M_KG@adjust_phasor
+###########################################
+# The Sharma 2020 combiner
+thesubs = [(sigma, coupling_KG),
+           (Delta, 0),
+           (a, 1)]
+M_Sharma = ccoupler.subs(thesubs)
+#M_Sharma = M_Sharma@adjust_phasor
+###########################################
+# The Tepper 2017 combiner
+thesubs = [(sigma, coupling_Tepper),
+           (Delta, 0),
+           (a, 1)]
+M_Tepper = ccoupler.subs(thesubs)
+###########################################
 
 def bracewell_ph(include_masks=False, tap_ratio=None):
     """
@@ -193,13 +249,17 @@ def angel_woolf_ph(ph_shifters=None, include_masks=False, tap_ratio=None):
     else:
         return combiner
 
-def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False, offset=True, tap_ratio=None):
+def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False,
+                             offset=True, tap_ratio=None, 
+                             Mc=M_KG, input_ph_shifters=None):
     """
     optional :
     ph_shifters : a list of phase shifters in between the 2 stages
                 (eg: for kernel-nuller ph_shifters=[0, sp.pi/2])
     include_masks: If true, the output will include bright, dark and photometric masks
                 selecting the relevnant outputs
+    Mc          : The chromatic combiner model default: M_KG
+                
     in: 4
     out: 8 (ph0, ph1, bright0, dark0, dark1, bright1, ph2, ph3)
     symbols:
@@ -214,13 +274,14 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False, offset=True,
     """
     #sigma = sp.symbols("sigma", real=True)
     phi = sp.Matrix(sp.symbols('phi0:{}'.format(2), real=True))
+    psi = sp.Matrix(sp.symbols('psi0:{}'.format(4), real=True))
     psplitter1 = sp.Matrix([[sp.sqrt(sigma)],
                             [sp.sqrt(1-sigma)]])
     psplitter2 = kernuller.crossover@psplitter1
     #fprint(psplitter1, "\mathbf{Y}_1 = ")
     #fprint(psplitter2, "\mathbf{Y}_2 = ")
     #fprint(kernuller.xcoupler, "\mathbf{X} = ")
-
+    A0 = sp.diag(ph_shifter(psi[0]),ph_shifter(psi[1]), ph_shifter(psi[2]),ph_shifter(psi[3]))
     A = sp.diag(psplitter1, psplitter1, psplitter2, psplitter2)
     B = sp.diag(1, kernuller.crossover, sp.eye(2), kernuller.crossover, 1)
     C = sp.diag(sp.eye(2),Mc, Mc, sp.eye(2))
@@ -229,7 +290,7 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False, offset=True,
     E = sp.diag(sp.eye(3), Mc, sp.eye(3))
     E1  = sp.diag(sp.eye(3), kernuller.ph_shifter(sp.pi/2), kernuller.ph_shifter(sp.pi), sp.eye(3))
     
-    combiner = E1@E@D@C2@C@B@A
+    combiner = E1@E@D@C2@C@B@A@A0
     if offset:
         combiner = combiner# + sp.ones(combiner.shape[0], combiner.shape[1])*1.e-20*lamb
     #fprint(combiner2, "\mathbf{M}_2 = ")
@@ -237,6 +298,12 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False, offset=True,
     if ph_shifters is not None:
         thesubs = [(phi[0], ph_shifters[0]),
                   (phi[1], ph_shifters[1])]
+        combiner = combiner.subs(thesubs)
+    if input_ph_shifters is not None:
+        thesubs = [(thepsi, thevalue) for thepsi, thevalue in zip(psi, input_ph_shifters)]
+        combiner = combiner.subs(thesubs)
+    else:
+        thesubs = [(thepsi, 0) for thepsi in psi]
         combiner = combiner.subs(thesubs)
     if tap_ratio is not None:
         combiner = combiner.subs([(sigma, tap_ratio)])
@@ -295,7 +362,9 @@ def VIKiNG(ph_shifters=None, include_masks=False, tap_ratio=None):
     
 
     
-def ABCD():
+def ABCD(Mc=kernuller.xcoupler,
+         ph_shifter_type="achromatic",
+         wl=None):
     """
     Build an ABCD combiner.
     
@@ -303,14 +372,22 @@ def ABCD():
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
+    if ph_shifter_type == "achromatic":
+        phasor = sp.exp(sp.I*sp.pi/2)
+    elif ph_shifter_type == "geometric":
+        piston = wl/4 # This is to get a pi/2 at wl
+        phaseterm = aphi.subs([(p,piston)])
+        phasor = sp.exp(sp.I*phaseterm)
     A = sp.diag(kernuller.splitter, kernuller.splitter)
     B = sp.diag(1, kernuller.crossover, 1)
-    C = sp.diag(kernuller.ph_shifter(sp.pi/2), sp.eye(3))
-    D = sp.diag(kernuller.xcoupler, kernuller.xcoupler)
+    C = sp.diag(phasor, sp.eye(3))
+    D = sp.diag(Mc, Mc)
     ABCD = D@C@B@A
     return ABCD
 
-def GRAVITY():
+def GRAVITY(Mc=kernuller.xcoupler,
+            wl=None,
+            ph_shifter_type="achromatic"):
     """
     Build a 4 input baseline-wise ABCD combiner
     similar in principle to the one used in GRAVITY.
@@ -319,7 +396,10 @@ def GRAVITY():
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
-    F = sp.diag(ABCD(), ABCD(), ABCD(),ABCD(),ABCD(), ABCD())
+    theabcd = ABCD(Mc=Mc,
+                   ph_shifter_type=ph_shifter_type,
+                   wl=wl)
+    F = sp.diag(theabcd, theabcd, theabcd,theabcd,theabcd, theabcd)
     M = four2six()
     GRAVITY = F@M
     return GRAVITY #A, B, C, D, E, F
