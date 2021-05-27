@@ -30,6 +30,7 @@ The following packages are required:
  - kernuller # https://github.com/rlaugier/kernuller
  - astropy==4.0
  - astroplan>=0.6
+ - astroquery
 
 Recommandation for installation:
 -------------------------------

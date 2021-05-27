@@ -17,7 +17,7 @@ setup(name='scifysim',
       ],
       packages=['scifysim'],
       install_requires=[
-          'numpy', 'sympy', 'scipy', 'matplotlib', 'astropy','tqdm', 'astroplan', 'kernuller', 'lmfit', 'numexpr'
+          'numpy', 'sympy', 'scipy', 'matplotlib', 'astropy','tqdm', 'astroplan', 'kernuller', 'lmfit', 'numexpr', 'astroquery'
       ],
       include_package_data=True,
       zip_safe=False)
