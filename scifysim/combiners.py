@@ -3,9 +3,14 @@ import sympy as sp
 import numpy as np
 from kernuller import fprint
 
+import pathlib
+
+parent = pathlib.Path(__file__).parent.absolute()
+asym_data_file = parent/"data/asymetric_coupling_rate_gls.csv"
+direc_data_file = parent/"data/directional_coupling_bar.csv"
+
 
 import logging
-
 logit = logging.getLogger(__name__)
 
 
@@ -110,7 +115,7 @@ phase_KG = phase_KG - sp.pi/2
 # from Sharma et al. 2020
 # Data taken from Fig. 6 (left)
 ###########################################
-xk = np.genfromtxt("data/asymetric_coupling_rate_gls.csv", delimiter=",")
+xk = np.genfromtxt(asym_data_file, delimiter=",")
 x = xk[1:20,0]*1e-6
 k = xk[1:20,1]
 coefs = np.polyfit(x, k, 6)
@@ -120,7 +125,7 @@ coupling_Sharma = sp.Add(*[a*lamb**i for i, a in enumerate(np.flip(coefs))])
 #################################################
 # Implementation of the directional coupler
 # Data from Tepper et al. 2017
-xk = np.genfromtxt("data/directional_coupling_bar.csv", delimiter=",")
+xk = np.genfromtxt(direc_data_file, delimiter=",")
 # Here, making the asumption that the combiner 
 x = xk[1:,0]*1e-6 + 0.4e-6 # will be tune for the correct band
 k = xk[1:,1]

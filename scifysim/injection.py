@@ -21,7 +21,6 @@ import numpy as np
 import threading
 import time
 from pathlib import Path
-
 from scipy.interpolate import interp2d, interp1d
 
 # amto_screen is now provided in house to provide seed
@@ -38,6 +37,7 @@ logit = logging.getLogger(__name__)
 
 from . import utilities
 
+parent = Path(__file__).parent.absolute()
 
 
 class atmo(object):
@@ -731,7 +731,7 @@ class injector(object):
         NA = theconfig.getfloat("fiber", "num_app")
         # Core radius
         a = theconfig.getfloat("fiber", "core")
-        if np.isclose(a, 0.):
+        if np.isclose(a, 0., atol=1.0e-10):
             logit.warning("Core radius is set to 0 : optimize")
             logit.warning("Not implemented in scifysim: set to 4.25")
             a = 4.25e-6
@@ -1006,7 +1006,7 @@ class fringe_tracker(object):
         self.static_bias_scaling = self.config.getfloat("fringe tracker", "static_bias_scaling")
         logit.warning("Loading keyword n_dish from [configuration] in fringe_tracking")
         self.n_tel = self.config.getint("configuration","n_dish")
-        data = np.loadtxt(self.reference_file, comments="#")
+        data = np.loadtxt(parent/self.reference_file, comments="#")
         self.ref_freqs = data[:,0]
         self.ref_ps_phase = data[:,1]
         self.ref_ps_disp = data[:,2]

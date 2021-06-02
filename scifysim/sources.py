@@ -7,6 +7,9 @@ from . import utilities
 from astropy import constants
 from astropy import units
 import scipy.interpolate as interp
+from pathlib import Path
+
+parent = Path(__file__).parent.absolute()
 
 class transmission_emission(object):
     def __init__(self,trans_file="data/MK_trans_sfs.txt", T=285,
@@ -30,7 +33,7 @@ class transmission_emission(object):
             self.trans_file = np.array([[1.0e-9, trans_file],
                                        [50.0e-6, trans_file]])
         elif isinstance(trans_file, str):
-            self.trans_file = np.loadtxt(trans_file)
+            self.trans_file = np.loadtxt(parent/trans_file)
         else:
             raise ValueError("Requires a float or a file path")
             
