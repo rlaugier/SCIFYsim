@@ -311,7 +311,7 @@ def plot_opds(integ, step_time):
     # I should profide an easier access to this time step
     integration_step = step_time
     t = np.arange(integ.summed_signal.shape[0])*integration_step
-    plt.figure()
+    fig_phase = plt.figure(dpi=150)
     pup = 1
     plt.plot(t, integ.ft_phase[:,pup], label="Fringe tracker phase")
     plt.plot(t, integ.inj_phase[:,:], label="Injection phase")
@@ -324,7 +324,7 @@ def plot_opds(integ, step_time):
     plt.legend()
     plt.show()
 
-    plt.figure()
+    fig_amp = plt.figure(dpi=150)
     plt.plot(t, integ.inj_amp[:]**2, label="Injection rate")
     #plt.plot(asim.fringe_tracker.ref_sample_times[:1000],
     #         2*np.pi/3.5e-6*asim.fringe_tracker.dry_piston_series[:1000,pup],
@@ -336,7 +336,7 @@ def plot_opds(integ, step_time):
     plt.legend()
     plt.show()
 
-    plt.figure()
+    fig_outputs = plt.figure()
     pup = 1
     plt.plot(t, integ.summed_signal.sum(axis=1)[:,3:5], label="Dark output signal")
     plt.plot(t, integ.summed_signal.sum(axis=1)[:,3] - integ.summed_signal.sum(axis=1)[:,4], label="Kernel signal")
@@ -348,3 +348,5 @@ def plot_opds(integ, step_time):
     plt.ylabel("Photons")
     plt.legend()
     plt.show()
+    
+    return fig_phase, fig_amp, fig_outputs

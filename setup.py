@@ -7,7 +7,7 @@ setup(name='scifysim',
       description='A python tool for simulating high contrast interferometric observations from the ground or in space.',
       url='--',
       author='Romain Laugier',
-      author_email='romain.laugier@oca.eu',
+      author_email='romain.laugier@kuleuven.be',
       license='',
       classifiers=[
           'Development Status :: 3 - pre-Alpha',

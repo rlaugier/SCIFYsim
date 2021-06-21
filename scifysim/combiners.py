@@ -66,9 +66,9 @@ ccoupler = sp.sqrt(a)*sp.Matrix([[sp.sqrt(sigma), - sp.sqrt(1-sigma)*sp.exp(-sp.
 ###########################################
 # A simple achromatic coupler written in a physical way
 # with phasors compatible with the physics
-thesubs = [(sigma, 0.5),
+thesubs = [(sigma, 1/2),
            (Delta, 0),
-           (a, 1.)]
+           (a, 1)]
 
 pcoupler = ccoupler.subs(thesubs)
 

@@ -433,7 +433,6 @@ class simulator(object):
         myinput = inst_phasor*geom_phasor*amplitude[:,None]
         output_amps = np.einsum("ijk,ik->ij",self.combiner.Mcn.astype(np.complex64), myinput)
         #set_trace()
-        pass
         return output_amps
     def combine(self, inst_phasor, geom_phasor, amplitude=None):
         """
@@ -768,12 +767,16 @@ class simulator(object):
         # Warning: this vigneting map for the maps are in the simulator.vigneting_map
         # not to be confused with simulator.injector.vigneting
         self.vigneting_map = vigneting_map
+        self.mapsource = type('', (), {})()
+        self.mapsource.xx_r = mas2rad(self.vigneting_map.xx)
+        self.mapsource.yy_r = mas2rad(self.vigneting_map.yy)
         maps = []
         for i, time in enumerate(self.sequence):
             self.point(self.sequence[i], self.target)
             amap = self.make_map(i, vigneting_map, dtype=dtype)
             maps.append(amap)
         maps = np.array(maps)
+        print(maps.shape)
         self.mapshape = (len(self.sequence),
                     self.lambda_science_range.shape[0],
                     maps.shape[2],
@@ -796,24 +799,30 @@ class simulator(object):
         vigneting_map : The vigneting map drawn used for resolution
         """
         self.point(self.sequence[blockindex], self.target)
+        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
         #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
                 vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
                                                   self.lambda_science_range, 1.)
         # Caution: line is not idempotent!
-        vigneted_spectrum = np.swapaxes(vigneted_spectrum, 0,1)
-        static_output = np.array([self.combiner.pointed_encaps(mas2rad(vigneting_map.xx),
-                                        mas2rad(vigneting_map.yy),
-                                        2*np.pi/thelambda,
-                                        np.ones(self.ntelescopes, dtype=np.complex128)) \
-                                         for m, thelambda in enumerate(self.lambda_science_range)])
-        static_output = static_output * np.sqrt(vigneted_spectrum[:,None,:])
+        #vigneted_spectrum = np.swapaxes(vigneted_spectrum, 0,1)
+        self.mapsource.ss = vigneted_spectrum.T
+        #self.mapsource.ss = vigneted_spectrum
+        dummy_collected = np.ones(self.lambda_science_range.shape[0])
+        perfect_injection = np.ones((self.lambda_science_range.shape[0], self.ntelescopes))
+        static_output = self.combine_light(self.mapsource, perfect_injection,
+                                           array, dummy_collected,
+                                           dtype=dtype,
+                                           dosum=False)
+        static_output = static_output.swapaxes(0, -1)
+        static_output = static_output.swapaxes(0, 1)
+        #static_output = static_output# * np.sqrt(vigneted_spectrum[:,None,:])
         # lambdified argument order matters! This should remain synchronous
         # with the lambdify call
         # incoherently combining over sources
         # Warning: modifying the array
-        combined = np.abs(static_output*np.conjugate(static_output)).astype(np.float32)
-        return combined
+        #combined = np.abs(static_output*np.conjugate(static_output)).astype(np.float32)
+        return static_output
         
     def __call__(self):
         pass
