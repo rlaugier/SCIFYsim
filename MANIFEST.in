@@ -10,3 +10,4 @@ include scifysim/config/default_R2000.ini
 include scifysim/data/asymetric_coupling_rate_gls.csv
 include scifysim/data/directional_coupling_bar.csv
 include scifysim/data/directional_coupling_cross.csv
+include scifysim/data/znse_index.csv

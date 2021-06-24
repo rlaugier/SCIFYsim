@@ -10,6 +10,7 @@ from . import combiner  # A class to simulate the bihaviour of the combiner
 from . import spectrograph # Simulate the behaviour of the spectrograph and camera
 from . import director  # A class to rule them all
 from . import sources   # A library of sources
+from . import correctors # A classes to simulate OPD and chromatic compensators
 
 from . import n_air # Manages the refractive index of air
 from .n_air import *
