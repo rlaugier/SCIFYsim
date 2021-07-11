@@ -8,6 +8,21 @@ logit = logging.getLogger(__name__)
 def set_logging_level(level=logging.WARNING):
     logit.setLevel(level=level)
     logit.info("Setting the logging level to %s"%(level))
+    
+    
+class wet_atmo(object):
+    def __init__(self, config):
+        self.pres = config.getfloat("atmo", "pres")
+        self.co2 = config.getfloat("atmo", "co2")
+        self.rhum = config.getfloat("atmo", "rhum")
+        self.temp = config.getfloat("vlti", "T_vlti")
+        self.Nair = None
+    def get_Nair(self, lambs):
+        self.Nair = n_air(lambs, temp=self.temp,
+                         pres=self.pres,
+                         rhum=self.rhum)
+        return self.Nair
+    
 
 def n_air(lambda_ , temp=273.15+15., pres=1000.,
          rhum=0., co2=450., ph2o=None, eso=False,

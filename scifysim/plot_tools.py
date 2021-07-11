@@ -350,3 +350,48 @@ def plot_opds(integ, step_time):
     plt.show()
     
     return fig_phase, fig_amp, fig_outputs
+
+
+def plot_corrector_tuning_angel_woolf(corrector,lambs,
+                                      combiner,show=True):
+    """
+    Plots some 
+    Currently works only with lambda_science_range
+    """
+    
+    from kernuller.diagrams import plot_chromatic_matrix as cmpc
+    import matplotlib.pyplot as plt
+    from scifysim.correctors import get_Is
+    
+    orig_vecs = (np.ones_like(corrector.b), np.ones_like(corrector.c))
+    current_vecs = (corrector.b, corrector.c)
+    origIs = get_Is(orig_vecs, combiner, corrector, lambs)
+    bestIs = get_Is(current_vecs, combiner, corrector, lambs)
+
+    nul_plot = plt.figure(dpi=150)
+    plt.plot(bestIs[:,3], label="Adjusted 3")
+    plt.plot(bestIs[:,4], label="Adjusted 4")
+    plt.plot(origIs[:,3], label="Original 3")
+    plt.plot(origIs[:,4], label="Original 4")
+    plt.yscale("log")
+    plt.legend()
+    plt.xlabel("Wavelength [m]")
+    plt.ylabel("Output intensity for unit input")
+    plt.title("On-axis chromatic response")
+    if show : plt.show()
+    
+    corphasor = corrector.get_phasor(lambs)
+    cmp_plot = cmpc(combiner.M[2:6,:], combiner.lamb, lambs,
+                plotout=corphasor, minfrac=0.9, show=show)
+    
+    bar_plot = plt.figure()
+    plt.bar(np.arange(corrector.b.shape[0]),corrector.b, width=0.2, label="Geometric piston")
+    plt.bar(np.arange(corrector.b.shape[0])+0.2,corrector.c, width=0.2, label="ZnSe length")
+    plt.bar(np.arange(corrector.b.shape[0])+0.4,-(corrector.nmean-1)*corrector.c, width=0.2, label="Geometric compensation")
+    plt.legend()
+    plt.xlabel("Input index")
+    plt.ylabel("Path length [m]")
+    plt.title("Path lengths of corrector")
+    if show : plt.show()
+    
+    return nul_plot, cmp_plot, bar_plot

@@ -186,6 +186,28 @@ class simulator(object):
                                                  self.lambda_science_range,
                                                  n_chan=n_chan)
         
+    def prepare_corrector(self, config=None, optimize=True):
+        """
+        Prepare the corrector object for the simulator, based
+        on a config file.
+        
+        Parameters:
+        -----------
+        config   : Either:
+                    - None (default) to use the simulators config
+                    - A parsed config file
+        optimize : Boolean. If True, will optimize
+        apply    : Boolean. If True, apply the
+        """
+        if config is None:
+            config = self.config
+        
+        self.corrector = sf.correctors.corrector(config,
+                                                 self.lambda_science_range)
+        asol = self.corrector.tune_static(self.lambda_science_range,
+                                          combiner=self.combiner, apply=optimize)
+        
+        
     
     
     def make_metrologic_exposure_old(self, interest, star, diffuse,
@@ -361,7 +383,7 @@ class simulator(object):
                 self.integrator.ft_phase.append(np.angle(tracked[:,0]))
                 self.integrator.inj_phase.append(np.angle(injected[:,0]))
                 self.integrator.inj_amp.append(np.abs(injected[:,0]))
-            injected = (injected * tracked).T
+            injected = (injected * tracked).T * self.corrector.get_phasor(self.lambda_science_range)
             combined_starlight = self.combine_light(star, injected, array, collected)
             self.integrator.starlight.append(combined_starlight)
             combined_planetlight = self.combine_light(interest, injected, array, collected)
@@ -547,7 +569,7 @@ class simulator(object):
             # getting a number of photons
             combined_starlight = combined_starlight * np.sqrt(star.ss[:,None,:] * collected[:,None,None])
             combined_starlight = np.sum(np.abs(combined_starlight*np.conjugate(combined_starlight), dtype=dtype), axis=(2))
-            if spectro is not None:
+            if spectro is None:
                 self.integrator.accumulate(combined_starlight)
             
             combined_planetlight = np.array([self.combiner.pointed_encaps(mas2rad(interest.xx_f), mas2rad(interest.yy_f),
@@ -556,7 +578,7 @@ class simulator(object):
             # getting a number of photons
             combined_planetlight = combined_planetlight * np.sqrt(interest.ss[:,None,:] * collected[:,None,None])
             combined_planetlight = np.sum(np.abs(combined_planetlight*np.conjugate(combined_planetlight), dtype=dtype), axis=(2))
-            if spectro is not None:
+            if spectro is None:
                 self.integrator.accumulate(combined_planetlight)
             
             # incoherently combining over sources
@@ -647,22 +669,23 @@ class simulator(object):
         else :
             it_subexp = range(self.n_subexps)
         for i in it_subexp:
+            self.integrator.exposure += t_co
             injected = next(self.injector.get_efunc)(self.lambda_science_range)
             tracked = next(self.fringe_tracker.phasor)
             if monitor_phase:
                 self.integrator.ft_phase.append(np.angle(tracked[:,0]))
                 self.integrator.inj_phase.append(np.angle(injected[:,0]))
                 self.integrator.inj_amp.append(np.abs(injected[:,0]))
-            injected = (injected * tracked).T
+            injected = (injected * tracked).T * self.corrector.get_phasor(self.lambda_science_range)
             # lambdified argument order matters! This should remain synchronous
             # with the lambdify call
             combined_starlight = self.combine_light(star, injected, array, collected)
-            if spectro is not None:
+            if spectro is None:
                 self.integrator.accumulate(combined_starlight)
             
             
             combined_planetlight = self.combine_light(interest, injected, array, collected)
-            if spectro is not None:
+            if spectro is None:
                 self.integrator.accumulate(combined_planetlight)
             
             # incoherently combining over sources
@@ -671,7 +694,6 @@ class simulator(object):
             # self.integrator.accumulate(combined)
             for k, astatic in enumerate(self.computed_static):
                 self.integrator.accumulate(astatic)
-        
         self.integrator.static_list = []
         for k, astatic in enumerate(self.computed_static):
             self.integrator.static_list.append(diffuse[k].__name__)
@@ -809,7 +831,8 @@ class simulator(object):
         self.mapsource.ss = vigneted_spectrum.T
         #self.mapsource.ss = vigneted_spectrum
         dummy_collected = np.ones(self.lambda_science_range.shape[0])
-        perfect_injection = np.ones((self.lambda_science_range.shape[0], self.ntelescopes))
+        perfect_injection = np.ones((self.lambda_science_range.shape[0], self.ntelescopes))\
+            * self.corrector.get_phasor(self.lambda_science_range)
         static_output = self.combine_light(self.mapsource, perfect_injection,
                                            array, dummy_collected,
                                            dtype=dtype,

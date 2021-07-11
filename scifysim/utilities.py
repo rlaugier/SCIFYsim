@@ -99,7 +99,8 @@ class ee(object):
 
 def prepare_all(afile, thetarget=None, update_params=False,
                instrumental_errors=True, seed=None,
-               crop=1., target_coords=None):
+               crop=1., target_coords=None,
+               compensate_chromatic=True):
     """
     A shortcut to prepare a simulator object
     """
@@ -127,6 +128,8 @@ def prepare_all(afile, thetarget=None, update_params=False,
     highest = len(asim.sequence)//2
     asim.obs.point(asim.sequence[highest], asim.target)
     asim.reset_static()
+    asim.combiner.chromatic_matrix(asim.lambda_science_range)
+    asim.prepare_corrector(optimize=compensate_chromatic)
     return asim
     
 
@@ -433,13 +436,13 @@ def get_star_params_GAIA_JMMC(star, verbose=True, showtable=False):
     catav.sort(keys="Gmag")
     obj = catav[0]
     dist = (obj["Plx"] * u.mas).to(u.parsec, equivalencies=u.parallax()).value
-    try:
+    try: #See if it is available in JMMC
         cataj = j["II/346/jsdc2"]
         cataj.sort(keys="Vmag")
         objj = cataj[0]
         T = objj["Teff"]
         Rad = objj["UDDK"]*u.mas.to(u.rad)/2*dist*u.pc.to(u.Rsun)
-    except:
+    except: # if it is not in JMMC
         try:
             cataj = j["II/300/jsdc"]
             cataj.sort(keys="Vmag")

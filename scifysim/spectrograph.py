@@ -31,6 +31,7 @@ class integrator():
         
         self.keepall = keepall
         self.n_sources = n_sources
+        self.exposure = 0.
         if config is None:
             self.eta=0.7
             self.ron=0.
@@ -52,6 +53,13 @@ class integrator():
         self.reset()
         
     def accumulate(self,value):
+        """
+        Accumulates some signal.
+        
+        Parameters:
+        -----------
+        value   : The signals to accumulate
+        """
         self.acc += value
         self.runs += 1
         if self.keepall:
@@ -73,16 +81,24 @@ class integrator():
                  n_pixsplit=None):
         """
         Made a little bit complicated by the ability to simulate CRED1 camera
+        
+        Parameters:
+        -----------
         spectrograph  : A spectrograph object to map the spectra on
                     a 2D detector
         t_exp         : [s]  Integration time to take into account dark current
+                        This is only used if self.exposure is close to 0. (if 
+                        the )
+        n_pixsplit    : The number of pixels 
         """
         if n_pixsplit is not None: # Splitting the signal over a number pixels
             thepixels = self.acc.copy()
             thepixels = ((thepixels/n_pixsplit)[None,:,:]*np.ones(n_pixsplit)[:,None,None])
         else:
             thepixels = self.acc.copy()
-        obtained_dark = self.dark * t_exp * self.mgain
+        if np.isclose(self.exposure, 0., atol=1.e-8):
+            self.exposure = t_exp
+        obtained_dark = self.dark * self.exposure * self.mgain
         if spectrograph is not None:
             acc = spectrograph.get_spectrum_image(thepixels)
         else:
@@ -100,12 +116,16 @@ class integrator():
                          "Dark signal": obtained_dark}
         return read
     def reset(self,):
+        """
+        Reset the values of the accumulation of signal in the detector.
+        """
         self.vals = []
         self.acc = 0.
         self.runs = 0
         self.forensics = {}
         self.mean = None
-        self.std=None
+        self.std = None
+        self.exposure = 0.
         
     def prepare_t_exp_base(self):
         eta, f_planet, n_pix, f_tot, ron, =  sp.symbols("eta, f_{planet}, n_p, f_{tot}, ron", real=True)
@@ -131,6 +151,22 @@ class integrator():
                                     self.expr_t_max.subs(mysubs),
                                     modules="numpy")
     def consolidate_metrologic(self, ):
+        """
+        Compiles the results of metrologic exposure. 
+        Paramters compiled:
+        -------------------
+        self.nsamples    : The number of integration steps
+        self.summed_signal : The total integration of 
+                            all sources throughout the time steps
+        self.total_summed_signal : The total integration over
+                            both sources and time steps
+        self.sums        : The list of signals from each of the sources
+                            summed over the time steps
+        self.source_labels : The labels of the sources corresIFEST.in
+-rwxrwx--x  1 rlaugier rlaugier 1,1K mai   27 14:50 REAponding to 
+                            sums.
+        
+        """
         self.nsamples = self.n_subexps
         sumstatic = np.sum(self.static, axis=0)
         self.summed_signal = sumstatic[None,:,:]+self.starlight+\
