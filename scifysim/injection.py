@@ -1178,7 +1178,121 @@ from kernuller import fprint
 
 
 
-
+class gaussian_fiber_head(object):
+    def __init__(self, NA=None,
+                mfd=None, wl_mfd=None,
+                apply=True):
+        """
+        A class that constructs a gaussian approximation for a fiber mode.
+        Numerical evaluations are based on NA or mfd and wl_mfd, depending
+        on which is provided.
+        ufuncs are stored in:
+        Hy_r
+        Hy_xy
+        
+        Parameters:
+        -----------
+        NA        : The numerical aperture
+        mfd       : The mode field diameter [m]
+        wl_mfd    : The wavelength at which the mfd is measured [m]
+        """
+        self.r, self.x, self.y = sp.symbols("r, x, y", real=True)
+        self.lamb, self.lamb0 = sp.symbols("lambda, lambda_0", real=True, positive=True)
+        self.w, self.R, self.k = sp.symbols("w, R, k", real=True)
+        # q, the beam parameter
+        self.q = 1/(1/self.R - sp.I*self.lamb/(sp.pi*self.w**2))
+        qwaist = self.q.subs([(self.R, sp.oo)])
+        self.u = 1/self.q*sp.exp(-sp.I*self.k/2*(self.x**2+self.y**2)*1/self.q)
+        self.ur = 1/self.q*sp.exp(-sp.I*self.k/2*self.r**2*1/self.q)
+        uwaist = self.u.subs([(self.R, sp.oo),
+                        (self.k, 2*sp.pi/self.lamb)])
+        
+        #self.nclad, self.ncore, self.eps0, self.mu = sp.symbols("n_clad n_core epsilon_0, mu", real=True)
+        #self.lamb, self.r, self.a  = sp.symbols("lambda r a", real=True)
+        #self.U, self.V, self.W = sp.symbols("U V W", real=True)
+        #self.c_H = sp.symbols("c_H", real=True)
+        self.NA = sp.symbols("N.A.", real=True, positive=True)
+        # ? taken from Shaklan and Roddier?
+        self.d = sp.symbols("d", real=True) # pupil diameter
+       
+        self.define_substitutions()
+        
+        self.build_equation()
+        
+        self.thesubs = []#self.subcore_na
+        if NA is not None:
+            self.NA_value = NA
+            self.mfd_value = None
+            self.wl_mfd_value = None
+            self.thesubs.append((self.NA, self.NA_value))
+        elif mfd is not None:
+            self.mfd_value = mfd
+            self.wl_mfd_value = wl_mfd
+            self.NA_value = (self.lamb0/(sp.pi*self.w_0)).subs([(self.lamb0, self.mfd_value),
+                                                                (self.w_0, mfd/2)])
+            self.thesubs.append((self.NA, ))
+        #self.consolidate_equation(self.thesubs)
+        if apply:
+            self.consolidate_equation(self.thesubs)
+        
+        
+    def define_substitutions(self):
+        self.w_0 = sp.symbols("w_0", real=True, positive=True)
+        self.z = sp.symbols("z", real=True)
+        self.zr = sp.pi*self.w_0**2/self.lamb
+        self.Rz = (self.z**2 + self.zr**2)/self.z # that one is not used for now
+        #fprint(Rz, "R(z) = ")
+        self.wz = self.w_0*sp.sqrt(1+self.z**2/self.zr**2)
+        #fprint(wz, "w(z) = ")
+        # This one is the cool one!
+        self.ur_lamb = self.ur.subs([(self.k, 2*sp.pi/self.lamb),
+                  (self.w, self.wz),
+                  (self.R, self.Rz)])
+        self.ncore, self.nclad = sp.symbols("n_{core}, c_{clad}", real=True, positive=True)
+        
+    def build_equation(self):
+        self.Hy = self.ur_lamb.subs([(self.z, 0),
+                                    (self.w_0, self.lamb/self.NA)])
+        #fprint(Hy,"H_y = ")
+        
+    def consolidate_equation(self, thesubs):
+        self.Hy_consolidated = self.Hy.subs(thesubs) # Apply the subsitutions
+        #self.Hy_r = 
+        self.Hy_r = sp.lambdify((self.r, self.NA, self.lamb),self.Hy_consolidated)
+        self.subr = (self.r, sp.sqrt(self.x**2+self.y**2))
+        self.Hy_xy = sp.lambdify((self.x, self.y, self.NA, self.lamb),
+                                 self.Hy_consolidated.subs([self.subr]))
+    def full_consolidation(self, NA=None,
+                mfd=None, wl_mfd=None):
+        """
+        Completes the consolidation of the lambda function
+        with the application parameters:
+        
+        Parameters:
+        -----------
+        NA      : The numerical aperture
+        mfd     : The mode field diameter in [m]
+        wl_mfd  : The wavelength at which mfd is measured in [m]
+        
+        """
+        if NA is not None:
+            thesubs = [(self.NA, NA),
+                      self.subr]
+        else :
+            thesubs = [(self.w_0, mfd/2),
+                       (self.lamb0, wl_mfd),
+                      self.subr]
+        self.Hy_xylambda = self.Hy_consolidated.subs(thesubs)
+        self.Hy_xy_full = sp.lambdify((self.x, self.y,self.lamb),self.Hy_xylambda)
+    def numerical_evaluation(self, half_range, nsamples, lambs):
+        xx, yy = np.meshgrid(np.linspace(-half_range, half_range, nsamples),
+                                      np.linspace(-half_range, half_range, nsamples))
+        amap = self.Hy_xy_full(xx[None,:,:], yy[None,:,:], lambs[:,None,None])
+        map_total = np.sqrt(np.sum(np.abs(amap)**2, axis=(1,2)))
+        self.map = amap / map_total[:,None,None]
+        #from pdb import set_trace
+        #set_trace()
+        return self.map
 
 
 
