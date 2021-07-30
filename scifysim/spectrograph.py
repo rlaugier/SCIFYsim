@@ -115,6 +115,20 @@ class integrator():
                          "Read noise": self.ron,
                          "Dark signal": obtained_dark}
         return read
+    def get_static(self):
+        """
+        Returns the total value of integrated light from static sources.
+        Not affected by noises
+        """
+        static = np.array(self.static)
+        total_static = self.n_subexps * static.sum(axis=0)
+        return total_static
+    
+    def get_starlight(self):
+        return self.starlight.sum(axis=0)    
+    def get_planetlight(self):
+        return self.planetlight.sum(axis=0)
+    
     def reset(self,):
         """
         Reset the values of the accumulation of signal in the detector.
@@ -126,6 +140,8 @@ class integrator():
         self.mean = None
         self.std = None
         self.exposure = 0.
+        self.starlight = None
+        self.planetlight = None
         
     def prepare_t_exp_base(self):
         eta, f_planet, n_pix, f_tot, ron, =  sp.symbols("eta, f_{planet}, n_p, f_{tot}, ron", real=True)

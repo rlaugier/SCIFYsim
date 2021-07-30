@@ -139,7 +139,7 @@ class transmission_emission(object):
         Used when chaining different media.
         Returns the total filtered
         flux density per solid angle of the
-        object in each wl channel. [ph/m2/sr] downstream of the object (inclusively)
+        object in each wl channel. [ph/s/m2/sr] downstream of the object (inclusively)
         """
         result = self.get_own_brightness(wl) + self.get_own_transmission(wl) * self.get_upstream_brightness(wl)
         return result

@@ -208,113 +208,12 @@ class simulator(object):
                                           combiner=self.combiner, apply=optimize)
         
         
-    
-    
-    def make_metrologic_exposure_old(self, interest, star, diffuse,
-                                 texp=1., t_co=2.0e-3, time=None,
-                                 monitor_phase=True, dtype=np.float32):
-        """
-        Warning: at the moment, this assumes pointing has already been performed.
-        
-        Simulate an exposure with source of interest and sources of noise
-        interest  : sf.sources.resolved_source object representing the source of intereest (planet)
-        star      : sf.sources.resolved_source object representing the star
-        diffuse   : a list of sf.transmission_emission objects linked in a chain.
-        texp      : Exposure time (seconds)
-        t_co      : Coherence time (seconds) 
-        monitor_phase : If true, will also record values of phase errors from injection and fringe tracking
-        
-        Chained diffuse objects are used both for transmission and thermal background. 
-        Result is returned as an integrator object. Currently the integrator object is only a
-        vessel for the individual subexposures, and not used to do the integration.
-        """
-        t_co = self.injector.screen[0].step_time
-        self.n_subexps = int(texp/t_co)
-        self.integrator.n_subexps = self.n_subexps
-        #taraltaz = self.obs.observatory_location.altaz(time, target=self.target)
-        #taraltaz, tarPA = self.obs.get_position(self.target, time)
-        
-        #Pointing should be done already
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
-        
-        self.integrator.static_xx = self.injector.vigneting.xx
-        self.integrator.static_yy = self.injector.vigneting.yy
-        self.integrator.reset()
-        self.integrator.static =  []
-        self.integrator.static_list = []
-        for asource in diffuse:
-            aspectrum = asource.get_downstream_transmission(self.lambda_science_range, inclusive=False) \
-                            * asource.get_own_brightness(self.lambda_science_range) \
-            # Collecting surface appears here
-            vigneted_spectrum = self.injector.vigneting.vigneted_spectrum(aspectrum,
-                                                            self.lambda_science_range,
-                                                            t_co)
-            # vigneted_spectrum also handles the integration in time and space
-            static_output = np.array([self.combiner.pointed_encaps(mas2rad(self.injector.vigneting.xx), mas2rad(self.injector.vigneting.yy),
-                                    2*np.pi/thelambda, np.ones(self.ntelescopes, dtype=np.complex128))
-                                     for m, thelambda in enumerate(self.lambda_science_range)])
-            #print(static_output.shape)
-            static_output = (static_output.swapaxes(0,2) * np.sqrt(vigneted_spectrum[:,None,:]))
-            static_output = np.sum(np.abs(static_output*np.conjugate(static_output), dtype=dtype), axis=0)
-            self.integrator.static.append(static_output.T)
-            self.integrator.static_list.append(asource.__name__)
-                
-        
-        logit.warning("Currently no vigneting (requires a normalization of vigneting)")
-        filtered_starlight = diffuse[0].get_downstream_transmission(self.lambda_science_range)
-        # collected will convert from [ph / s /m^2] to [ph]
-        collected = filtered_starlight * self.injector.collecting * t_co
-        self.integrator.starlight = []
-        self.integrator.planetlight = []
-        self.integrator.ft_phase = []
-        self.integrator.inj_phase = []
-        self.integrator.inj_amp = []
-        logit.warning("Ugly management of injection/tracking")
-        for i in tqdm(range(self.n_subexps)):
-            injected = next(self.injector.get_efunc)(self.lambda_science_range)
-            tracked = next(self.fringe_tracker.phasor)
-            if monitor_phase:
-                self.integrator.ft_phase.append(np.angle(tracked[:,0]))
-                self.integrator.inj_phase.append(np.angle(injected[:,0]))
-                self.integrator.inj_amp.append(np.abs(injected[:,0]))
-            injected = injected * tracked
-            # lambdified argument order matters! This should remain synchronous
-            # with the lambdify call
-            thexx = star.xx_f
-            theyy = star.yy_f
-            
-            combined_starlight = np.array([self.combiner.pointed_encaps(mas2rad(thexx), mas2rad(theyy),
-                                    2*np.pi/thelambda, injected[:,m])
-                                     for m, thelambda in enumerate(self.lambda_science_range)])
-            # getting a number of photons
-            combined_starlight = combined_starlight * np.sqrt(star.ss[:,None,:] * collected[:,None,None])
-            combined_starlight = np.sum(np.abs(combined_starlight*np.conjugate(combined_starlight), dtype=dtype), axis=(2))
-            self.integrator.starlight.append(combined_starlight)
-            
-            combined_planetlight = np.array([self.combiner.pointed_encaps(mas2rad(interest.xx_f), mas2rad(interest.yy_f),
-                                    2*np.pi/thelambda, injected[:,m])
-                                     for m, thelambda in enumerate(self.lambda_science_range)])
-            # getting a number of photons
-            combined_planetlight = combined_planetlight * np.sqrt(interest.ss[:,None,:] * collected[:,None,None])
-            combined_planetlight = np.sum(np.abs(combined_planetlight*np.conjugate(combined_planetlight), dtype=dtype), axis=(2))
-            self.integrator.planetlight.append(combined_planetlight)
-            
-            # incoherently combining over sources
-            # Warning: modifying the array
-            # combined = np.sum(np.abs(combined*np.conjugate(combined)), axis=(2))
-            # integrator.accumulate(combined)
-            
-        #mean, std = self.integrator.compute_stats()
-        self.integrator.starlight = np.array(self.integrator.starlight, dtype=dtype)
-        self.integrator.planetlight = np.array(self.integrator.planetlight, dtype=dtype)
-        self.integrator.ft_phase = np.array(self.integrator.ft_phase, dtype=dtype)
-        self.integrator.inj_phase = np.array(self.integrator.inj_phase, dtype=dtype)
-        self.integrator.inj_amp = np.array(self.integrator.inj_amp, dtype=dtype)
-        return self.integrator
+
 
     def make_metrologic_exposure(self, interest, star, diffuse,
                                  texp=1., t_co=2.0e-3, time=None,
-                                 monitor_phase=True, dtype=np.float32):
+                                 monitor_phase=True, dtype=np.float32,
+                                 perfect=False):
         """
         Warning: at the moment, this assumes pointing has already been performed.
         
@@ -378,6 +277,9 @@ class simulator(object):
         for i in tqdm(range(self.n_subexps)):
             injected = next(self.injector.get_efunc)(self.lambda_science_range)
             tracked = next(self.fringe_tracker.phasor)
+            if perfect:
+                injected = self.injector.best_injection(self.lambda_science_range)
+                tracked = np.ones_like(tracked)
             if monitor_phase:
                 # Here we take it only at the shortest wl
                 self.integrator.ft_phase.append(np.angle(tracked[:,0]))
@@ -400,6 +302,10 @@ class simulator(object):
         self.integrator.ft_phase = np.array(self.integrator.ft_phase, dtype=dtype)
         self.integrator.inj_phase = np.array(self.integrator.inj_phase, dtype=dtype)
         self.integrator.inj_amp = np.array(self.integrator.inj_amp, dtype=dtype)
+        if perfect:
+            logit.warning("Idealized injection")
+            print("### WARNING: idealized injection used")
+            print("mean phasor : ", np.mean(injected.T,axis=1))
         return self.integrator
     def combine_light(self, asource, injected, input_array, collected,
                       dosum=True, dtype=np.float64):
@@ -484,119 +390,7 @@ class simulator(object):
         phi = self.k[:,None] * anarray.dot(a)[None,:]
         b = np.exp(1j*phi)
         return b
-    
-    def make_exposure_old(self, interest, star, diffuse,
-                                 texp=1., t_co=2.0e-3, time=None,
-                                 monitor_phase=True,
-                                 use_tqdm=False,
-                                 dtype=np.float32,
-                                 spectro=None):
-        """
-        DEPRECATED
-        Warning: at the moment, this assumes pointing has already been performed.
-        
-        Simulate an exposure with source of interest and sources of noise
-        interest  : sf.sources.resolved_source object representing the source of intereest (planet)
-        star      : sf.sources.resolved_source object representing the star
-        diffuse   : a list of sf.transmission_emission objects linked in a chain.
-        texp      : Exposure time (seconds)
-        t_co      : Coherence time (seconds) 
-        monitor_phase : If true, will also record values of phase errors from injection and
-                        fringe tracking
-        dtype     : Data type to use for results
-        spectro   : spectrograph object to use. If None, the method will assume one pixel 
-                        per output and per spectral channel
-        
-        Chained diffuse objects are used both for transmission and thermal background. 
-        Result is returned as an integrator object. Currently the integrator object is only a
-        vessel for the individual subexposures, and not used to do the integration.
-        """
-        t_co = self.injector.screen[0].step_time
-        self.n_subexps = int(texp/t_co)
-        
-        #Pointing should be done already
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
-        self.computed_static_xx = self.injector.vigneting.xx
-        self.computed_static_yy = self.injector.vigneting.yy
-        self.integrator.reset()
-        # Check existence of pre-computed static signal: This part should remain static per pointing
-        if not hasattr(self, "computed_static"): # Pointings should delete this attribute
-            self.computed_static =  []
-            for asource in diffuse:
-                aspectrum = asource.get_downstream_transmission(self.lambda_science_range, inclusive=False) \
-                                * asource.get_own_brightness(self.lambda_science_range) \
-                # Collecting surface appears here
-                vigneted_spectrum = self.injector.vigneting.vigneted_spectrum(aspectrum,
-                                                                self.lambda_science_range,
-                                                                t_co)
-                # vigneted_spectrum also handles the integration in time and space
-                static_output = np.array([self.combiner.pointed_encaps(mas2rad(self.injector.vigneting.xx), mas2rad(self.injector.vigneting.yy),
-                                        2*np.pi/thelambda, np.ones(self.ntelescopes, dtype=np.complex128))
-                                         for m, thelambda in enumerate(self.lambda_science_range)])
-                #print(static_output.shape)
-                static_output = (static_output.swapaxes(0,2) * np.sqrt(vigneted_spectrum[:,None,:]))
-                static_output = np.sum(np.abs(static_output*np.conjugate(static_output), dtype=dtype), axis=0)
-                self.computed_static.append(static_output.T)
-        
-        logit.warning("Currently no vigneting (requires a normalization of vigneting)")
-        filtered_starlight = diffuse[0].get_downstream_transmission(self.lambda_science_range)
-        # collected will convert from [ph / s /m^2] to [ph]
-        collected = filtered_starlight * self.injector.collecting * t_co
-        self.integrator.ft_phase = []
-        self.integrator.inj_phase = []
-        self.integrator.inj_amp = []
-        logit.warning("Ugly management of injection/tracking")
-        if use_tqdm:
-            it_subexp = tqdm(range(self.n_subexps))
-        else :
-            it_subexp = range(self.n_subexps)
-        for i in it_subexp:
-            injected = next(self.injector.get_efunc)(self.lambda_science_range)
-            tracked = next(self.fringe_tracker.phasor)
-            if monitor_phase:
-                self.integrator.ft_phase.append(np.angle(tracked[:,0]))
-                self.integrator.inj_phase.append(np.angle(injected[:,0]))
-                self.integrator.inj_amp.append(np.abs(injected[:,0]))
-            injected = injected * tracked
-            # lambdified argument order matters! This should remain synchronous
-            # with the lambdify call
-            thexx = star.xx_f
-            theyy = star.yy_f
-            
-            combined_starlight = np.array([self.combiner.pointed_encaps(mas2rad(thexx), mas2rad(theyy),
-                                    2*np.pi/thelambda, injected[:,m])
-                                     for m, thelambda in enumerate(self.lambda_science_range)])
-            # getting a number of photons
-            combined_starlight = combined_starlight * np.sqrt(star.ss[:,None,:] * collected[:,None,None])
-            combined_starlight = np.sum(np.abs(combined_starlight*np.conjugate(combined_starlight), dtype=dtype), axis=(2))
-            if spectro is None:
-                self.integrator.accumulate(combined_starlight)
-            
-            combined_planetlight = np.array([self.combiner.pointed_encaps(mas2rad(interest.xx_f), mas2rad(interest.yy_f),
-                                    2*np.pi/thelambda, injected[:,m])
-                                     for m, thelambda in enumerate(self.lambda_science_range)])
-            # getting a number of photons
-            combined_planetlight = combined_planetlight * np.sqrt(interest.ss[:,None,:] * collected[:,None,None])
-            combined_planetlight = np.sum(np.abs(combined_planetlight*np.conjugate(combined_planetlight), dtype=dtype), axis=(2))
-            if spectro is None:
-                self.integrator.accumulate(combined_planetlight)
-            
-            # incoherently combining over sources
-            # Warning: modifying the array
-            # combined = np.sum(np.abs(combined*np.conjugate(combined)), axis=(2))
-            # self.integrator.accumulate(combined)
-            for k, astatic in enumerate(self.computed_static):
-                self.integrator.accumulate(astatic)
-        
-        self.integrator.static_list = []
-        for k, astatic in enumerate(self.computed_static):
-            self.integrator.static_list.append(diffuse[k].__name__)
-            
-        #mean, std = self.integrator.compute_stats()
-        self.integrator.ft_phase = np.array(self.integrator.ft_phase).astype(dtype)
-        self.integrator.inj_phase = np.array(self.integrator.inj_phase).astype(dtype)
-        self.integrator.inj_amp = np.array(self.integrator.inj_amp).astype(dtype)
-        return self.integrator
+
     
     def make_exposure(self, interest, star, diffuse,
                                  texp=1., t_co=2.0e-3, time=None,
@@ -631,6 +425,7 @@ class simulator(object):
         self.computed_static_xx = self.injector.vigneting.xx
         self.computed_static_yy = self.injector.vigneting.yy
         self.integrator.reset()
+        self.integrator.n_subexps = self.n_subexps
         # Check existence of pre-computed static signal: This part should remain static per pointing
         if not hasattr(self, "computed_static"): # Pointings should delete this attribute
             if not hasattr(diffuse[0], "xx_r"):
@@ -655,7 +450,8 @@ class simulator(object):
             for asource in diffuse:
                 static_output = self.combine_light(asource, perfect_injection, array, dummy_collected)
                 self.computed_static.append(static_output)
-        
+        self.integrator.starlight = np.zeros_like(self.computed_static[0])
+        self.integrator.planetlight = np.zeros_like(self.integrator.starlight)
         logit.warning("Currently no vigneting (requires a normalization of vigneting)")
         filtered_starlight = diffuse[0].get_downstream_transmission(self.lambda_science_range)
         # collected will convert from [ph / s /m^2] to [ph]
@@ -682,11 +478,13 @@ class simulator(object):
             combined_starlight = self.combine_light(star, injected, array, collected)
             if spectro is None:
                 self.integrator.accumulate(combined_starlight)
+                self.integrator.starlight += combined_starlight
             
             
             combined_planetlight = self.combine_light(interest, injected, array, collected)
             if spectro is None:
                 self.integrator.accumulate(combined_planetlight)
+                self.integrator.planetlight += combined_planetlight
             
             # incoherently combining over sources
             # Warning: modifying the array
