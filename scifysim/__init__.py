@@ -24,6 +24,9 @@ from . import control_loop # Legacy from GENIEsim : builds closed loop TFs
 from . import observatory as obs # Manages the geometry of the array
 from . import plot_tools as pt  # Tools to facilitate the plotting
 
+from . import map_manager
+from . import analysis
+
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt

@@ -369,10 +369,10 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     bestIs = get_Is(current_vecs, combiner, corrector, lambs)
 
     nul_plot = plt.figure(dpi=150)
-    plt.plot(bestIs[:,3], label="Adjusted 3")
-    plt.plot(bestIs[:,4], label="Adjusted 4")
-    plt.plot(origIs[:,3], label="Original 3")
-    plt.plot(origIs[:,4], label="Original 4")
+    plt.plot(lambs, bestIs[:,3], label="Adjusted 3")
+    plt.plot(lambs, bestIs[:,4], label="Adjusted 4")
+    plt.plot(lambs, origIs[:,3], label="Original 3")
+    plt.plot(lambs, origIs[:,4], label="Original 4")
     plt.yscale("log")
     plt.legend()
     plt.xlabel("Wavelength [m]")
@@ -381,8 +381,11 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     if show : plt.show()
     
     corphasor = corrector.get_phasor(lambs)
+    
+    plt.style.use("default")
     cmp_plot = cmpc(combiner.M[2:6,:], combiner.lamb, lambs,
                 plotout=corphasor, minfrac=0.9, show=show)
+    plt.style.use("dark_background")
     
     bar_plot = plt.figure()
     plt.bar(np.arange(corrector.b.shape[0]),corrector.b, width=0.2, label="Geometric piston")

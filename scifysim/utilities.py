@@ -555,3 +555,111 @@ def get_location(simple_map, map_extent=None,
         return r, theta
     else :
         return pos
+    
+def mag2sig(mag, dit, lead_transmission,context, eta=1., spectrum="flat", ds_sr=1.):
+    """
+    Obtains the coefficients including object magnitude, detector integration time,
+    transmission, spectral channels, pixel solid angle, and quantum efficiency (default: 1.).
+    
+    Parameters:
+    -----------
+    
+    * mag     : Magnitude of object (Vega)
+    * dit     : detector integration time [s]
+    * lead_transmission : The transmission of the leading element (often sky) of the 
+                transmission-emission chain
+    * context : The spectral context of the instrument (defining the vega magnitudes)
+    * eta     : (default=1.) The quantum efficiency of the detector
+    * spectrum : The type of spectrum of the object defaults to flat as opposed to the 
+                temperature of Vega.
+    * ds_sr   : When working with a map the solid angle of a pixel [sr]
+                Can be found in `simulator.vigneting_map.ds_sr` after maps have been computed
+    """
+    
+    aspectrum = context.sflux_from_vegamag(12.5) #asim.src.planet.ss.flatten()
+    if spectrum == "flat":
+        aspectrum = np.mean(aspectrum)*np.ones_like(aspectrum)
+    acoeff = coeff(dit, lead_transmission, context,
+                    eta=eta, spectrum=spectrum, ds_sr=ds_sr)
+    full_coeff = aspectrum*acoeff
+    return full_coeff
+
+def coeff(dit, lead_transmission,context, eta=1., spectrum="flat", ds_sr=1.):
+    """
+    Obtains the coefficients including detector integration time,
+    transmission, spectral channels, pixel solid angle, and quantum efficiency (default: 1.).
+    
+    Parameters:
+    -----------
+    
+    * dit     : detector integration time [s]
+    * lead_transmission : The transmission of the leading element (often sky) of the 
+                transmission-emission chain
+    * context : The spectral context of the instrument (defining the vega magnitudes)
+    * eta     : (default=1.) The quantum efficiency of the detector
+    * spectrum : The type of spectrum of the object defaults to flat as opposed to the 
+                temperature of Vega.
+    * ds_sr   : When working with a map the solid angle of a pixel [sr]
+                Can be found in `simulator.vigneting_map.ds_sr` after maps have been computed
+    """
+    acoeff = (1/(ds_sr) *\
+                  dit * eta *\
+                  lead_transmission.get_downstream_transmission(context.avega.lambda_science_range))
+    return acoeff
+
+
+def extract_diffobs_map(maps, simulator, dit=1., mag=None, postprod=None, eta=1., K=None):
+    """
+    Here in photons per dit (default=1s)
+    
+    Parameters:
+    * maps     : Transmission maps for 1 ph/s/m2 
+                        at the entrance of atmo
+    * simulator : a sumulator object (see comments below)
+    * dit      : Detector integration time [s]
+    * mag      : The magnitude of a source on the map
+    * postprod : A post-processing (whitening matrix)
+    * eta      : The quantum efficiency of the detector
+    * K        : A matrix to extract the differential
+                observable quantities (kernel matrix).
+                By default, the matrix is obtained from 
+                simulator.combiner.K
+    
+    Simulator object is used for
+    * The head transmission (simulator.src.sky)
+    * The solid angle of the pisel
+    * The spectral context (for the spectral channels)
+    """
+    if len(maps.shape) == 5:
+        nt, nwl, nout, ny, nx = maps.shape
+    elif len(maps.shape) == 4:
+        nt, nwl, nout, no = maps.shape
+        raise NotImplementedError("single_datacube")
+    else : 
+        raise NotImplementedError("Shape not expected")
+    if K is None:
+        K = simulator.combiner.K
+        
+    acoeff = coeff(dit, simulator.src.sky,
+                               simulator.context,ds_sr=simulator.vigneting_map.ds_sr,
+                               eta=eta, spectrum="flat")
+    
+    
+#    coeff = (1/(asim.vigneting_map.ds_sr) *\
+#                  dit * eta *\
+#                  diffuse[0].get_downstream_transmission(asim.lambda_science_range))
+    ymap = []
+    for at in range(nt):
+        for awl in range(nwl):
+            ay = K.dot(maps[at,awl,:,:,:].reshape(nout,ny*nx))
+            ay = ay.reshape(1,ny,nx)
+            ymap.append(ay)
+    ymap = np.array(ymap)
+    ymap = ymap.reshape(nt, nwl, 1, ny, nx)
+    ymap = ymap*acoeff[None,:,None,None, None]
+    
+    if postprod is not None:
+        print(ymap.shape)
+        for (k, i, j), a in np.ndenumerate(ymap[:,0,0,:,:]):
+            ymap[k,:,:,i,j] =  postprod[k,:,:].dot(ymap[k,:,:,i,j])
+    return ymap
