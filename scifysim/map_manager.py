@@ -101,7 +101,7 @@ class map_meta(object):
         self.mgs = hdul[0].data
         self.header = hdul[0].header
         self.dec = hdul[0].header["DEC"]
-        self.input_order = hdul[0].header["INPUT_ORDER"]
+        self.input_order = hdul[0].header["HIERARCH INPUT_ODRDER"]
         self.metadata = dict(self.header)
         hdul.close()
         
