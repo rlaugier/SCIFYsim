@@ -6,6 +6,11 @@ from einops import rearrange
 
 from scipy.linalg import sqrtm
 
+import matplotlib.pyplot as plt
+
+from scipy.stats import chi2, ncx2, norm
+from scipy.optimize import leastsq
+
 logit = logging.getLogger(__name__)
 
 
@@ -135,8 +140,8 @@ class noiseprofile(object):
             return cov_tot_diff
         
     def plot_noise_sources(self, wls, dit=1., starmags=np.linspace(2., 6., 5),
-                          show=True, legend_loc="best", legend_font="x-small"):
-        import matplotlib.pyplot as plt
+                          show=True, legend_loc="best", legend_font="x-small",
+                          ymin=0., ymax=1.):
         
         sigphis = []
         sigphots = []
@@ -155,14 +160,16 @@ class noiseprofile(object):
         #plt.plot(wls, sigma_phot, label="Photon")
         for i, dump in enumerate(sigphis):
             msg = f"$\sigma_{{inst}}$ (mag = {starmags[i]:.1f})"
+            cvalue = i/sigphis.shape[0]
             aline = plt.plot(wls,
                                  sigphis[i,:], label=msg,
-                                 color=mybmap(i/sigphis.shape[0]))
+                                 color=mybmap(sf.utilities.trois(cvalue, 0.,1., ymin=ymin, ymax=ymax)))
         for i, dump in enumerate(sigphots):
             msg = f"$\sigma_{{phot}}$ (mag = {starmags[i]:.1f})"
+            cvalue = i/sigphis.shape[0]
             aline = plt.plot(wls,
                                  sigphots[i,:], label=msg,
-                                 color=mygmap(i/sigphis.shape[0]))
+                                 color=mygmap(sf.utilities.trois(cvalue, 0.,1., ymin=ymin, ymax=ymax)))
             #plt.text(np.min(wls), asnr[0], msg)
         plt.yscale("log")
         plt.ylabel("Noise $[e^-]$")
@@ -241,8 +248,10 @@ def F2mag(F):
     return mag
 
 
-from scipy.stats import chi2,ncx2
-from scipy.optimize import leastsq
+##################################
+# The energy detector test
+##################################
+
 def pdet_e(lamb, xsi, rank):
     """
     Computes the residual of Pdet
@@ -253,18 +262,23 @@ def pdet_e(lamb, xsi, rank):
     """
     respdet = 1 - ncx2.cdf(xsi,rank,lamb)
     return respdet
-def residual_pdet(lamb, xsi, rank, targ):
+def residual_pdet_Te(lamb, xsi, rank, targ):
     """
     Computes the residual of Pdet
-    lamb     : The noncentrality parameter representing the feature
-    targ     : The target Pdet to converge to
-    xsi      : The location of threshold
-    rang     : The rank of observable
-    Returns the Pdet difference
+    
+    Parameters:
+    -----------
+    
+    * lamb     : The noncentrality parameter representing the feature
+    * targ     : The target Pdet to converge to
+    * xsi      : The location of threshold
+    * rank     : The rank of observable
+    
+    Returns the Pdet difference. See Ceau et al. 2019 for more information
     """
     respdet = 1 - ncx2.cdf(xsi,rank,lamb) - targ
     return respdet
-def get_sensitivity(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.,
+def get_sensitivity_Te(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.,
                 verbose=True):
     """
     Magnitude map at which a companion is detectable for a given map and whitening matrix.
@@ -278,6 +292,8 @@ def get_sensitivity(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.,
     * postproc_mat : The matrix of the whitening transformation ($\Sigma^{-1/2}$)
     * ref_mag    : The reference mag for the given map
     * verbose    : Print some information along the way
+    
+     See Ceau et al. 2019 for more information
     
     """
     W = postproc_mat
@@ -303,7 +319,7 @@ def get_sensitivity(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.,
     xsi = chi2.ppf(1.-pfa, nbkp)
     lambda0 = 0.2**2 * nbkp
     #The solution lamabda is the x^T.x value satisfying Pdet and Pfa
-    sol = leastsq(residual_pdet, lambda0,args=(xsi,nbkp, pdet))# AKA lambda
+    sol = leastsq(residual_pdet_Te, lambda0,args=(xsi,nbkp, pdet))# AKA lambda
     lamb = sol[0][0]
     fluxs = []
     mags = []
@@ -333,8 +349,94 @@ def get_sensitivity(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.,
     
     return mags, fluxs, Tes
 
+##################################
+# The Neyman-Pearson test
+##################################
 
-from einops import rearrange
+
+def get_Tnp_threshold(x, Pfa):
+    if len(x.shape) == 1:
+        xTx = x.T.dot(x)
+    elif len(x.shape) == 5:
+        xTx = np.einsum("ijklm, ijklm -> lm", x, x)
+    return np.sqrt(xTx)*norm.ppf(1-Pfa)
+def get_Tnp_threshold_map(xTx_map, Pfa):
+    if len(xTx_map.shape) == 2:
+        #xTx = x.T.dot(x)
+        return np.sqrt(xTx_map)*norm.ppf(1-Pfa)
+def residual_pdet_Tnp(xTx, xsi, targ):
+    """
+    Computes the residual of Pdet in a NP test.
+    Parameters:
+    ----------
+    
+    * xTx     : The noncentrality parameter representing the feature
+    * targ     : The target Pdet to converge to
+    * xsi      : The location of threshold
+    
+    Returns the Pdet difference.
+    
+    """
+    
+    Pdet_Pfa = 1 - norm.cdf((xsi - xTx)/np.sqrt(xTx))
+    return Pdet_Pfa - targ
+
+def get_sensitivity_Tnp(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.,
+                verbose=False, use_tqdm=True):
+    """
+    Magnitude map at which a companion is detectable for a given map and whitening matrix.
+    The throughput for the signal of interest is given by the map at a reference magnitude.
+    The effective noise floor is implicitly described by the whitening matrix.
+    
+    
+    * maps       : Differential map for a given reference magnitude
+    * pfa        : The false alarm rate used to determine the threshold
+    * pdet       : The detection probability used to determine the threshold
+    * postproc_mat : The matrix of the whitening transformation ($\Sigma^{-1/2}$)
+    * ref_mag    : The reference mag for the given map
+    * verbose    : Print some information along the way
+    
+    """
+    from scipy.stats import norm
+    W = postproc_mat
+    if len(W.shape) == 3:
+        nbkp = W.shape[0]*W.shape[1]
+    elif len(W.shape)==2:
+        nbkp = W
+    else:
+        raise NotImplementedError("Wrong dimension for post-processing matrix")
+    if len(maps.shape) == 5:
+        nt, nwl, nout, ny, nx = maps.shape
+    elif len(maps.shape) == 4:
+        nt, nwl, nout, no = maps.shape
+        raise NotImplementedError("single_datacube")
+    else : 
+        raise NotImplementedError("Shape not expected")
+    f0 = sf.analysis.mag2F(ref_mag) #flux_from_vegamag(ref_mag)
+    
+    x_map = 1 * np.einsum("iok, iklm-> iolm",
+                     postproc_mat, rearrange(maps, "a b c d e -> a (b c) d e"))
+    x_map = rearrange(x_map, "a b c d -> (a b) c d")
+    #Xsi is the threshold
+    xTx_map = np.einsum("olm, olm -> lm", x_map, x_map)
+    xsi_0 = get_Tnp_threshold_map(xTx_map, pfa)
+    
+    F_map = f0/np.sqrt(xTx_map) * ( norm.ppf(1-pfa, loc=0) - norm.ppf(1-pdet, loc=xTx_map, scale=np.sqrt(xTx_map)))
+    mag_map = sf.analysis.F2mag(F_map)
+    if verbose:
+        plt.figure()
+        plt.imshow(mag_map)
+        plt.colorbar()
+        plt.show()
+        print(x_map.shape)
+        print(xTx_map.dtype)
+        plt.figure()
+        plt.imshow(xsi_0)
+        plt.colorbar()
+        plt.show()
+    return mag_map
+ 
+
 def correlation_map(signal, maps, postproc=None, K=None, n_diffobs=1, verbose=False):
     """
     Returns the raw correlation map of a signal with a map.
