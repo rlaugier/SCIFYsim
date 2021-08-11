@@ -576,7 +576,7 @@ def mag2sig(mag, dit, lead_transmission,context, eta=1., spectrum="flat", ds_sr=
                 Can be found in `simulator.vigneting_map.ds_sr` after maps have been computed
     """
     
-    aspectrum = context.sflux_from_vegamag(12.5) #asim.src.planet.ss.flatten()
+    aspectrum = context.sflux_from_vegamag(mag) #asim.src.planet.ss.flatten()
     if spectrum == "flat":
         aspectrum = np.mean(aspectrum)*np.ones_like(aspectrum)
     acoeff = coeff(dit, lead_transmission, context,
@@ -663,3 +663,11 @@ def extract_diffobs_map(maps, simulator, dit=1., mag=None, postprod=None, eta=1.
         for (k, i, j), a in np.ndenumerate(ymap[:,0,0,:,:]):
             ymap[k,:,:,i,j] =  postprod[k,:,:].dot(ymap[k,:,:,i,j])
     return ymap
+
+
+def trois(x, xmin, xmax, ymin=0., ymax=1.):
+    xrange = xmax-xmin
+    yrange = ymax-ymin
+    normalized = (x - xmin)/xrange
+    y = normalized*yrange + ymin
+    return y

@@ -171,7 +171,7 @@ def plot_projected_pupil(asim, seq_index,
     
     return fig
 
-def plot_phasescreen(theinjector):
+def plot_phasescreen(theinjector, show=True, noticks=True, screen_index=True):
     import matplotlib.pyplot as plt
     import scifysim as sf
     if not isinstance(theinjector, sf.injection.injector):
@@ -180,16 +180,24 @@ def plot_phasescreen(theinjector):
     #tweaking the colormap showing the pupil cutout
     current_cmap = plt.matplotlib.cm.get_cmap("coolwarm")
     current_cmap.set_bad(color='black')
-    plt.figure(figsize=(8,4),dpi=100)
+    fig = plt.figure(figsize=(8,4),dpi=100)
     for i in range(theinjector.ntelescopes):
         plt.subplot(1,theinjector.ntelescopes,i+1)
         plt.imshow((theinjector.focal_plane[i][0]._phs/theinjector.focal_plane[i][0].pupil),
                            cmap=current_cmap)
-    plt.show()
+        if noticks:
+            plt.xticks([])
+            plt.yticks([])
+        if screen_index:
+            plt.title(f"Pupil {i}")
+    if show:
+        plt.show()
+    return fig
+    
     
     
 
-def plot_injection(theinjector):
+def plot_injection(theinjector, show=True, noticks=True):
     """
     Provides a view of the injector status.
     Plots the phase screen for each pupil.
@@ -199,40 +207,54 @@ def plot_injection(theinjector):
     if not isinstance(theinjector, sf.injection.injector):
         raise ValueError("Expects an injector module")
     # Showing the wavefronts
-    plot_phasescreen(theinjector)
+    pscreen = plot_phasescreen(theinjector, show=False)
     # Showing the injection profiles
-    plt.show()
-    plt.figure(figsize=(2*theinjector.ntelescopes,2*2),dpi=100)
+    if show:
+        pscreen.show()
+    focal_plane = plt.figure(figsize=(2*theinjector.ntelescopes,2*2),dpi=100)
     for i in range(theinjector.ntelescopes):
         plt.subplot(2,theinjector.ntelescopes,i+1)
         plt.imshow(np.abs(theinjector.focal_planes[i,0]), cmap="Blues")
         CS = plt.contour(theinjector.lpmap[0], levels=theinjector.map_quartiles[0], colors="black")
         plt.clabel(CS, inline=1, fontsize=6)
+        if noticks:
+            plt.xticks([])
+            plt.yticks([])
         plt.subplot(2,theinjector.ntelescopes,i+1+theinjector.ntelescopes)
         plt.imshow(np.abs(theinjector.focal_planes[i,-1]), cmap="Reds")
         CS = plt.contour(theinjector.lpmap[-1], levels=theinjector.map_quartiles[-1], colors="black")
         plt.clabel(CS, inline=1, fontsize=6)
+        if noticks:
+            plt.xticks([])
+            plt.yticks([])
     plt.suptitle("Injection focal plane (contours: LP01 mode quartiles)")
-    plt.show()
+    if show:
+        plt.show()
 
     tindexes = ["Telescope %d"%(i) for i in range(theinjector.injected.shape[0])]
-    plt.figure()
+    
+    amplitudes = plt.figure(figsize=(6.,2.))
     width = 0.1
     for i in range(theinjector.injected.shape[1]):
         plt.bar(np.arange(4)+i*width,np.abs(theinjector.injected[:,i]), width, label="%.1f µm"%(theinjector.lambda_range[i]*1e6))
-    plt.legend(loc="lower right",fontsize=7, title_fontsize=8)
+    plt.legend(loc="lower center",fontsize=7, title_fontsize=8)
     plt.ylabel("Injection amplitude")
     plt.title("Injection amplitude for each telescope by WL")
-    plt.show()
+    if show:
+        plt.show()
 
-    plt.figure()
+    phases = plt.figure(figsize=(6.,2.))
     width = 0.1
     for i in range(theinjector.injected.shape[1]):
         plt.bar(np.arange(4)+i*width,np.angle(theinjector.injected[:,i]), width, label="%.1f µm"%(theinjector.lambda_range[i]*1e6))
-    plt.legend(loc="lower right",fontsize=7, title_fontsize=8)
-    plt.ylabel("Injection phase (radians)")
+    plt.legend(loc="lower center",fontsize=7, title_fontsize=8)
+    plt.ylabel("Injection phase [radians]")
     plt.title("Injection phase for each telescope by WL")
-    plt.show()
+    if show:
+        plt.show()
+        
+    return focal_plane, amplitudes, phases
+
     
 def plot_response_map(asim, outputs=None,
                       wavelength=None,
