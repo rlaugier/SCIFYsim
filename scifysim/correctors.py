@@ -14,6 +14,10 @@ from pathlib import Path
 parent = Path(__file__).parent.absolute()
 znse_file = parent/"data/znse_index.csv"
 
+# Brute force test parameter to 
+thetas = np.linspace(-np.pi, np.pi, 10000)
+comphasor = np.ones(4)[None,:]*np.exp(1j*thetas[:,None])
+
 # Utility functions for optimization
 ##################################################
 
@@ -90,6 +94,7 @@ def get_Is(params, combiner, corrector, lambs):
     Is = np.abs(res)**2
     return Is
 
+
 def get_contrast_res(params, combiner, corrector, lambs):
     """
     Macro that gets the a residual from parameters 
@@ -99,6 +104,47 @@ def get_contrast_res(params, combiner, corrector, lambs):
     res = get_depth(combiner, Is)
     return res
 
+
+def get_es(params, combiner, corrector, lambs):
+    """
+    Returns the enantiomorph excursion taking into account the corrections provided in
+    params.
+    **Currently works only for double-bracewell 3-4 architecures**
+        
+    **dcomp is computed automatically be default.**
+    
+    Parameters:
+    -----------
+    params   : either
+                - A Parameters object from the optimization
+                - A tuple of vectors bvec, cvec
+    combiner : A combiner object.
+    corrector : The corrector object
+    lambs    : The wavelengths considered.
+    """
+    
+    if isinstance(params, Parameters):
+        bvec, cvec = extract_corrector_params(corrector, params)
+    else:
+        bvec, cvec = params
+    phasor = corrector.get_phasor_from_params(lambs, 
+                                             a=None,
+                                             b=bvec,
+                                             c=cvec)
+    thetas = np.linspace(-np.pi, np.pi, 10000)
+    comphasor = np.ones(4)[None,:]*np.exp(1j*thetas[:,None])
+    amatcomp = np.einsum("ijk, ik -> ijk", combiner.Mcn, phasor)
+    allcor = np.einsum("ik, mk -> mik", amatcomp[:,3,:], comphasor) - np.conjugate(amatcomp[:, 4,:])[None,:,:]
+    excursion = np.min(np.linalg.norm(allcor, axis=2), axis=0)
+    
+    return excursion
+def get_shape_res(params, combiner, corrector, lambs):
+    """
+    Macro that gets the a residual from parameters 
+    for minimizing method.
+    """
+    res = get_es(params, combiner, corrector, lambs)
+    return res
 
 
 class corrector(object):
@@ -116,6 +162,12 @@ class corrector(object):
                     (At the __init__ stage, it is only used for
                     the computation of a mean refractive index for
                     the dispersive material)
+                    
+        Internal parameters:
+        --------------------
+        a     :     Vector of the amplitude term
+        b     :     Vetor of the geometric piston term [m]
+        c     :     Vetor of the dispersive piston term [m]
         """
         self.config = config
         nznse_file = np.loadtxt(znse_file,delimiter=";")
@@ -254,6 +306,71 @@ class corrector(object):
             self.c = cvec
             self.dcomp = -(self.nmean-1)*self.c
         return sol
+    
+    def tune_static_shape(self, lambs, combiner, apply=True,
+                    sync_params=[("b3", "b2", 0.),
+                                ("c3", "c2", 0.)],
+                    freeze_params=["b0", "c0", "b1", "c1"]):
+        """
+        Optimize the compensator to correct chromatism in the 
+        model of the combiner to obtain enantomporph combinations
+        at the outputs. Returns a lmfit solution object.
+        If "apply" is set to True, a, b, c, and dcomp are also
+        set to the best fit value.
+        
+        **Currently only works for double Bracewell 3-4 architectures.**
+        
+        Parameters:
+        -----------
+        lambs :     The wavelength channels to consider [m]
+        combiner :  A combiner object (chromatic)  
+        apply    :  Boolean deciding whether to set the local
+                    parameters to best fit value (default: True)
+        Note: For obtaining a more practical direct results, some
+        more complicated balancing guidelines should be followed.
+        
+        Example:
+        --------
+        ```
+        sol = asim.corrector.tune_static_shape(asim.lambda_science_range,
+                             asim.combiner,
+                             sync_params=[("b3", "b2", asim.corrector.b[3] - asim.corrector.b[2]),
+                                         ("c3", "c2", asim.corrector.c[3] - asim.corrector.c[2])],
+                             apply=True)
+        ```
+        """
+        params = Parameters()
+        print("inside_tuning", self.b, self.c)
+        for i in range(self.b.shape[0]):
+            params.add("b%d"%(i),value=self.b[i], min=-1.0e-3, max=1.0e-3, vary=True)
+            params.add("c%d"%(i),value=self.c[i], min=-1.0e-3, max=1.0e-3, vary=True)
+        
+        # Should do this in a loop for sync_params
+        for tosync in sync_params:
+            params[tosync[0]].set(expr=tosync[1]+f"+ {tosync[2]}")
+        # If we have 
+        #b23 = self.b[3]-self.b[2]
+        #c23 = self.c[3]-self.c[2]
+        #params["b3"].set(expr=f"b2 + {b23}")
+        #params["c3"].set(expr=f"c2 + {c23}")
+        for aparam in freeze_params:
+            params[aparam].set(vary=False)
+        
+        #display.display(params)
+        sol = minimize(get_shape_res, params,
+               args=(combiner, self, lambs),
+               method="leastsq")
+        
+        self.sol = sol
+        if apply:
+            bvec, cvec = extract_corrector_params(self, sol.params)
+            self.b = bvec
+            self.c = cvec
+            self.dcomp = -(self.nmean-1)*self.c
+        return sol
+    
+    
+    
     def plot_tuning(self,lambs,  npoints = 20):
         from kernuller.diagrams import plot_chromatic_matrix as cmpc
         import matplotlib.pyplot as plt

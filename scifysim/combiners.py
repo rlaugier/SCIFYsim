@@ -6,7 +6,9 @@ from kernuller import fprint
 import pathlib
 
 parent = pathlib.Path(__file__).parent.absolute()
-asym_data_file = parent/"data/asymetric_coupling_rate_gls.csv"
+#asym_data_file = parent/"data/asymetric_coupling_rate_gls.csv"
+asym_data_file = parent/"data/asymmetric_coupling_rate_gross.csv"
+asym_phase_file = parent/"data/asymmetric_diff_phase_gls.csv"
 direc_data_file = parent/"data/directional_coupling_bar.csv"
 
 
@@ -116,11 +118,18 @@ phase_KG = phase_KG - sp.pi/2
 # Data taken from Fig. 6 (left)
 ###########################################
 xk = np.genfromtxt(asym_data_file, delimiter=",")
-x = xk[1:20,0]*1e-6
-k = xk[1:20,1]
+x = xk[1:,0]*1e-6 # will be tune for the correct band #1:20 originally, the 1:23 with points added
+k = xk[1:,1]
 coefs = np.polyfit(x, k, 6)
 #xs = sp.symbols("x", real=True)
 coupling_Sharma = sp.Add(*[a*lamb**i for i, a in enumerate(np.flip(coefs))])
+# Now for the phase
+xk = np.genfromtxt(asym_phase_file, delimiter=",")
+x = xk[1:,0]*1e-6# + 0.4e-6 # will be tune for the correct band
+k = xk[1:,1] * np.pi/180 + np.pi/5 - np.pi # Converting to degrees
+coefs = np.polyfit(x, k, 1)
+#xs = sp.symbols("x", real=True)
+phase_Gross = sp.Add(*[a*lamb**i for i, a in enumerate(np.flip(coefs))])
 #polyn = sp.lambdify((xs), polys, modules="numpy")
 #################################################
 # Implementation of the directional coupler
@@ -143,8 +152,8 @@ M_KG = ccoupler.subs(thesubs)
 #M_KG = M_KG@adjust_phasor
 ###########################################
 # The Sharma 2020 combiner
-thesubs = [(sigma, coupling_KG),
-           (Delta, 0),
+thesubs = [(sigma, coupling_Sharma),
+           (Delta, phase_Gross),
            (a, 1)]
 M_Sharma = ccoupler.subs(thesubs)
 #M_Sharma = M_Sharma@adjust_phasor

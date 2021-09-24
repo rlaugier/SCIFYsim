@@ -143,8 +143,8 @@ def plot_projected_pupil(asim, seq_index,
         xx, yy = np.meshgrid(np.linspace(np.min(anarray[:,0]), np.max(anarray[:,0]), grid_res),
                             np.linspace(np.min(anarray[:,1]), np.max(anarray[:,1]), grid_res))
         grid = np.array([xx,yy])
-        parallels = np.array(list(zip(grid[0].flat, grid[1].flat))).reshape(5,5,2)
-        meridians = np.array(list(zip(grid[0].T.flat, grid[1].T.flat))).reshape(5,5,2)
+        parallels = np.array(list(zip(grid[0].flat, grid[1].flat))).reshape(grid_res,grid_res,2)
+        meridians = np.array(list(zip(grid[0].T.flat, grid[1].T.flat))).reshape(grid_res,grid_res,2)
         formatted_grid = np.array([parallels,meridians])
         projected_grid = formatted_grid.copy()
         for i in range(formatted_grid.shape[0]):
@@ -385,29 +385,33 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     import matplotlib.pyplot as plt
     from scifysim.correctors import get_Is
     
+    darkout_indices = np.arange(combiner.M.shape[0])[combiner.dark]
+    # Normalisation factor is the peak intensity
+    normalization = np.sum(np.abs(combiner.Mcn[:,3,:]), axis=-1)**2
+    
     orig_vecs = (np.ones_like(corrector.b), np.ones_like(corrector.c))
     current_vecs = (corrector.b, corrector.c)
     origIs = get_Is(orig_vecs, combiner, corrector, lambs)
     bestIs = get_Is(current_vecs, combiner, corrector, lambs)
 
     nul_plot = plt.figure(dpi=150)
-    plt.plot(lambs, bestIs[:,3], label="Adjusted 3")
-    plt.plot(lambs, bestIs[:,4], label="Adjusted 4")
-    plt.plot(lambs, origIs[:,3], label="Original 3")
-    plt.plot(lambs, origIs[:,4], label="Original 4")
+    for i, adarkout in enumerate(darkout_indices):
+        plt.plot(lambs, 1/normalization * origIs[:,adarkout], label=f"Original {adarkout}", color=f"C{i}", linestyle=":")
+        plt.plot(lambs, 1/normalization * bestIs[:,adarkout], label=f"Adjusted {adarkout}", color=f"C{i}")
     plt.yscale("log")
     plt.legend()
     plt.xlabel("Wavelength [m]")
-    plt.ylabel("Output intensity for unit input")
+    plt.ylabel("Output contrast (I+/I-)")
     plt.title("On-axis chromatic response")
     if show : plt.show()
     
     corphasor = corrector.get_phasor(lambs)
     
+    original_plt_params = plt.rcParams
     plt.style.use("default")
     cmp_plot = cmpc(combiner.M[2:6,:], combiner.lamb, lambs,
                 plotout=corphasor, minfrac=0.9, show=show)
-    plt.style.use("dark_background")
+    plt.rcParams = original_plt_params
     
     bar_plot = plt.figure()
     plt.bar(np.arange(corrector.b.shape[0]),corrector.b, width=0.2, label="Geometric piston")
@@ -418,5 +422,35 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     plt.ylabel("Path length [m]")
     plt.title("Path lengths of corrector")
     if show : plt.show()
+        
+        
+        
+    #  The morphology residual (enantiomorph excursion)
     
-    return nul_plot, cmp_plot, bar_plot
+    thetas = np.linspace(-np.pi, np.pi, 10000)
+    comphasor = np.ones(4)[None,:]*np.exp(1j*thetas[:,None])
+    
+    amat = combiner.Mcn
+    aphasor = corrector.get_phasor(lambs)
+    amatcomp = np.einsum("ijk, ik -> ijk", amat, aphasor)
+
+    allcor = np.einsum("ik, mk -> mik", amat[:,3,:], comphasor) - np.conjugate(amat[:, 4,:])[None,:,:]
+    morph_error_orig = 1/normalization * np.min(np.linalg.norm(allcor, axis=2), axis=0)
+
+    allcor = np.einsum("ik, mk -> mik", amatcomp[:,3,:], comphasor) - np.conjugate(amatcomp[:, 4,:])[None,:,:]
+    morph_error_cor = 1/normalization * np.min(np.linalg.norm(allcor, axis=2), axis=0)
+    
+    morph_plot = plt.figure(dpi=150)
+    plt.plot(lambs, morph_error_orig**2,color="C0", linestyle=":",
+             label="Initial")
+    plt.plot(lambs, morph_error_cor**2,color="C0",
+             label="Corrected")
+    plt.yscale("log")
+    plt.legend(fontsize="x-small")
+    plt.xlabel("Wavelength [m]")
+    plt.ylabel(f"Shape error $\Lambda$")
+    plt.title("Enantiomorph excursion")
+    if show : plt.show()
+
+    
+    return nul_plot, cmp_plot, bar_plot, morph_plot

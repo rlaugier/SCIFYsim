@@ -196,16 +196,22 @@ class simulator(object):
         config   : Either:
                     - None (default) to use the simulators config
                     - A parsed config file
-        optimize : Boolean. If True, will optimize
-        apply    : Boolean. If True, apply the
+        optimize : Boolean. If True, will optimize both depth and shape
+        apply    : Boolean. If True, apply the optimization 
         """
         if config is None:
             config = self.config
         
         self.corrector = sf.correctors.corrector(config,
                                                  self.lambda_science_range)
-        asol = self.corrector.tune_static(self.lambda_science_range,
-                                          combiner=self.combiner, apply=optimize)
+        if optimize is not False:
+            asol = self.corrector.tune_static(self.lambda_science_range,
+                                              combiner=self.combiner, apply=optimize)
+            sol = self.corrector.tune_static_shape(self.lambda_science_range,
+                             self.combiner,
+                             sync_params=[("b3", "b2", self.corrector.b[3] - self.corrector.b[2]),
+                                         ("c3", "c2", self.corrector.c[3] - self.corrector.c[2])],
+                             apply=True)
         
         
 
