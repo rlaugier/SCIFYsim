@@ -259,8 +259,12 @@ blackbody = _blackbody()
 def distant_blackbody(lambda_range, T, dist, radius):
     """
     Returns the flux density for a distant blackbody
+    lambda_range : Wavelenght [m]
     T      : temperature [K]
     dist   : Distance [pc]
+    radius : Star radius [R_sun]
+    
+    Returns flux density [ph/s/m^2] arriving to earth (no atmosphere).
     
     """
     dlambda = np.gradient(lambda_range)

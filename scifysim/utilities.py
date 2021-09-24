@@ -671,3 +671,5 @@ def trois(x, xmin, xmax, ymin=0., ymax=1.):
     normalized = (x - xmin)/xrange
     y = normalized*yrange + ymin
     return y
+"""
+WARNING-matplotlib.axes._axes- *c* argument looks like a single numeric RGB or RGBA sequence, which should be avoided as value-mapping will have precedence in case its length matches with *x* & *y*.  Please use the *color* keyword-argument or provide a 2-D array with a single row if you intend to specify the same RGB or RGBA value for all points."""

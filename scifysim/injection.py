@@ -158,6 +158,9 @@ class atmo(object):
         self.yynorm2 = np.sum(self.yy**2)
         
         self.it = self.give()
+        
+        # Must update screen to obtain the correct scaling and correction
+        self.update_screen()
     
 
     # ==============================================================
@@ -226,19 +229,6 @@ class atmo(object):
 
         self.kolm2   = np.tile(self.kolm, (2,2))
 
-        if self.keepgoing is False:
-            # case that must be adressed:
-            # amplitude changed when atmo is frozen!
-            subk = self.kolm2[self.offx:self.offx+self.psz,
-                              self.offy:self.offy+self.psz].copy()
-            
-            if self.ttc is True:            
-                ttx = np.sum(subk*self.xx) / self.xxnorm2
-                tty = np.sum(subk*self.yy) / self.yynorm2
-                subk -= ttx * self.xx + tty * self.yy
-
-            self.rms_i = subk.std()
-            self.shm_phs = subk + self.qstatic
 
     def reset(self):
         self.offx = 0.
@@ -978,6 +968,13 @@ class injector(object):
         self.injection_arg = unsorted_interp2d(self.lambda_range, offset, np.angle(injecteds), kind=interpolation, fill_value=0.)
         self.injection_arg.__doc__ = """phase(wavelength[m], offset[lambda/D])"""
         return
+    
+    def update_screens(self):
+        """
+        Reset all the screens for the injection
+        """
+        for ascreen in self.screen:
+            ascreen.update_screen()
 
     
     
