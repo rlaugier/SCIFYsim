@@ -401,7 +401,7 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     plt.yscale("log")
     plt.legend()
     plt.xlabel("Wavelength [m]")
-    plt.ylabel("Output contrast (I+/I-)")
+    plt.ylabel(f"Output contrast ($I^-/I^{{peak}}$)")
     plt.title("On-axis chromatic response")
     if show : plt.show()
     

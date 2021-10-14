@@ -340,6 +340,8 @@ i2pi = 1j*2*np.pi   # complex phase factor
 
 
 
+def Hn(A):
+    return np.conjugate(np.transpose(A))
 
 
 class focuser(object):
@@ -397,14 +399,16 @@ class focuser(object):
             self.pupil = ud(csz, csz, csz//2, True)
         else:
             self.pupil = pupil
+        self.pupilsum = np.sum(self.pupil)
 
         self.pdiam  = pdiam                 # pupil diameter in meters
         self.pscale = pscale                # plate scale in mas/pixel
         self.fov = self.isz * self.pscale
         self.wl     = wl                    # wavelength in meters
+        self.mu2phase = 2.0 * np.pi / self.wl / 1e6  # convert microns to phase
         self.frm0   = np.zeros((ysz, xsz))  # initial camera frame
 
-        self.btwn_pixel = False            # fourier comp. centering option
+        self.btwn_pixel = True            # fourier comp. centering option
         self.phot_noise = False            # photon noise flag
         self.signal     = 1e6              # default # of photons in frame
         self.corono     = False            # if True: perfect coronagraph
@@ -475,10 +479,6 @@ class focuser(object):
             self.phot_noise = False
 
     # =========================================================================
-    def get_image(self, ):
-        return(self.shm_cam)
-
-    # =========================================================================
     def sft(self, A2):
         ''' Class specific implementation of the explicit Fourier Transform
 
@@ -534,9 +534,8 @@ class focuser(object):
         ----------
         - phscreen: 
         ------------------------------------------------------------------- '''
-        from pdb import set_trace
+        #from pdb import set_trace
         # Here 
-        mu2phase = 2.0 * np.pi / self.wl / 1e6  # convert microns to phase
 
         phs = np.zeros((self.csz, self.csz), dtype=np.float64)  # phase map
         
@@ -546,71 +545,33 @@ class focuser(object):
             else:
                 phs += phscreen
             
-        wf = np.exp(1j*phs*mu2phase)
+        wf = np.exp(1j*phs*self.mu2phase)
         wf *= np.sqrt(self.signal / self.pupil.sum())  # signal scaling
         wf *= self.pupil                               # apply the pupil mask
         self._phs = phs * self.pupil                   # store total phase
         self.fc_pa = self.sft(wf)                      # focal plane cplx ampl
         return self.fc_pa
-
-
-
-    # =========================================================================
-    def nogive(self, dm_shm=None, atmo_shm=None):
-
-        ''' ----------------------------------------
-        DEPRECATED
-        Thread (infinite loop) that monitors changes
-        to the DM, atmo, and qstatic data structures
-        and updates the camera image.
-
-        Parameters:
-        ----------
-        - dm_shm    : shared mem file for DM
-        - atmo_shm  : shared mem file for atmosphere
-        - qstat_shm : shared mem file for qstatic error
-        --------------------------------------------
-
-        Do not use directly: use self.start_server()
-        and self.stop_server() instead.
-        ---------------------------------------- '''
-        dm_cntr = 0      # counter to keep track of updates
-        atm_cntr = 0     # on the phase screens
-        dm_map = None    # arrays that store current phase
-        atm_map = None   # screens, if they exist
-        nochange = True  # lazy flag!
-
-        # 1. read the shared memory data structures if present
-        # ----------------------------------------------------
-        if dm_shm is not None:
-            dm_map = shm(dm_shm)
-
-        if atmo_shm is not None:
-            atm_map = shm(atmo_shm)
-
-        # 2. enter the loop
-        # ----------------------------------------------------
-        while self.keepgoing:
-            nochange = True  # lazy flag up!
-
-            if atm_map is not None:
-                test = atm_map.get_counter()
-                atmomap = atm_map.get_data()
-                if test != atm_cntr:
-                    atm_cntr = test
-                    nochange = False
+    
+    def get_inv_image(self, image):
+        B = Hn(self._A1).dot(image.dot(Hn(self._A3)))
+        return B
+    
+    def get_injection(self, phscreen=None):
+        """"""
+        
+        phs = np.zeros((self.csz, self.csz), dtype=np.float64)  # phase map
+        
+        if phscreen is not None:  # a phase screen was provided
+            if self.remove_injection_piston:
+                phs += phscreen - np.mean(phscreen[self.pupil])
             else:
-                atmomap = None
-
-            self.make_image(phscreen=atmomap, dmmap=dmmap, nochange=nochange)
+                phs += phscreen
             
-            
-            
-            
-            
-            
-            
-            
+        wf = np.exp(1j*phs*self.mu2phase)
+        wf *= np.sqrt(self.signal / self.pupilsum)  # signal scaling
+        wf *= self.pupil                               # apply the pupil mask
+        self._phs = phs * self.pupil                   # store total phase
+        self.fc_pa = self.sft(wf)                      # focal plane cplx ampl
             
             
             
@@ -859,6 +820,18 @@ class injector(object):
         for i, amap in enumerate(self.lpmap):
             quartiles.append([i*np.max(amap)/4 for i in range(4)])
         self.map_quartiles = np.array(quartiles)
+        
+        # Computing the mode of the fiber in the pupil plane for all scopes and wavelengths
+        # Although they should be all the same
+        lppup = []
+        for i, scope in enumerate(self.focal_plane): # Iterating ont the scopes
+            focal_wl = []
+            for i, fiberwl in enumerate(scope): # Iterating on the wavelengths
+                a_lp_pup = fiberwl.pupil * fiberwl.get_inv_image(self.lpmap[i,:,:])
+                fiberwl.lppup = a_lp_pup
+                focal_wl.append(a_lp_pup)
+            lppup.append(focal_wl)
+        self.lppup = np.array(lppup)
     
     def reset_screen(self):
         for ascreen in self.screen:
@@ -877,7 +850,47 @@ class injector(object):
             self.focal_planes = focal_planes
             self.injected = np.sum(self.focal_planes*self.lpmap[None,:,:,:], axis=(2,3))
             yield self.injected
-    
+            
+    def give_comparison(self,):
+        """
+        A test comparison between image and pupil plane injection
+        """
+        while True:
+            focal_planes = []
+            thescreens = []
+            for i, scope in enumerate(self.focal_plane):
+                thescreen = next(self.screen[i].it)
+                thescreens.append(thescreen)
+                focal_wl = []
+                for fiberwl in scope:
+                    focal_wl.append(fiberwl.getimage(thescreen))
+                focal_planes.append(focal_wl)
+            focal_planes = np.array(focal_planes)
+            #self.focal_planes = focal_planes
+            orig_injected = np.sum(focal_planes*self.lpmap[None,:,:,:], axis=(2,3))
+            
+            focal_planes = []
+            for i, scope in enumerate(self.focal_plane):
+                thescreen = thescreens[i]
+                focal_wl = []
+                for ascope in scope:
+                    myscreen = thescreen - np.mean(thescreen[ascope.pupil])
+                    mu2phase = 2.0 * np.pi / ascope.wl / 1e6  # convert microns to phase
+                    wf = np.exp(1j*myscreen*mu2phase)
+                    wf *= np.sqrt(ascope.signal / ascope.pupil.sum())  # signal scaling
+                    wf *= ascope.pupil                               # apply the pupil mask
+                    #wf /= np.mean(wf)
+                    
+                    focal_wl.append(wf)
+                    pupil_injected = self.pupil
+                focal_planes.append(focal_wl)
+            focal_planes = np.array(focal_planes)
+            pupil_injected = np.sum(focal_planes*self.lppup[:,:,:,:], axis=(2,3))
+            #self.focal_planes = focal_planes
+            #self.injected = np.sum(self.focal_planes*self.lpmap[None,:,:,:], axis=(2,3))
+            yield orig_injected, pupil_injected
+        
+
     def all_inj_phasors(self,lambdas):
         """
         Convenience function that applies interpolation for all the inputs
