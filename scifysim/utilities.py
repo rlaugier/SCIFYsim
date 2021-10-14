@@ -198,10 +198,15 @@ def test_ex():
 
 import cProfile, pstats, io
 
-def profileit(func):
+def profileit(func, highres=False):
+    
     def wrapper(*args, **kwargs):
         datafn = func.__name__ + ".profile" # Name the data file sensibly
-        prof = cProfile.Profile()
+        if highres:
+            from time import perf_counter_ns
+            prof = cProfile.Profile(perf_counter_ns, timeunit=0.000001)
+        else:
+            prof = cProfile.Profile()
         retval = prof.runcall(func, *args, **kwargs)
         s = io.StringIO()
         sortby = 'cumulative'

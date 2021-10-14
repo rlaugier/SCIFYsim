@@ -532,7 +532,7 @@ class focuser(object):
 
         Parameters:
         ----------
-        - phscreen: 
+        - phscreen:   The piston map in µm
         ------------------------------------------------------------------- '''
         #from pdb import set_trace
         # Here 
@@ -556,22 +556,25 @@ class focuser(object):
         B = Hn(self._A1).dot(image.dot(Hn(self._A3)))
         return B
     
-    def get_injection(self, phscreen=None):
-        """"""
+    def get_injection(self, phscreen):
+        """
+        Computes the complex injection phasor based on fiber mode in the pupil plane.
         
-        phs = np.zeros((self.csz, self.csz), dtype=np.float64)  # phase map
+        Parameters:
+        ----------
+        - phscreen:    The piston map in µm
+        """
         
-        if phscreen is not None:  # a phase screen was provided
-            if self.remove_injection_piston:
-                phs += phscreen - np.mean(phscreen[self.pupil])
-            else:
-                phs += phscreen
-            
+        phs = phscreen
         wf = np.exp(1j*phs*self.mu2phase)
         wf *= np.sqrt(self.signal / self.pupilsum)  # signal scaling
         wf *= self.pupil                               # apply the pupil mask
         self._phs = phs * self.pupil                   # store total phase
-        self.fc_pa = self.sft(wf)                      # focal plane cplx ampl
+        #self.fc_pa = self.sft(wf)                      # focal plane cplx ampl
+        injected = np.sum(self.lppup * wf)
+        return injected
+        
+        
             
             
             
@@ -874,18 +877,11 @@ class injector(object):
                 thescreen = thescreens[i]
                 focal_wl = []
                 for ascope in scope:
-                    myscreen = thescreen - np.mean(thescreen[ascope.pupil])
-                    mu2phase = 2.0 * np.pi / ascope.wl / 1e6  # convert microns to phase
-                    wf = np.exp(1j*myscreen*mu2phase)
-                    wf *= np.sqrt(ascope.signal / ascope.pupil.sum())  # signal scaling
-                    wf *= ascope.pupil                               # apply the pupil mask
-                    #wf /= np.mean(wf)
-                    
-                    focal_wl.append(wf)
-                    pupil_injected = self.pupil
+                    focal_wl.append(ascope.get_injection(thescreen))
+                    #pupil_injected = self.pupil
                 focal_planes.append(focal_wl)
             focal_planes = np.array(focal_planes)
-            pupil_injected = np.sum(focal_planes*self.lppup[:,:,:,:], axis=(2,3))
+            pupil_injected = focal_planes
             #self.focal_planes = focal_planes
             #self.injected = np.sum(self.focal_planes*self.lpmap[None,:,:,:], axis=(2,3))
             yield orig_injected, pupil_injected
@@ -904,7 +900,7 @@ class injector(object):
         outs = np.array([self.best_einterp[i](lambdas) for i in range(self.ntelescopes)])
         return outs
             
-    def give_interpolated(self,interpolation):
+    def give_interpolated_injection_image_plane(self,interpolation):
         """
         This one will yield the method that interpolates all the injection phasors
         """
@@ -920,6 +916,31 @@ class injector(object):
             focal_planes = np.array(focal_planes)
             self.focal_planes = focal_planes
             self.injected = np.sum(self.focal_planes*self.lpmap[None,:,:,:], axis=(2,3))
+            #self.injected = np.array([])
+            self.einterp = [interp1d(self.lambda_range,
+                                      self.injected[i,:],kind=interpolation,
+                                      fill_value="extrapolate")\
+                                                            for i in range(self.ntelescopes)]
+            yield self.all_inj_phasors
+            
+            
+    def give_interpolated(self,interpolation):
+        """
+        This one will yield the method that interpolates all the injection phasors
+        """
+        from scipy.interpolate import interp1d
+        while True:
+            injection_values = []
+            for i, scope in enumerate(self.focal_plane):
+                thescreen = next(self.screen[i].it)
+                inj_wl = []
+                for fiberwl in scope:
+                    inj_wl.append(fiberwl.get_injection(thescreen))
+                injection_values.append(inj_wl)
+            injection_values = np.array(injection_values)
+            #self.focal_planes = focal_planes
+            self.injected = injection_values
+            #self.injected = np.array([])
             self.einterp = [interp1d(self.lambda_range,
                                       self.injected[i,:],kind=interpolation,
                                       fill_value="extrapolate")\
