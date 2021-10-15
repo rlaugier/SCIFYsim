@@ -345,7 +345,7 @@ def get_sensitivity_Te(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.
     fluxs = np.array(fluxs).reshape((ny, nx))
     mags = np.array(mags).reshape((ny,nx))
     Tes = np.array(Tes).reshape((ny,nx))
-    print(wsig.shape)
+    #print(wsig.shape)
     
     return mags, fluxs, Tes
 
@@ -380,7 +380,6 @@ def residual_pdet_Tnp(xTx, xsi, targ):
     
     Pdet_Pfa = 1 - norm.cdf((xsi - xTx)/np.sqrt(xTx))
     return Pdet_Pfa - targ
-
 def get_sensitivity_Tnp(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.,
                 verbose=False, use_tqdm=True):
     """
