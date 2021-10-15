@@ -266,7 +266,7 @@ class atmo(object):
 
             self.rms_i = subk.std()
             self.shm_phs = subk + self.qstatic
-            yield self.shm_phs
+            yield self.shm_phs.astype(np.float32)
             
 # ==================================================================
 def atmo_screen(isz, ll, r0, L0, fc=25, correc=1.0, pdiam=None,seed=None):
@@ -335,7 +335,7 @@ i2pi = 1j*2*np.pi   # complex phase factor
 
 
 
-
+from pdb import set_trace
 
 
 
@@ -399,18 +399,19 @@ class focuser(object):
             self.pupil = ud(csz, csz, csz//2, True)
         else:
             self.pupil = pupil
-        self.pupilsum = np.sum(self.pupil)
+        self.flatpup = self.pupil.flatten()
+        self.pupilsum = np.sum(self.pupil).astype(np.float32)
 
         self.pdiam  = pdiam                 # pupil diameter in meters
         self.pscale = pscale                # plate scale in mas/pixel
         self.fov = self.isz * self.pscale
         self.wl     = wl                    # wavelength in meters
-        self.mu2phase = 2.0 * np.pi / self.wl / 1e6  # convert microns to phase
+        self.mu2phase = np.float32(2.0 * np.pi / self.wl / 1e6)  # convert microns to phase
         self.frm0   = np.zeros((ysz, xsz))  # initial camera frame
 
         self.btwn_pixel = True            # fourier comp. centering option
         self.phot_noise = False            # photon noise flag
-        self.signal     = 1e6              # default # of photons in frame
+        self.signal     = np.float32(1e6)              # default # of photons in frame
         self.corono     = False            # if True: perfect coronagraph
         self.remove_injection_piston = rm_inj_piston
         self.npix = np.count_nonzero(self.pupil)
@@ -472,10 +473,10 @@ class focuser(object):
         - nph: the total number of photons inside the frame
         ------------------------------------------------------------------- '''
         if (nph > 0):
-            self.signal = nph
+            self.signal = np.flaot32(nph)
             self.phot_noise = True
         else:
-            self.signal = 1e6
+            self.signal = np.float32(1e6)
             self.phot_noise = False
 
     # =========================================================================
@@ -564,14 +565,15 @@ class focuser(object):
         ----------
         - phscreen:    The piston map in µm
         """
-        
-        phs = phscreen
-        wf = np.exp(1j*phs*self.mu2phase)
-        wf *= np.sqrt(self.signal / self.pupilsum)  # signal scaling
-        wf *= self.pupil                               # apply the pupil mask
-        self._phs = phs * self.pupil                   # store total phase
+        #set_trace()
+        phs = phscreen.flatten()
+        phs -= np.mean(phs[self.flatpup])
+        # We do only the needed operations thanks to masking
+        wf = np.sqrt(self.signal / self.pupilsum) * np.exp(1j*phs[self.flatpup]*self.mu2phase)  # signal scaling
+        #wf *= self.pupil                               # apply the pupil mask
+        #self._phs = phs * self.pupil                   # store total phase
         #self.fc_pa = self.sft(wf)                      # focal plane cplx ampl
-        injected = np.sum(self.lppup * wf)
+        injected = self.flat_masked_lppup.dot(wf)
         return injected
         
         
@@ -832,6 +834,7 @@ class injector(object):
             for i, fiberwl in enumerate(scope): # Iterating on the wavelengths
                 a_lp_pup = fiberwl.pupil * fiberwl.get_inv_image(self.lpmap[i,:,:])
                 fiberwl.lppup = a_lp_pup
+                fiberwl.flat_masked_lppup = fiberwl.lppup.flatten()[fiberwl.flatpup]   # This is pre-computation/ to optimize the computation
                 focal_wl.append(a_lp_pup)
             lppup.append(focal_wl)
         self.lppup = np.array(lppup)
