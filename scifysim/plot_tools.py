@@ -377,7 +377,15 @@ def plot_opds(integ, step_time):
 def plot_corrector_tuning_angel_woolf(corrector,lambs,
                                       combiner,show=True):
     """
-    Plots some 
+    Plots some information on the tuning of the combiner using geometric piston
+    and chromatic corrector plates.
+    Plots:
+    ------
+    - Nulling contrast (before and after correction)
+    - The corrected matrix matrix plot
+    - The length of correction, compensation, and offset
+    - Shape excursion (before and after correction)
+    
     Currently works only with lambda_science_range
     """
     
