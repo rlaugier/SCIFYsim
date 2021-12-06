@@ -131,6 +131,25 @@ def prepare_all(afile, thetarget=None, update_params=False,
     asim.combiner.chromatic_matrix(asim.lambda_science_range)
     asim.prepare_corrector(optimize=compensate_chromatic)
     return asim
+
+
+import itertools
+def get_uv(puparray):
+    """
+    Computes the uv baselines for a given pupil configuration.
+    puparray    : An array representing the location of each pupil
+    """
+    uv = []
+    for pair in itertools.combinations(puparray, 2):
+        #print(pair)
+        uv.append(pair[0]-pair[1])
+    uv = np.array(uv)
+    indices = []
+    for pair in itertools.combinations(np.arange(puparray.shape[0]), 2):
+        #print(pair)
+        indices.append((pair[0],pair[1]))
+    indices = np.array(indices)
+    return uv, indices
     
 
 def test_ex():

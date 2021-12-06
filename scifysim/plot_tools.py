@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import logging
 from tqdm import tqdm
+from scifysim import utilities as util
 
 logit = logging.getLogger(__name__)
 
@@ -170,6 +171,51 @@ def plot_projected_pupil(asim, seq_index,
                     grid=projected_grid)
     
     return fig
+
+def plot_projected_uv(asim, seq_indices=None,
+                         grid=False, grid_res=5,
+                         compass=True, compass_length=10.,
+                         usize=150., dist=140., perspective=True):
+    """
+    Designed as a wrapper around plot_pupil that also handles
+    additional illustration.
+    As a contrast to plot_pupil, plot_projected_pupil takes in a
+    simulator object.
+    The plots are made of the array as seen from the target in meters 
+    projected to RA-Dec coordinates.
+    
+    asim    : Simulator object
+    seq_indices: The index in the observing sequence (This feature may evolve)
+                if None: the whole sequence is mapped
+    grid    : Whether to plot a grid of ground position
+    grid_res: The number of lines in the grid for each direction
+    compass : Whether to plot a little North and East symbol for direction
+    compoass_length: In meters the length of the compass needles.
+    """
+    anarray = asim.obs.statlocs
+    
+    if seq_indices is None:
+        thesequence = asim.sequence
+    else:
+        thesequence = asim.sequence[seq_indices]
+    alluvs = []
+    for atime in thesequence:
+        #Get the pointing of the array:
+        altaz, PA = asim.obs.get_position(asim.target, atime)
+        p_array = asim.obs.get_projected_array(altaz, PA=PA, loc_array=anarray)
+        uvs, indices = util.get_uv(p_array)
+        alluvs.append(uvs)
+    alluvs = np.array(alluvs)
+    #thepistons = asim.obs.get_projected_geometric_pistons(altaz)
+    
+    fig = plt.figure(dpi=200)
+    for at in alluvs:
+        for i, abl in enumerate(at):
+            plt.scatter(abl[0], abl[1], color=f"C{i}", label=i)
+            plt.scatter(-abl[0], -abl[1], color=f"C{i}", label=i)
+    plt.show()
+    
+    return fig, alluvs
 
 def plot_phasescreen(theinjector, show=True, noticks=True, screen_index=True):
     import matplotlib.pyplot as plt
