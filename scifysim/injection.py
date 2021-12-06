@@ -22,6 +22,7 @@ import threading
 import time
 from pathlib import Path
 from scipy.interpolate import interp2d, interp1d
+from xaosim import zernike
 
 # amto_screen is now provided in house to provide seed
 #from xaosim import wavefront as wft
@@ -67,7 +68,8 @@ class atmo(object):
     # ==================================================
     def __init__(self, name="GRAVITY+", csz = 512,
                  psz=200,
-                 lsz=8.0, r0=0.2, L0=10.0,
+                 lsz=8.0, r0=0.2,
+                 ro_wl=3.5e-6, L0=10.0,
                  fc=24.5, correc=1.0, seed=None,
                  wind_speed = 1., 
                  wind_angle = 0.1,
@@ -106,6 +108,7 @@ class atmo(object):
             self.step_time = step_time
             self.r0      = r0
             self.L0      = L0
+            self.r0_wl   = r0_wl
 
             self.rms_i   = 0.0
             self.correc  = correc
@@ -116,11 +119,13 @@ class atmo(object):
             screen_oversize = self.config.getfloat("atmo", "screen_size")
             pdiams = self.config.getarray("configuration","diam")
             pdiam = pdiams[0]
+            fc = self.config.getfloat("atmo", "fc_ao")
             r0 = self.config.getfloat("atmo", "r0")
             L0 = self.config.getfloat("atmo", "Lout")
             correc = self.config.getfloat("atmo", "correc")
             wind_speed = self.config.getfloat("atmo", "vwind")
             step_time = self.config.getfloat("atmo", "step_time")
+            wl_mean = self.config.getfloat("photon", "lambda_cen")
             
             self.csz     = int(pres*screen_oversize)
             self.psz     = pres
@@ -131,12 +136,17 @@ class atmo(object):
             self.lsz     = self.pdiam*screen_oversize
             self.r0      = r0
             self.L0      = L0
+            self.r0_wl   = wl_mean
 
             self.rms_i   = 0.0
             self.correc  = correc
             self.fc      = fc
             
-        self.kolm    = atmo_screen(self.csz, self.lsz, self.r0, self.L0, self.fc, self.correc, pdiam=self.pdiam, seed=seed).real
+        kolm, self.modul    = atmo_screen(screen_dimension=self.csz, screen_extent=self.lsz,
+                                          r0=self.r0, L0=self.L0,
+                                          fc=self.fc, correc=self.correc,
+                                          pdiam=self.pdiam, seed=seed)
+        self.kolm = kolm.real
         
         self.qstatic = np.zeros((self.psz, self.psz))
         self.shm_phs = self.qstatic
@@ -222,10 +232,13 @@ class atmo(object):
             self.fc = fc
         
         # Converting to a piston screen in microns at this point
-        # r0 is expected at the hard-coded wavelength of 3.5 mum
+        # r0 is now expected at the mean of the wl band
         logit.warning("Update the way the phase screen is converted to a piston screen")
-        self.kolm    = 3.5 / (2*np.pi) * atmo_screen(
-            self.csz, self.lsz, self.r0, self.L0, self.fc, self.correc, seed=seed).real
+        kolm, self.modul = atmo_screen(screen_dimension=self.csz, screen_extent=self.lsz,
+                                          r0=self.r0, L0=self.L0,
+                                          fc=self.fc, correc=self.correc,
+                                          pdiam=self.pdiam, seed=seed)
+        self.kolm    = 1.0e6 * self.r0_wl / (2*np.pi) * kolm.real  # converting to piston in microns
 
         self.kolm2   = np.tile(self.kolm, (2,2))
 
@@ -269,7 +282,10 @@ class atmo(object):
             yield self.shm_phs.astype(np.float32)
             
 # ==================================================================
-def atmo_screen(isz, ll, r0, L0, fc=25, correc=1.0, pdiam=None,seed=None):
+def atmo_screen(screen_dimension, screen_extent,
+                r0, L0,
+                fc=25, correc=1.0,
+                pdiam=None,seed=None):
     ''' -----------------------------------------------------------
     The Kolmogorov - Von Karman phase screen generation algorithm.
 
@@ -283,13 +299,14 @@ def atmo_screen(isz, ll, r0, L0, fc=25, correc=1.0, pdiam=None,seed=None):
     Parameters:
     ----------
 
-    - isz    : the size of the array to be computed (in pixels)
-    - ll     :  the physical extent of the phase screen (in meters)
+    - screen_dimension    : the size of the array to be computed (in pixels)
+    - screen_extent     :  the physical extent of the phase screen (in meters)
     - r0     : the Fried parameter, measured at a given wavelength (in meters)
     - L0     : the outer scale parameter (in meters)
     - fc     : DM cutoff frequency (in lambda/D)
     - correc : correction of wavefront amplitude (factor 10, 100, ...)
     - pdiam  : pupil diameter (in meters)
+    - seed   : random seed for the screen (default: None produces a new seed)
 
     Returns: two independent phase screens, available in the real and 
     imaginary part of the returned array.
@@ -297,32 +314,35 @@ def atmo_screen(isz, ll, r0, L0, fc=25, correc=1.0, pdiam=None,seed=None):
     Remarks:
     -------
     If pdiam is not specified, the code assumes that the diameter of
-    the pupil is equal to the extent of the phase screen "ll".
+    the pupil is equal to the extent of the phase screen "screen_extent".
     ----------------------------------------------------------- '''
     
-    #phs = 2*np.pi * (np.random.rand(isz, isz) - 0.5)
+    #phs = 2*np.pi * (np.random.rand(screen_dimension, screen_dimension) - 0.5)
     rng = np.random.default_rng(np.random.SeedSequence(seed))
-    phs = rng.uniform(low=-np.pi, high=np.pi, size=(isz,isz))
+    phs = rng.uniform(low=-np.pi, high=np.pi, size=(screen_dimension,screen_dimension))
 
-    xx, yy = np.meshgrid(np.arange(isz)-isz/2, np.arange(isz)-isz/2)
+    xx, yy = np.meshgrid(np.arange(screen_dimension)-screen_dimension/2, np.arange(screen_dimension)-screen_dimension/2)
     rr = np.hypot(yy, xx)
     rr = shift(rr)
     rr[0,0] = 1.0
 
-    modul = (rr**2 + (ll/L0)**2)**(-11/12.)
+    modul = (rr**2 + (screen_extent/L0)**2)**(-11/12.)
 
     if pdiam is not None:
-        in_fc = (rr < fc * ll / pdiam)
+        in_fc = (rr < fc * screen_extent / pdiam)
     else:
         in_fc = (rr < fc)
 
     modul[in_fc] /= correc
+    # obtaining unique rr values 
+    rru, rru_indices = np.unique(rr, return_index=True)
+    amodul = np.sqrt(2*0.0228)*(screen_extent/r0)**(5/6.)*modul.flat[rru_indices]
     
-    screen = ifft(modul * np.exp(1j*phs)) * isz**2
-    screen *= np.sqrt(2*0.0228)*(ll/r0)**(5/6.)
+    screen = ifft(modul * np.exp(1j*phs)) * screen_dimension**2
+    screen *= np.sqrt(2*0.0228)*(screen_extent/r0)**(5/6.)
 
     screen -= screen.mean()
-    return(screen)
+    return screen, np.array([rru, amodul]).T
 
 # ======================================================================
 
@@ -418,6 +438,17 @@ class focuser(object):
       
         # final tune-up
         self.update_cam()
+        
+        self.tip = self.pupil*zernike.mkzer(*zernike.noll_2_zern(2),
+                                 self.pupil.shape[0], 100,
+                                 limit=False)
+        self.tip = np.pi*self.tip/np.max(self.tip)
+        self.ntip = self.tip.flatten()/self.tip.flatten().dot(self.tip.flatten())
+        self.tilt = self.pupil*zernike.mkzer(*zernike.noll_2_zern(3),
+                                  self.pupil.shape[0], 100,
+                                  limit=False)
+        self.tilt = np.pi*self.tilt/np.max(self.tilt)
+        self.ntilt = self.tilt.flatten()/self.tilt.flatten().dot(self.tilt.flatten())
 
     # =========================================================================
     def update_cam(self, wl=None, pscale=None, between_pixel=None):
@@ -575,6 +606,35 @@ class focuser(object):
         #self.fc_pa = self.sft(wf)                      # focal plane cplx ampl
         injected = self.flat_masked_lppup.dot(wf)
         return injected
+    
+    def get_tilt(self, phscreen=None):
+        ''' Measures the tip-tilt measurement corresponding to the wavefront
+        provided. The tip-tilt is in a 2-array in units of lambda/D
+        -------------------------------------------------------------------
+
+        Parameters:
+        ----------
+        - phscreen:   The piston map in µm
+        ------------------------------------------------------------------- '''
+        #from pdb import set_trace
+        # Here 
+
+        phs = np.zeros((self.csz, self.csz), dtype=np.float64)  # phase map
+        
+        if phscreen is not None:  # a phase screen was provided
+            if self.remove_injection_piston:
+                phs += phscreen - np.mean(phscreen[self.pupil])
+            else:
+                phs += phscreen
+            
+        phase = self.pupil*phs*self.mu2phase
+        tip  = phase.flatten().dot(self.ntip)
+        tilt = phase.flatten().dot(self.ntilt)
+        #wf *= np.sqrt(self.signal / self.pupil.sum())  # signal scaling
+        #wf *= self.pupil                               # apply the pupil mask
+        #self._phs = phs * self.pupil                   # store total phase
+        #self.fc_pa = self.sft(wf)                      # focal plane cplx ampl
+        return np.array([tip, tilt])
         
         
             
