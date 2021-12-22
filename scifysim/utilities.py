@@ -688,6 +688,18 @@ def extract_diffobs_map(maps, simulator, dit=1., mag=None, postprod=None, eta=1.
             ymap[k,:,:,i,j] =  postprod[k,:,:].dot(ymap[k,:,:,i,j])
     return ymap
 
+def test_maps(fname="local_config/default_R200", target="GJ 86 A"):
+    """
+    Testing and comparing the 2 approaches to build transmission maps.
+    """
+    asim.build_all_maps_dask(mapcrop=0.2, mapres=10, )
+    asim.persist_maps_to_disk()
+    mapdask = asim.maps.compute()
+    asim.build_all_maps(mapcrop=0.2, mapres=10, )
+    mapnp = asim.maps.copy()
+    print("They are the same map: ", np.allclose(mapnp, mapdask))
+    return mapnp, mapdask
+
 
 def trois(x, xmin, xmax, ymin=0., ymax=1.):
     xrange = xmax-xmin

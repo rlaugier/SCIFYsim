@@ -144,6 +144,24 @@ class integrator():
         self.planetlight = None
         
     def prepare_t_exp_base(self):
+        """
+        Computes some basic laws regarding exposure times
+        for the current configuration:
+        
+        - self.expr_snr_t       : expression of SNR as function of time
+                                    which also gets printed
+        - self.expr_t_for_snr   : time to get a given SNR
+        - self.expr_well_fraction : Fraction of well filled by the number of Ph considered
+        - self.expr_t_max       : Maximum exposure time to fill the well
+        - self.t_exp_base       : lambdified version of expr_t_for_snr
+        - self.snr_t            : lambdified version of expr_sr_t
+        - self.well_fraction    : lambdified version of expr_well_faction 
+        - self.t_exp_max        : lambdified version of expr_t_max
+        
+        eta, f_planet, n_pix, f_tot, ron, =  sp.symbols("eta, f_{planet}, n_p, f_{tot}, ron", real=True)
+        n_planet, n_tot, t_exp0, t_exp = sp.symbols("n_{planet}, n_{tot}, t_{esxp0}, t_{exp}", real=True)
+        
+        """
         eta, f_planet, n_pix, f_tot, ron, =  sp.symbols("eta, f_{planet}, n_p, f_{tot}, ron", real=True)
         n_planet, n_tot, t_exp0, t_exp = sp.symbols("n_{planet}, n_{tot}, t_{esxp0}, t_{exp}", real=True)
         SNR = sp.symbols("SNR", real=True)

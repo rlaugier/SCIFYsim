@@ -4,9 +4,11 @@ import scifysim as sf
 import numpy as np
 from tqdm import tqdm
 import logging
-
 from kernuller import mas2rad, rad2mas
 from astropy import units
+from pdb import set_trace
+
+import dask.array as da
 
 logit = logging.getLogger(__name__)
 
@@ -346,8 +348,57 @@ class simulator(object):
         if dosum:
             outputs = np.sum(np.abs(b)**2, axis=0)
         else:
+            #set_trace()
             outputs = np.abs(b)**2
         return outputs
+    
+    def combine_light_dask(self, asource, injected, input_array, collected,
+                      dosum=True, map_index=0):
+        """
+        Computes the combination for a discretized light source object 
+        for all the wavelengths of interest. The computation is done 
+        out of core using dask.
+        Returns the intensity in all outputs at all wavelengths.
+        inputs:
+        asource     : Source object or transmission_emission object
+                        including ss and xx_r attributes as dask arrays
+        injected    : complex phasor for the instrumental errors
+        input_array  : The projected geometric configuration of the array
+                        use observatory.get_projected_array()
+        collected   : Dask version of the intensity across wavelength
+                        and the difference source origins
+        map_index   : The index of the pointing in the sequence. Mostly use for numbering
+                        of the temporary disk file
+        
+        # Note that in "dask" mode the `collected` and `source.ss` are expected as dask arrays
+        # 
+        """
+        # Ideally, this collected operation should be factorized over all subexps
+        intensity = asource.ss * collected[:,None]
+        amplitude = np.sqrt(intensity)
+        b = []
+
+        #xx_r = da.from_array(asource.xx_r)
+        #yy_r = da.from_array(asource.yy_r)
+        #damplitude = da.from_array(amplitude)
+        geometric_phasor = self.geometric_phasor_dask(asource.xx_r,
+                                                      asource.yy_r,
+                                                      input_array)
+        #print("Computing and writing geometric_phasor", flush=True)
+        da.to_zarr(geometric_phasor , f"/tmp/full_geometric_phasor_{map_index}.zarr", overwrite=True)
+        #print("Done", flush=True)
+        #print("Loading", flush=True)
+        geometric_phasor =  da.from_zarr(f"/tmp/full_geometric_phasor_{map_index}.zarr")
+        #print("Done", flush=True)
+        myinput = injected[None,:,:] * geometric_phasor
+        myinput = myinput * amplitude.T[:,:,None]
+        b = da.einsum("w o i, f w i -> f w o", self.combiner.Mcn, myinput)
+        if dosum:
+            outputs = np.sum(np.abs(b)**2, axis=0)
+        else:
+            outputs = np.abs(b)**2
+        return outputs
+
     def combine_32(self, inst_phasor, geom_phasor, amplitude=None,):
         """
         Computes the output INTENSITY based on the input AMPLITUDE
@@ -396,6 +447,22 @@ class simulator(object):
         phi = self.k[:,None] * anarray.dot(a)[None,:]
         b = np.exp(1j*phi)
         return b
+    def geometric_phasor_dask(self, alphas, betas, anarray):
+        """
+        Returns the complex phasor corresponding to the locations
+        of the family of sources
+        alpha         : The coordinate matched to X in the array geometry
+                        as a dask array (field positions)
+        beta          : The coordinate matched to Y in the array geometry
+                        as a dask array (field positions)
+        anarray       : The array geometry (n_input, 2)
+        """
+        # making a dask array of field positions (nfield, 2)
+        alphabeta = da.from_array((alphas, betas)).T
+        k = da.from_array(self.k)
+        phi = k[None, :, None] * da.einsum( "a d, f d -> f a",  anarray, alphabeta)[:,None,:]
+        z = da.exp(1j*phi)
+        return z
 
     
     def make_exposure(self, interest, star, diffuse,
@@ -575,7 +642,7 @@ class simulator(object):
                        dtype=np.float32):
         """
         Builds the transmission maps for the combiner for all the pointings
-        on self.target at the times of self.target
+        on self.target at the times of self.sequence
         mapres        : The resolution of the map in pixels
         mapcrop       : Adjusts the extent of the map
         Returns (also stored in self.map) a transmission map of shape:
@@ -599,7 +666,7 @@ class simulator(object):
         maps = []
         for i, time in enumerate(self.sequence):
             self.point(self.sequence[i], self.target)
-            amap = self.make_map(i, vigneting_map, dtype=dtype)
+            amap = self.make_map(i, self.vigneting_map, dtype=dtype)
             maps.append(amap)
         maps = np.array(maps)
         print(maps.shape)
@@ -609,11 +676,115 @@ class simulator(object):
                     mapres,
                     mapres)
         self.maps = maps.reshape(self.mapshape)
-        extent = [np.min(vigneting_map.xx),
-                  np.max(vigneting_map.xx),
-                  np.min(vigneting_map.yy),
-                  np.max(vigneting_map.yy)]
+        extent = [np.min(self.vigneting_map.xx),
+                  np.max(self.vigneting_map.xx),
+                  np.min(self.vigneting_map.yy),
+                  np.max(self.vigneting_map.yy)]
         self.map_extent = extent
+        
+        
+    def build_all_maps_dask(self, mapres=100, mapcrop=1.,
+                       dtype="dask"):
+        """
+        Builds the transmission maps for the combiner for all the pointings
+        on self.target at the times of self.sequence.
+        Returns an uncomputed dask array referencing one input map per pointing
+        that are each stored to disk.
+        call self.maps[element indices].compute() to compute specific elements
+        without computing the whole map.
+        
+        mapres        : The resolution of the map in pixels
+        mapcrop       : Adjusts the extent of the map
+        Returns (also stored in self.map) a transmission map of shape:
+        [n_sequence,
+        n_wl_chanels,
+        n_outputs,
+        mapres,
+        mapres]
+        
+        To get final flux of a point source :
+        Map/ds_sr * p.ss * DIT
+        ds_sr is the scene surface element in steradian
+        and can be found in director.vigneting_map
+        """
+        vigneting_map = sf.injection.injection_vigneting(self.injector, mapres, mapcrop)
+        # Warning: this vigneting map for the maps are in the simulator.vigneting_map
+        # not to be confused with simulator.injector.vigneting
+        #set_trace()
+        self.vigneting_map = vigneting_map
+        self.mapsource = type('', (), {})()
+        self.mapsource.xx_r = mas2rad(self.vigneting_map.xx)
+        self.mapsource.yy_r = mas2rad(self.vigneting_map.yy)
+        maps = []
+        for i, time in enumerate(self.sequence):
+            self.point(self.sequence[i], self.target)
+            amap = self.make_map_dask(i, self.vigneting_map, dtype=dtype, map_index=i)
+            maps.append(amap)
+        maps = da.array(maps)
+        print(maps.shape)
+        self.mapshape = (len(self.sequence),
+                    self.lambda_science_range.shape[0],
+                    maps.shape[2],
+                    mapres,
+                    mapres)
+        self.maps = maps.reshape(self.mapshape)
+        extent = [np.min(self.vigneting_map.xx),
+                  np.max(self.vigneting_map.xx),
+                  np.min(self.vigneting_map.yy),
+                  np.max(self.vigneting_map.yy)]
+        self.map_extent = extent
+        #self.maps = maps
+        
+    def persist_maps_to_disk(self, fname="/tmp/full_maps.zarr"):
+        """
+        Computes and stores the map to disk. The file is then loaded
+        out of core and is still accessible in the same way (but without
+        the computing times).
+        """
+        print("Computing and writing full map", flush=True)
+        da.to_zarr(self.maps , fname, overwrite=True)
+        print("Done", flush=True)
+        print("Loading", flush=True)
+        self.maps =  da.from_zarr(fname)
+        print("Done", flush=True)
+        fname = f"/tmp/full_geometric_phasor_*.zarr"
+        print(f"The files {fname} can be removed manually")
+        
+        
+        
+    def make_map_dask(self, blockindex, vigneting_map, dtype="dask", map_index=0):
+        """
+        Create sensitivity map in ph/s/sr per spectral channel.
+        To get final flux of a point source :
+        Map/ds_sr * p.ss * DIT
+        blockindex : The index in the observing sequence to create the map
+        vigneting_map : The vigneting map drawn used for resolution
+        """
+        self.point(self.sequence[blockindex], self.target)
+        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        #injected = self.injector.best_injection(self.lambda_science_range)
+        vigneted_spectrum = \
+                vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
+                                                  self.lambda_science_range, 1.)
+        # Caution: line is not idempotent!
+        #vigneted_spectrum = np.swapaxes(vigneted_spectrum, 0,1)
+        self.mapsource.ss = da.from_array(vigneted_spectrum.T)
+        #self.mapsource.ss = vigneted_spectrum
+        dummy_collected = da.ones(self.lambda_science_range.shape[0])
+        perfect_injection = da.ones((self.lambda_science_range.shape[0], self.ntelescopes))\
+            * self.corrector.get_phasor(self.lambda_science_range)
+        static_output = self.combine_light_dask(self.mapsource, perfect_injection,
+                                           array, dummy_collected,
+                                           dosum=False,map_index=map_index)
+        static_output = static_output.swapaxes(0, -1)
+        static_output = static_output.swapaxes(0, 1)
+        #static_output = static_output# * np.sqrt(vigneted_spectrum[:,None,:])
+        # lambdified argument order matters! This should remain synchronous
+        # with the lambdify call
+        # incoherently combining over sources
+        # Warning: modifying the array
+        #combined = np.abs(static_output*np.conjugate(static_output)).astype(np.float32)
+        return static_output
         
         
     def make_map(self, blockindex, vigneting_map, dtype=np.float32):

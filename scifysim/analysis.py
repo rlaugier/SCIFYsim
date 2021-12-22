@@ -156,7 +156,8 @@ class noiseprofile(object):
         mybmap = plt.matplotlib.cm.Blues
         mygmap = plt.matplotlib.cm.YlOrBr
         fig = plt.figure(dpi=200)
-        plt.plot(wls, self.sigma_ron_d*np.ones_like(wls), label=r"$\sigma_{RON}$")
+        plt.plot(wls, self.sigma_ron_d*np.ones_like(wls),color="gray",
+                 label=r"$\sigma_{RON}$")
         #plt.plot(wls, sigma_phot, label="Photon")
         for i, dump in enumerate(sigphis):
             msg = f"$\sigma_{{inst}}$ (mag = {starmags[i]:.1f})"

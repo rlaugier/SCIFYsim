@@ -28,8 +28,8 @@ The following packages are required:
  - tqdm
  - lmfit
  - kernuller # https://github.com/rlaugier/kernuller
- - astropy==4.0
- - astroplan>=0.6
+ - astropy
+ - astroplan
  - astroquery
 
 Recommandation for installation:

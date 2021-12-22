@@ -24,6 +24,11 @@ from pathlib import Path
 from scipy.interpolate import interp2d, interp1d
 from xaosim import zernike
 
+
+
+from pdb import set_trace
+
+
 # amto_screen is now provided in house to provide seed
 #from xaosim import wavefront as wft
 
@@ -74,6 +79,7 @@ class atmo(object):
                  wind_speed = 1., 
                  wind_angle = 0.1,
                  step_time = 0.01,
+                 lo_excess = 0.,
                  pdiam=8.0, config=None):
 
         ''' Kolmogorov type atmosphere + qstatic error
@@ -112,6 +118,7 @@ class atmo(object):
 
             self.rms_i   = 0.0
             self.correc  = correc
+            self.lo_excess = lo_excess
             self.fc      = fc
         else :
             self.config = config
@@ -123,6 +130,7 @@ class atmo(object):
             r0 = self.config.getfloat("atmo", "r0")
             L0 = self.config.getfloat("atmo", "Lout")
             correc = self.config.getfloat("atmo", "correc")
+            lo_excess = self.config.getfloat("atmo", "lo_excess")
             wind_speed = self.config.getfloat("atmo", "vwind")
             step_time = self.config.getfloat("atmo", "step_time")
             wl_mean = self.config.getfloat("photon", "lambda_cen")
@@ -140,11 +148,13 @@ class atmo(object):
 
             self.rms_i   = 0.0
             self.correc  = correc
+            self.lo_excess = lo_excess
             self.fc      = fc
             
         kolm, self.modul    = atmo_screen(screen_dimension=self.csz, screen_extent=self.lsz,
                                           r0=self.r0, L0=self.L0,
                                           fc=self.fc, correc=self.correc,
+                                          lo_excess=self.lo_excess,
                                           pdiam=self.pdiam, seed=seed)
         self.kolm = kolm.real
         
@@ -237,6 +247,7 @@ class atmo(object):
         kolm, self.modul = atmo_screen(screen_dimension=self.csz, screen_extent=self.lsz,
                                           r0=self.r0, L0=self.L0,
                                           fc=self.fc, correc=self.correc,
+                                          lo_excess=self.lo_excess,
                                           pdiam=self.pdiam, seed=seed)
         self.kolm    = 1.0e6 * self.r0_wl / (2*np.pi) * kolm.real  # converting to piston in microns
 
@@ -284,7 +295,7 @@ class atmo(object):
 # ==================================================================
 def atmo_screen(screen_dimension, screen_extent,
                 r0, L0,
-                fc=25, correc=1.0,
+                fc=25, correc=1.0, lo_excess=0.,
                 pdiam=None,seed=None):
     ''' -----------------------------------------------------------
     The Kolmogorov - Von Karman phase screen generation algorithm.
@@ -305,6 +316,8 @@ def atmo_screen(screen_dimension, screen_extent,
     - L0     : the outer scale parameter (in meters)
     - fc     : DM cutoff frequency (in lambda/D)
     - correc : correction of wavefront amplitude (factor 10, 100, ...)
+    - lo_excess: A factor introducing excess low-order averations (mosly tip-tilt)
+                Must be striclty 0 =< lo_excess < 1.
     - pdiam  : pupil diameter (in meters)
     - seed   : random seed for the screen (default: None produces a new seed)
 
@@ -327,13 +340,17 @@ def atmo_screen(screen_dimension, screen_extent,
     rr[0,0] = 1.0
 
     modul = (rr**2 + (screen_extent/L0)**2)**(-11/12.)
+    
 
     if pdiam is not None:
         in_fc = (rr < fc * screen_extent / pdiam)
     else:
         in_fc = (rr < fc)
-
-    modul[in_fc] /= correc
+        
+    #if not np.isclose(lo_excess, 0):
+    #    set_trace()
+    
+    modul[in_fc] /= correc * (1 - lo_excess * np.exp(- 0.5*rr[in_fc]))
     # obtaining unique rr values 
     rru, rru_indices = np.unique(rr, return_index=True)
     amodul = np.sqrt(2*0.0228)*(screen_extent/r0)**(5/6.)*modul.flat[rru_indices]
@@ -351,11 +368,6 @@ dtor = np.pi/180.0  # to convert degrees to radians
 i2pi = 1j*2*np.pi   # complex phase factor
 
 
-
-
-
-
-from pdb import set_trace
 
 
 
@@ -609,7 +621,8 @@ class focuser(object):
     
     def get_tilt(self, phscreen=None):
         ''' Measures the tip-tilt measurement corresponding to the wavefront
-        provided. The tip-tilt is in a 2-array in units of lambda/D
+        provided. The tip-tilt is in a 2-array and the unit is lambda/D 
+        where D is the extent of the pupil mask.
         -------------------------------------------------------------------
 
         Parameters:
