@@ -840,7 +840,7 @@ class injector(object):
             pupil = tel_pupil(pres, pres, radius, file=theconfig, tel_index=0)
         
         ntelescopes = theconfig.getint("configuration", "n_dish")
-        if ntelescopes is not 4:
+        if ntelescopes != 4:
             raise NotImplementedError("Currently only supports 4 telescopes")
         rm_inj_piston = theconfig.getboolean("atmo", "remove_injection_piston")
         
@@ -1255,7 +1255,7 @@ class fringe_tracker(object):
     
 class unsorted_interp2d(interp2d):
     def __call__(self, x, y, dx=0, dy=0):
-        if (len(x) is 1) and (len(y) is 1):
+        if (len(x) == 1) and (len(y) == 1):
             return interp2d.__call__(self, x, y, dx=dx, dy=dy, assume_sorted=True)
         asx = np.argsort(x)
         usx = np.argsort(asx)

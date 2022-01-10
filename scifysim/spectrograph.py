@@ -275,7 +275,7 @@ class spectrograph(object):
                 i)
             image += np.sum(cube, axis=0)
         
-        if self.over is not 1:
+        if self.over != 1:
             image = image.reshape(self.over, ishape[0]//self.over, ishape[1]//self.over, self.over).sum(axis=(0,3))
         return image
             

@@ -66,7 +66,7 @@ class ee(object):
         modules : The module to use for computation.
         """
         #Here, we have to decide if we need the function to all 
-        if ("numexpr" in modules) and (self.outlen is not 1):
+        if ("numexpr" in modules) and (self.outlen != 1):
             thefuncs = []
             for i in range(self.outlen):
                 thefuncs.append(sp.lambdify(args, sp.flatten(self.expr)[i], modules=modules))
@@ -100,7 +100,8 @@ class ee(object):
 def prepare_all(afile, thetarget=None, update_params=False,
                instrumental_errors=True, seed=None,
                crop=1., target_coords=None,
-               compensate_chromatic=True):
+               compensate_chromatic=True,
+               modificators=None):
     """
     A shortcut to prepare a simulator object
     """
@@ -113,6 +114,9 @@ def prepare_all(afile, thetarget=None, update_params=False,
         update_star_params(config=asim.config)
     update_observing_night(config=asim.config, target_coords=target_coords)
     asim.prepare_observatory(file=asim.config)
+    if modificators is not None:
+        for amod in modificators:
+            asim.config.set(amod["section"], amod["key"], amod["value"])
     if not instrumental_errors:
         asim.config.set("fringe tracker", "dry_scaling", "0.0001")
         asim.config.set("fringe tracker", "wet_scaling", "0.0001")
@@ -709,3 +713,7 @@ def trois(x, xmin, xmax, ymin=0., ymax=1.):
     return y
 """
 WARNING-matplotlib.axes._axes- *c* argument looks like a single numeric RGB or RGBA sequence, which should be avoided as value-mapping will have precedence in case its length matches with *x* & *y*.  Please use the *color* keyword-argument or provide a 2-D array with a single row if you intend to specify the same RGB or RGBA value for all points."""
+    
+def Gauss(x, A, B, C):
+    y = A*np.exp(-1*B*(x-C)**2)
+    return y
