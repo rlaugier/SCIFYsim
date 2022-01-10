@@ -104,6 +104,25 @@ def prepare_all(afile, thetarget=None, update_params=False,
                modificators=None):
     """
     A shortcut to prepare a simulator object
+    Parameters:
+    -----------
+    - afile      : Config file 
+    - thetarget  : target name to replace in config file
+    - instrumental_errors : Bool. Whether to include instrumental
+                    errors
+    - seed       : seed to pass when generating the 
+                    time series of instrumental errors
+    - crop       : factor to pass to the injector
+    - target_coords : Coordinates of the target 
+                    default:None : finds the target from catalog
+    - compensate_chromatic : Bool Whether to run the optimization
+                    of the actuators to compensate for chromaticity
+                    in the combiner
+    - modificators : a dict of parameters to supersede the config file
+    
+    Returns:
+    --------
+    - asim        : A simulator object
     """
     from scifysim import director
     asim = director.simulator(fpath=afile)
@@ -713,6 +732,312 @@ def trois(x, xmin, xmax, ymin=0., ymax=1.):
     return y
 """
 WARNING-matplotlib.axes._axes- *c* argument looks like a single numeric RGB or RGBA sequence, which should be avoided as value-mapping will have precedence in case its length matches with *x* & *y*.  Please use the *color* keyword-argument or provide a 2-D array with a single row if you intend to specify the same RGB or RGBA value for all points."""
+
+def eval_perf(afile,t_exp,n_frames=100,
+               thetarget=None, update_params=False,
+               instrumental_errors=True, seed=None,
+               crop=1., target_coords=None,
+               compensate_chromatic=True,
+               modificators=None,
+               plotall=False,
+               use_tqdm=False):
+    """
+    Evaluate the noise profile for a given parameter file.
+    Parameters:
+    -----------
+    - afile      : Config file 
+    - t_exp      : Exposure time
+    - n_frames   : The number of frames for MC simulation
+                to evaluate the instrumental noise
+    - instrumental_errors : Bool. Whether to include instrumental
+                    errors
+    - seed       : seed to pass when generating the 
+                    time series of instrumental errors
+    - crop       : factor to pass to the injector
+    - target_coords : Coordinates of the target 
+                    default:None : finds the target from catalog
+    - compensate_chromatic : Bool Whether to run the optimization
+                    of the actuators to compensate for chromaticity
+                    in the combiner
+    - plotall    : Whether to plot a bunch of charts
+    - use_tqdm   : Whether tqdm should be used at the step of the
+                    MC simulations. (use false for parameter exploration)
+                
+    Returns:
+    --------
+    - asim       : The simulator object
+    - prof       : The noise profile object
+    - characteristics : A dictionary containing a collection of
+                performance statistics
+    """
+    import scifysim as sf
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from scipy.linalg import sqrtm
+    from scipy.stats import shapiro
+    from tqdm import tqdm
+    
+#    asim = prepare_all(afile, thetarget=thetarget, update_params=update_params,
+#               instrumental_errors=instrumental_errors, seed=seed,
+#               crop=crop, target_coords=target_coords, modificators=modificators,
+#               compensate_chromatic=compensate_chromatic)
+#    diffuse = [asim.src.sky, asim.src.UT, asim.src.warm_optics, asim.src.combiner, asim.src.cold_optics]
+#    #asim.point(asim.sequence[3], asim.target)
+#    #asim.combiner.chromatic_matrix(asim.lambda_science_range)
+#    integ = asim.make_metrologic_exposure(asim.src.planet, asim.src.star, diffuse,
+#                                          texp=t_exp)
+#    integ.prepare_t_exp_base()
+#    #consolidate_metrologic(integ)
+#    integ.consolidate_metrologic()
+    
+    
+    ###############
+    #skipping
+    ###############
+    asim = sf.utilities.prepare_all(afile, thetarget=thetarget, update_params=True,
+                  instrumental_errors=True, modificators=modificators)
+    diffuse = [asim.src.sky, asim.src.UT, asim.src.warm_optics, asim.src.combiner, asim.src.cold_optics]
+
+    asim.combiner.chromatic_matrix(asim.lambda_science_range)
+    #asim.integrator = integ
+    asim.context = sf.analysis.spectral_context("local_config/vega_R200.ini")
+    integ = asim.make_metrologic_exposure(asim.src.planet, asim.src.star, diffuse,
+                                          texp=t_exp)
+    asim.integrator = integ
+    
+    print("Starting loop", flush=True)
+    dit = 1.
+    mynpix = 8
+    reveta = 1/integ.eta
+    full_record = True
+    diffuse = [asim.src.sky, asim.src.UT, asim.src.warm_optics, asim.src.combiner, asim.src.cold_optics]
+    screen_age = 0.
+    datacube = []
+    dit_intensity = []
+    starlights = []
+    planetlights = []
+    coupling_means = []
+    compling_stds = []
+    phase_means = []
+    phase_stds = []
+    injphase_means = []
+    injphase_stds = []
+    if use_tqdm:
+        theit = tqdm(range(n_frames))
+    else:
+        theit = range(n_frames)
+    for i in theit:
+        if screen_age>=20. :
+            print("generating screen")
+            asim.injector.update_screens()
+            screen_age = 0.
+        integ = asim.make_exposure(asim.src.planet, asim.src.star, diffuse,
+                                    texp=dit,
+                                    monitor_phase=True,
+                                   spectro=None)
+        datacube.append(integ.get_total(spectrograph=None,
+                                        t_exp=dit,
+                                        n_pixsplit=mynpix))
+        dit_intensity.append(reveta * integ.forensics["Expectancy"].sum(axis=0))
+        if full_record:
+            starlights.append(integ.starlight.astype(np.float32))
+            planetlights.append(integ.planetlight.astype(np.float32))
+            coupling_means.append(np.mean(integ.inj_amp, axis=0))
+            compling_stds.append(np.mean(np.std(integ.inj_amp, axis=0)))
+            phase_means.append(np.mean(integ.ft_phase, axis=0))
+            phase_stds.append(np.mean(np.std(integ.ft_phase, axis=0)))
+            injphase_means.append(np.mean(integ.inj_phase, axis=0))
+            injphase_stds.append(np.mean(np.std(integ.inj_phase, axis=0)))
+            
+        integ.reset() # This can be removed after new kernel start
+        screen_age += dit
+    datacube = np.array(datacube)
+    dit_intensity = np.array(dit_intensity)
+    starlights = np.array(starlights)
+    planetlights = np.array(planetlights)
+    statics = np.array(integ.static)
+    
+    coupling_means = np.array(coupling_means)
+    coupling_stds = np.array(compling_stds)
+    phase_means = np.array(phase_means)
+    phase_stds = np.array(phase_stds)
+    injphase_means = np.array(injphase_means)
+    injphase_stds = np.array(injphase_stds)
+    
+    ###################################
+    integ.reset()
+    integ = asim.make_exposure(asim.src.planet, asim.src.star, diffuse,
+                                    texp=dit,
+                                    monitor_phase=False,
+                                   spectro=None)
+    block = integ.get_total(spectrograph=None,t_exp=dit, n_pixsplit=mynpix)
+    print(f"datacube shape: {datacube.shape}")
+    print(f"dit = {dit} s")
+    brigh_max = np.max(np.mean(integ.forensics["Expectancy"][:,:,asim.combiner.bright], axis=0))
+    dark_max = np.max(np.mean(integ.forensics["Expectancy"][:,:,asim.combiner.dark], axis=0))
+    longest_exp_bright = 65000 / (brigh_max/dit)
+    longest_exp_dark = 65000 / (dark_max/dit)
+    print(f"Bright limit: {longest_exp_bright:.2f} s\n Dark limit: {longest_exp_dark:.2f} s")
+    data_std = np.std(datacube, axis=0)
+    diff_std = np.std(datacube[:,:,3]-datacube[:,:,4], axis=0)
+    
+    integ.static = asim.computed_static
+    integ.mean_starlight = np.mean(starlights, axis=0)
+    integ.mean_planetlight = np.mean(planetlights, axis=0)
+    integ.mean_intensity = np.mean(dit_intensity, axis=0)
+    
+    ################ # Diff null distribution
+    diffdata = datacube[:,:,4] - datacube[:,:,3]
+    shapirops = np.array([shapiro(diffdata[:,i]).pvalue \
+              for i in range(asim.lambda_science_range.shape[0])])
+    from scipy.optimize import curve_fit
+    for i, awl in enumerate(asim.lambda_science_range[:]):
+        print(i)
+        print(f"Shapiro p = {shapirops[i]:.3f}")
+        if plotall:
+            myhist, edges = np.histogram(diffdata[:,i], bins=30)
+            parameters, covariance = curve_fit(Gauss, edges[:-1], myhist,p0=(300.,1.0e-8, 0.))
+            print(parameters)
+            plt.figure(figsize=(8,4), dpi=50)
+            plt.subplot(121)
+            plt.plot(edges[:-1], myhist, label="Differential null (simulation)")
+            plt.plot(edges[:-1], Gauss(edges[:-1], parameters[0], parameters[1], parameters[2]), label="Gaussian fit")
+            #plt.yscale("log")
+            plt.title(f"Wavelength: $\lambda = {awl:.2e}$ m")
+            plt.xlabel(f"Differential observable value [e-]")
+            plt.axvline(parameters[2],color="k")
+            plt.axvline(np.mean(diffdata[:,i]),color="k", linestyle="--")
+            plt.legend()
+            plt.subplot(122)
+            plt.plot(edges[:-1], myhist, label="Differential null (simulation)")
+            plt.plot(edges[:-1], Gauss(edges[:-1], parameters[0], parameters[1], parameters[2]), label="Gaussian fit")
+            plt.yscale("log")
+            plt.title(f"Wavelength: $\lambda = {awl:.2e}$ m")
+            plt.xlabel(f"Differential observable value [e-]")
+            plt.axvline(parameters[2],color="k")
+            plt.axvline(np.mean(diffdata[:,i]),color="k", linestyle="--")
+            plt.savefig(f"/tmp/plots/gaussian_fit_{1e6*awl:.2f}microns.pdf")
+            plt.show()
+    ####################
+    # More elipsis
+    #####################
+    
+    from kernuller import pairwise_kernel
+    ak = pairwise_kernel(2)
+    myk = np.hstack((np.zeros((1,3)), ak, np.zeros((1,3))))
+    asim.combiner.K = myk
+
+
+    diffobs = np.einsum("ij, mkj->mk",asim.combiner.K, dit_intensity)
+    diff_std = np.std(diffobs, axis=0)
+    prof = sf.analysis.noiseprofile(integ, asim, diffobs, n_pixsplit=mynpix)
+    if plotall:
+        fig = prof.plot_noise_sources(asim.lambda_science_range, dit=1., show=False,
+                                     ymin=0.2, ymax=1.)
+        plt.legend(loc="upper right", fontsize="xx-small")
+        plt.savefig("/tmp/plots/noises.pdf", bbox_inches='tight', dpi=200)
+        plt.show()
+    
+    characteristics = {"mean_coupling":np.mean(coupling_means),
+                  "inter-frame_coupling_std":np.mean(np.std(coupling_means, axis=0)),
+                  "intra-frame_coupling_std":np.mean(coupling_stds),
+                  "inter-frame_ft_phase":np.mean(np.std(phase_means, axis=0)),
+                  "intra-frame_ft_phase":np.mean(phase_stds),
+                  "inter-frame_inj_phase":np.mean(np.std(injphase_means, axis=0)),
+                  "shapirops":shapirops
+                  }
+    
+    return asim, prof, characteristics
+
+def produce_maps(asim, prof, adit=1.,
+                mypfa=0.01,mypdet=0.9,
+                base_name="/tmp/R200_twinmaps_",
+                total_time=3*3600,
+                starmags=np.linspace(2.,10., 20),
+                decs=np.linspace(-90, 30, 10),
+                mapcrop=0.5, mapres=50):
+    """
+    Utility macro that packages the production of multiple sensitivity
+    maps for a given director object and noise profile
+    Parameters:
+    -----------
+    - asim     : Simulator director object
+    - prof     : Noise profile
+    
+    Returns:
+    --------
+    - metamap   : T
+    - themap    : The energy detector map in magnitude
+    - theNPmap  : The Neyman-Pearson detector map in magnitude
+    
+    """
+    
+    import copy
+    import gc
+    from tqdm import tqdm
+    import scifysim as sf
+    
+    from scipy.linalg import sqrtm
+    old_target = copy.copy(asim.target)
+    
+    from einops import rearrange
+    rfx = 1.
+    rfx_N = 22. # For NP test, the ref mag needs to be relatively high
+    nslots = len(asim.sequence)
+    ndits = total_time/adit/nslots
+    ra = old_target.ra.deg #asim.target.ra.adeg
+
+    metadata = {"DIT": (adit, "Detector integration time [s]"),
+               "PFA": (mypfa, "False alarm rate"),
+               "PDET": (mypdet, "Detection probability"),
+               "INTEGRATION": (total_time, "Total integration time on target [s]"),
+               "CALIBRATION": ("IDEAL", "Currently only IDEAL. Biases are assumed perfectly corrected")}
+    for i, adec in enumerate(tqdm(decs[:])):
+        print(f"======= Declination {adec}")
+        metadata["DEC"] = (adec, "The declination for which the object map was computed")
+        asim.config.set("target", "mode", value="coords")
+        asim.config.set("target", "target", value="%.2f %.2f"%(ra, adec))
+        asim.prepare_observatory(file=asim.config)
+        asim.point(asim.sequence[3], asim.target)
+        print(asim.target)
+        asim.build_all_maps(mapres=mapres, mapcrop=mapcrop)
+
+        themaps = []
+        theNPmaps = []
+        for starmag in starmags:
+            amat = 1/ndits * prof.diff_noise_floor_dit(starmag, adit, matrix=True)
+            wmat = sqrtm(np.linalg.inv(amat))
+            whitenings = np.ones(len(asim.sequence))[:,None,None]*wmat[None,:,:]
+            aymap = extract_diffobs_map(asim.maps, asim,
+                                        postprod=None, eta=asim.integrator.eta) *\
+                                    asim.context.sflux_from_vegamag(rfx_N)[None,:,None,None,None]
+            #rearrange(aymap, "a b c d e -> a (b c) d e")
+            mgs,fx, Tes = sf.analysis.get_sensitivity_Te(aymap, postproc_mat=whitenings,
+                                                         ref_mag=rfx_N, pdet=mypdet,
+                                                         pfa=mypfa, verbose=False, )
+
+            mags_NP = sf.analysis.get_sensitivity_Tnp(aymap, postproc_mat=whitenings,
+                                                      pfa=0.1, pdet=0.9, ref_mag=rfx_N,
+                                                     verbose=False)
+            themaps.append(mgs)
+            theNPmaps.append(mags_NP)
+        themaps = np.array(themaps)
+        theNPmaps = np.array(theNPmaps)
+        ameta = sf.map_manager.map_meta(asim, starmags, 
+                                        mgs=themaps.astype(np.float64),
+                                        mgs_TNP=theNPmaps,
+                                        metadata=metadata)
+        ameta.to_fits(base_name+"%s_dec_%.1f.fits"%(ameta.input_order, adec))
+        aplot = ameta.plot_map(4.,dpi=50, show=True, detector="E")
+        aplot = ameta.plot_map(4.,dpi=50, show=True, detector="N")
+        #plt.title("Dec: %.0f"%adec)
+        #plt.show()
+        del asim.maps
+        gc.collect()
+        
+    return ameta, themaps, theNPmaps
+    
+
     
 def Gauss(x, A, B, C):
     y = A*np.exp(-1*B*(x-C)**2)
