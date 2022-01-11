@@ -36,3 +36,8 @@ Recommandation for installation:
 -------------------------------
 
 >> python setup.py install
+
+Documentation:
+--------------
+
+Find growing API documentation `here <https://rlaugier.github.io/scifysim_doc.github.io>`_
