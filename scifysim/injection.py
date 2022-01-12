@@ -2,16 +2,19 @@
 
 """
 This module revolves around the injector class
-At __init__(), injector builds
+At ``__init__()``, injector builds
+
 * one atmo object for each telescope (stored in a list)
 * one focuser object (badly named) for each wavelength AND each telescope
 * one fiber_head object that builds the map of LP01 mode.
-It then creates a generator called `self.it` that will return
+
+It then creates a generator called ``self.it`` that will return
 a series of complex numbers corresponding to injection complex phasors.
 
-Testing:
-test_fiber for the `fiber_head`
-test_injector for the `injector`
+**Testing:**
+
+- ``test_fiber`` for the ``fiber_head``
+- ``test_injector`` for the ``injector``
 
 """
 
@@ -48,11 +51,10 @@ parent = Path(__file__).parent.absolute()
 
 class atmo(object):
     '''Atmospheric Kolmogorov-type phase screen.
-
-    ====================================================================
-
-    Class Attributes:
-    ----------------
+    
+    **Class Attributes:**
+    
+    
     - csz     : size (csz x csz) of the phase screen       (in pixels)
     - pdiam   : diameter of the aperture within this array (in pixels)
     - rndarr  : uniformly distributed random array         (csz x csz)
@@ -62,12 +64,11 @@ class atmo(object):
     - rms     : total phase screen rms value           (in nanometers)
     - rms_i   : instant rms inside the pupil           (in nanometers)
 
-    Comment:
-    -------
+    **Comment:**
+    
     While the attributes are documented here for reference, the prefered
     way of interacting with them is via the functions defined within the
     class.
-    ====================================================================
 
     '''
     # ==================================================
@@ -84,9 +85,8 @@ class atmo(object):
 
         ''' Kolmogorov type atmosphere + qstatic error
 
-        -----------------------------------------------------
-        Parameters:
-        ----------
+        **Parameters:**
+        
         - name  : a string describing the instrument
         - csz   : the size of the Fourier array
         - psz   : the size of the pupil in  pixels
@@ -94,9 +94,9 @@ class atmo(object):
         - r0    : the Fried parameter (in meters)
         - L0    : the outer scale parameter (in meters)
         - fc    : the cutoff frequency [lambda/D] defined by the 
-                    number of actuators
+          number of actuators
         - correc : the correction factor to apply to controlled
-                    spatial frequencies.
+          spatial frequencies.
         - wind_speed : the speed of the phas screen in [m/s]
         - step_time : the time resolution of the simulation [s]
         - config : a parsed config file 
@@ -187,11 +187,17 @@ class atmo(object):
     
     def update_step_vector(self,wind_angle=0.1, wind_speed=None, step_time=None):
         """
+        ----
         Refresh the step vector that will be applied
-        wind_angle : the angle of incience of the wind (values around 0.1 rad
-                        are favoured since they provide long series before repeating)
-        wind_speed : The speed of the moving phase screen.
-        step_time  : The time step of the simulation [s]
+        
+        **Parameters:**
+        
+        - wind_angle : the angle of incience of the wind (values around 0.1 rad
+          are favoured since they provide long series before repeating)
+        - wind_speed : The speed of the moving phase screen.
+        - step_time  : The time step of the simulation [s]
+        
+        ----
         """
         if wind_speed is not None:
             self.wind_speed = wind_speed
@@ -206,8 +212,14 @@ class atmo(object):
     
     def set_qstatic(self, qstatic=None):
         """
+        ----
         Defines some quasistatic errors in the wavefront
-        qstatic    : A static phase screen
+        
+        **Parameters:**
+        
+        - qstatic    : A static phase screen
+        
+        ----
         """
         if qstatic is not None:
             if qstatic.shape == (self.csz, self.csz):
@@ -225,9 +237,13 @@ class atmo(object):
     def update_screen(self, correc=None, fc=None, r0=None, L0=None, seed=None):
         ''' ------------------------------------------------
         Generic update of the properties of the phase-screen
-        correc   : The correction factor for the control region
-        fc       : The 
-        r0       : r0 of the initial phase screen
+        
+        **Parameters:**
+        
+        - correc : *float* The correction factor for the control region
+        - fc : *float* The cutoff fequency
+        - r0 : *flaot* r0 of the initial phase screen
+        
         ------------------------------------------------ '''
         if r0 is not None:
             self.r0 = r0
@@ -265,12 +281,16 @@ class atmo(object):
         This returns a iterator that yelds the phase screen
         for one aperture.
         
-        use: a = atmo.give()
-             phscreen = next(a)
-             phscreen = next(a)
+        **use:**
+        
+        .. code-block::
+        
+            a = atmo.give()
+            phscreen = next(a)
+            phscreen = next(a)
 
-        Options:
-        ---------
+        **Options:**
+        
         -----------------------------------------  '''
 
         while True:
@@ -298,17 +318,17 @@ def atmo_screen(screen_dimension, screen_extent,
                 fc=25, correc=1.0, lo_excess=0.,
                 pdiam=None,seed=None):
     ''' -----------------------------------------------------------
+    
     The Kolmogorov - Von Karman phase screen generation algorithm.
 
     Adapted from the work of Carbillet & Riccardi (2010).
-    http://cdsads.u-strasbg.fr/abs/2010ApOpt..49G..47C
+    `<http://cdsads.u-strasbg.fr/abs/2010ApOpt..49G..47C>`_
 
     Kolmogorov screen can be altered by an attenuation of the power
     by a correction factor *correc* up to a cut-off frequency *fc*
     expressed in number of cycles across the phase screen
 
-    Parameters:
-    ----------
+    **Parameters:**
 
     - screen_dimension    : the size of the array to be computed (in pixels)
     - screen_extent     :  the physical extent of the phase screen (in meters)
@@ -317,17 +337,18 @@ def atmo_screen(screen_dimension, screen_extent,
     - fc     : DM cutoff frequency (in lambda/D)
     - correc : correction of wavefront amplitude (factor 10, 100, ...)
     - lo_excess: A factor introducing excess low-order averations (mosly tip-tilt)
-                Must be striclty 0 =< lo_excess < 1.
+      Must be striclty 0 =< lo_excess < 1.
     - pdiam  : pupil diameter (in meters)
     - seed   : random seed for the screen (default: None produces a new seed)
 
     Returns: two independent phase screens, available in the real and 
     imaginary part of the returned array.
 
-    Remarks:
-    -------
+    **Remarks:**
+    
     If pdiam is not specified, the code assumes that the diameter of
     the pupil is equal to the extent of the phase screen "screen_extent".
+    
     ----------------------------------------------------------- '''
     
     #phs = 2*np.pi * (np.random.rand(screen_dimension, screen_dimension) - 0.5)
@@ -378,24 +399,14 @@ def Hn(A):
 
 class focuser(object):
     ''' Generic monochoromatic camera class
-
-    ===========================================================================
-    The camera is connected to the other objects (DM- and atmosphere- induced
-    wavefronts) via shared memory data structures, after instantiation of
-    the camera, when it is time to take an image.
-
-    Thoughts:
-    --------
-
-    I am also considering another class to xaosim to describe the astrophysical
-    scene and the possibility to simulate rather simply images of complex
-    objects.
-
-    Using a generic convolutive approach would work all the time, but may be
-    overkill for 90% of the use cases of this piece of software so I am not
-    sure yet.
-    ===========================================================================
-
+    
+    This class simulates focusing optics. It can simulate injection 
+    either:
+    
+    - by computing the product of the image plane complex amplitude with
+      the fiber mode field, or
+    - by computing the product of the pupil plane complex amplitude with
+      the conjugation of the fiber mode field.
     '''
 
     # =========================================================================
@@ -406,7 +417,7 @@ class focuser(object):
 
         -------------------------------------------------------------------
         Parameters are:
-        --------------
+        ---------------
         - name    : a string describing the camera ("instrument + camera name")
         - csz     : array size for Fourier computations
         - (ys,xs) : the dimensions of the actually produced image
@@ -464,14 +475,15 @@ class focuser(object):
 
     # =========================================================================
     def update_cam(self, wl=None, pscale=None, between_pixel=None):
-        ''' -------------------------------------------------------------------
+        '''
         Change the filter, the plate scale or the centering of the camera
 
-        Parameters:
+        **Parameters:**
+        
         - pscale        : the plate scale of the image, in mas/pixel
         - wl            : the central wavelength of observation, in meters
         - between_pixel : whether FT are centered between four pixels or not
-        ------------------------------------------------------------------- '''
+        '''
         wasgoing = False
             
         if wl is not None:
@@ -511,10 +523,10 @@ class focuser(object):
         *IF* the value provided is negative, it sets the *phot_noise* flag
         back to *False* and sets the signal back to 1e6 photons
 
-        Parameters:
-        ----------
+        **Parameters:**
+        
         - nph: the total number of photons inside the frame
-        ------------------------------------------------------------------- '''
+        '''
         if (nph > 0):
             self.signal = np.flaot32(nph)
             self.phot_noise = True
@@ -572,12 +584,11 @@ class focuser(object):
 
         If you need something that returns the image, you have to use the
         class member method get_image(), after having called this method.
-        -------------------------------------------------------------------
 
-        Parameters:
-        ----------
+        **Parameters:**
+        
         - phscreen:   The piston map in µm
-        ------------------------------------------------------------------- '''
+        '''
         #from pdb import set_trace
         # Here 
 
@@ -604,9 +615,9 @@ class focuser(object):
         """
         Computes the complex injection phasor based on fiber mode in the pupil plane.
         
-        Parameters:
-        ----------
-        - phscreen:    The piston map in µm
+        **Parameters:**
+        
+        - phscreen: The piston map in µm
         """
         #set_trace()
         phs = phscreen.flatten()
@@ -623,12 +634,12 @@ class focuser(object):
         ''' Measures the tip-tilt measurement corresponding to the wavefront
         provided. The tip-tilt is in a 2-array and the unit is lambda/D 
         where D is the extent of the pupil mask.
-        -------------------------------------------------------------------
+        
 
-        Parameters:
-        ----------
+        **Parameters:**
+        
         - phscreen:   The piston map in µm
-        ------------------------------------------------------------------- '''
+        '''
         #from pdb import set_trace
         # Here 
 
@@ -670,26 +681,29 @@ class injector(object):
                  atmo_config=None):
         """
         Generates fiber injection object.
-        pupil     : The telescope pupil to consider
-        pdiam     : The pupil diameter
-        ntelescopes : The number of telescopes to inject
-        pupil     : Apupil name or definition
-        tt_correction : Amount of TT to correct (Not implemented yet)
-        no_piston : Remove the effect of piston at the injection 
-                    (So that it is handled only by the FT.)
-        NA        : Then numerical aperture of the fiber
-        a         : The radius of the core (m)
-        ncore    : The refractive index of the core
-        focal_hrange : The half-range of the focal region to simulate (m)
-        focal_res : The total resolution of the focal plane to simulate
-        pscale    : The pixel scale for imager setup (mas/pix)
-        seed      : Value to pass for random phase screen initialization
-        atmo_config: A parsed config file 
+        
+        **Parameters:**
+        
+        - pupil     : The telescope pupil to consider
+        - pdiam     : The pupil diameter
+        - ntelescopes : The number of telescopes to inject
+        - pupil     : Apupil name or definition
+        - tt_correction : Amount of TT to correct (Not implemented yet)
+        - no_piston : Remove the effect of piston at the injection 
+          (So that it is handled only by the FT.)
+        - NA        : Then numerical aperture of the fiber
+        - a         : The radius of the core (m)
+        - ncore    : The refractive index of the core
+        - focal_hrange : The half-range of the focal region to simulate (m)
+        - focal_res : The total resolution of the focal plane to simulate
+        - pscale    : The pixel scale for imager setup (mas/pix)
+        - seed      : Value to pass for random phase screen initialization
+        - atmo_config: A parsed config file 
                     
-        Use: call `next(self.it)` that returns injection phasors
+        Use: call ``next(self.it)`` that returns injection phasors
         For more information, look into the attributes.
         
-        To get the ideal injection: self.best_injection(lambdas)
+        To get the ideal injection: ``self.best_injection(lambdas)``
         """
         if lambda_range is None:
             self.lambda_range = np.linspace(3.0e-6, 4.2e-6, 6)
@@ -731,12 +745,15 @@ class injector(object):
                          focal_res=50, pupil=None, seed=None):
         """
         Construct the injector object from a config file
+        
+        **Parameters:**
+        
         file      : A pre-parsed config file
         fpath     : The path to a config file
         nwl       : The number of wl channels
         focal_res : The total resolution of the focal plane to simulate 
         
-        Gathers the variables from the config file then calls for a class instance (__init__())
+        Gathers the variables from the config file then calls for a class instance (``__init__()``)
         """
         from scifysim import parsefile
         if file is None:
@@ -1049,7 +1066,7 @@ class injector(object):
         """
         Computes an interpolation of the injection as a function of a tip-tilt
         
-        injector.injection_abs(wl [m], offset [lambda/D])
+        ``injector.injection_abs(wl [m], offset [lambda/D])``
         """
         from scipy.interpolate import interp2d
         
@@ -1206,9 +1223,11 @@ class fringe_tracker(object):
         """
         Mandatory
         Computes the interpolation functions to be used later
+        
         save:
-        self.piston_interpolation()
-        self.dispersion_interpolation
+        
+        ``self.piston_interpolation()``
+        ``self.dispersion_interpolation``
         """
         self.piston_interpolation = interp1d(self.ref_sample_times, self.dry_piston_series, axis=0, kind="linear")
         self.dispersion_interpolation = interp1d(self.ref_sample_times, self.dispersion_series, axis=0, kind="linear")
@@ -1294,14 +1313,14 @@ class gaussian_fiber_head(object):
         Numerical evaluations are based on NA or mfd and wl_mfd, depending
         on which is provided.
         ufuncs are stored in:
-        Hy_r
-        Hy_xy
+        ``Hy_r``
+        ``Hy_xy``
         
-        Parameters:
-        -----------
-        NA        : The numerical aperture
-        mfd       : The mode field diameter [m]
-        wl_mfd    : The wavelength at which the mfd is measured [m]
+        **Parameters:**
+        
+        - NA        : The numerical aperture
+        - mfd       : The mode field diameter [m]
+        - wl_mfd    : The wavelength at which the mfd is measured [m]
         """
         self.r, self.x, self.y = sp.symbols("r, x, y", real=True)
         self.lamb, self.lamb0 = sp.symbols("lambda, lambda_0", real=True, positive=True)
@@ -1375,8 +1394,8 @@ class gaussian_fiber_head(object):
         Completes the consolidation of the lambda function
         with the application parameters:
         
-        Parameters:
-        -----------
+        **Parameters:**
+        
         NA      : The numerical aperture
         mfd     : The mode field diameter in [m]
         wl_mfd  : The wavelength at which mfd is measured in [m]
@@ -1408,9 +1427,11 @@ class fiber_head(object):
         """
         A class that constructs helps compute the LP01 mode of
         a fiber.
-        ufuncs are stored in:
-        Hy_r
-        Hy_xy
+        
+        **ufuncs are stored in:**
+        
+        - ``Hy_r``
+        - ``Hy_xy``
         """
         self.nclad, self.ncore, self.eps0, self.mu = sp.symbols("n_clad n_core epsilon_0, mu", real=True)
         self.lamb, self.r, self.a  = sp.symbols("lambda r a", real=True)
@@ -1467,9 +1488,10 @@ class fiber_head(object):
         """
         Completes the consolidation of the lambda function
         with the application parameters:
-        NA  : The numerical aperture
-        a   : The core radius in meters
-        ncore : the refractive index of the core
+        
+        - NA  : The numerical aperture
+        - a   : The core radius in meters
+        - ncore : the refractive index of the core
         """
         thesubs = [(self.NA, NA),
                   (self.a, a),
@@ -1496,6 +1518,15 @@ class injection_vigneting(object):
     res          : 
     """
     def __init__(self, injector, res, crop=1.):
+        """
+        A shortcut to injection simulation in the case of diffuse sources
+        
+        **Parameters:**
+        
+        - injector     : an injector object to emulate
+        - res          : The resolution of the map
+        - crop         : A factor that scales the FoV of the map
+        """
         # First build a grid of coordinates
         
         lambond = (np.mean(injector.lambda_range) / injector.pdiam)*units.rad.to(units.mas)
@@ -1632,7 +1663,7 @@ def test_injection_fromfile(phscreensz=200,
                             fpath="/home/rlaugier/Documents/hi5/SCIFYsim/scifysim/config/default_new_4T.ini",
                             seed=20127):
     """
-    Remember to pass seed=None if you want a random initialization
+    **Remember** to pass ``seed=None`` if you want a **random initialization**
     """
     import xaosim
     # Construct a pupil using xaosim
@@ -1715,8 +1746,7 @@ def tel_pupil(n,m, radius, file=None, pdiam=None,
     description of the APLC coronograph of SPHERE, by Guerri et al, 
     2011. 
 
-    http://cdsads.u-strasbg.fr/abs/2011ExA....30...59G
-    
+    `<http://cdsads.u-strasbg.fr/abs/2011ExA....30...59G>`_
     
     --------------------------------------------------------- '''
     import xaosim

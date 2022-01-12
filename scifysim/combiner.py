@@ -61,7 +61,22 @@ class combiner(object):
     def chromatic_matrix(self, wl):
         """
         Work in progress. This helps define the chromatic behaviour of the combiner even
-        when it is define achromatic
+        when it is define achromatic.
+        
+        Parameters:
+        -----------
+        * wl      : An array of wavelengths for which to compute the matrix
+        
+        Result:
+        -------
+        Several matrices are stored in `combiner`
+        * self.Mcs    : a symbolic formula for the combiner matrix (2D sympy array)
+                        as a function of the wavenumber k
+        * self.Mcl    : The matrix as a lambda-function of (k, 0) 
+                            The extra 0 parameter passed helps to cast the correct shape
+        * self.Mcn    : The numpy ndarray of the matrix of interest
+                            shape is (n_wl, n_out, n_in)
+        
         """
         # Defining a chromatic version of the matrix
         k = sp.symbols("k")
@@ -124,11 +139,34 @@ class combiner(object):
     @classmethod
     def from_config(cls, file, ph_shifters=(0,0)):
         """
-        file         : The config file
-        ph_shifters  : Phase shifters between first and second stage default: (0,0)
+        A 
+        
+        Parameters:
+        -----------
+
+        - file         : The config file
+        - ph_shifters  : Phase shifters between first and second stage default: (0,0)
                         These correspond to the "internal modulation"
+
+        Config keywords:
+        ----------------
+
+        * ``configuration.combiner`` 						Name of the combiner architecture
+        * ``configuration.photometric_tap`` 		Fraction of light (power) sent to the photometric channels
+
+        * ``configuration.input_phase_offset``	Additional phase offset as part of the design of the combiner
+
         Accepted combiners:
-        angel_woolf_ph, VIKiNG, GLINT, GRAVITY, bracewell_ph, bracewell
+        -------------------
+        Managed by ``configuration.combiner``
+
+        - angel_woolf_ph,
+        - VIKiNG
+        - GLINT
+        - GRAVITY
+        - bracewell_ph
+        - bracewell
+
         """
         hasph = False
         lamb = None
@@ -195,6 +233,9 @@ class combiner(object):
         elif combiner_type == "GRAVITY":
             hasph = False
             M = sf.combiners.GRAVITY(Mc=Mc, ph_shifter_type=phase_offset_type,wl=wavelength)
+        elif combiner_type == "KN_3T":
+            hasph=False
+            M, bright, dark, photometric = sf.combiners.kernel_nuller_3T(include_masks=True)
         else:
             logit.error("Nuller type not recognized")
             raise KeyError("Nuller type not found")
