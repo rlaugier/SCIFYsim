@@ -1,3 +1,5 @@
+.. _docrecipe:
+
 Documentation recipe
 --------------------
 This documentation was generated through the following sequence.
@@ -18,9 +20,17 @@ This documentation was generated through the following sequence.
 
 	sphinx-apidoc -o source/ ../scifysim
 
-	make clean
+	# We must create a log file in source so that conf.py can import SCIFYsim to get the version
+	mkdir source/log
+
 	make html
 	touch build/html/.nojekyll
+
+To compile the documentation
+.. code-block::
+
+	make clean
+	make html
 
 We use "classic" theme because the RTD theme fails in a number of ways (fails to display itmeized lists, and some of the text...)
 

@@ -7,14 +7,47 @@ Welcome to SCIFYsim's documentation!
 ====================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Contents:
-
+   setup
 
 
 Indices and tables
-==================
+------------------
 
+* :ref:`setup`
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+Auotsummary:
+------------
+.. automodule:: scifysim
+   :members:
+
+.. autoclass:: scifysim
+   :members:
+
+.. currentmodule:: scifysim
+
+.. autosummary::
+
+   injection
+   
+
+Quick start
+-----------
+
+After you have :ref:`installed <setup>` SCIFYsim, you can get taste of SCIFYsim by running the notebook ``SCIFYsim/scifysim/quick_start.ipynb``. This will get you through the initialization of a simulator object and make your first exposures.
+
+What you need to know
+---------------------
+
+SCIFYsim does not have a GUI. You will have to interface with it through the API. You our recommendation is to use **jupyter(lab)** to create **semi-interactive scripts** to run the simulations and plot the data. You can also use **scripts** for a more rigid usage.
+
+More information :ref:`here <need-to-know>`.
+
+Building this documentation
+---------------------------
+
+Documentation is generated through sphinx. Intialization sequence follows this :ref:`recipe <docrecipe>`.
