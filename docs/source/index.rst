@@ -36,6 +36,7 @@ Indices and tables
 ------------------
 
 * :ref:`setup`
+* :ref:`need-to-know`
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`

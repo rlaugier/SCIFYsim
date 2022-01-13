@@ -18,14 +18,18 @@ class transmission_emission(object):
         Reproduces a basic behaviour in emission-transmission of a medium in the optical
         path. Inspired by the geniesim 
         
-        trans_file    : The path to a transmission data file
-        T             : Temperature of the medium used for emission
-        airmass       : When True, scales the effect with the airmass provided by the observatory object
-        observatory   : The observatory object used to provided the airmass.
+        **Parameters:**
         
-        WARNING: Unlike for astrophysical sources, when a transmission_emission
-        object contains an ss attribute, it already
-        takes into account the transmission through the insturment.
+        * trans_file    : The path to a transmission data file
+        * T             : Temperature of the medium used for emission
+        * airmass       : When True, scales the effect with the airmass provided by the observatory object
+        * observatory   : The observatory object used to provided the airmass.
+        
+        .. warning::
+        
+            Unlike for astrophysical sources, when a transmission_emission
+            object contains an ss attribute, it already
+            takes into account the transmission through the insturment.
         """
         self.__name__ = name
         if isinstance(trans_file, float):
@@ -48,9 +52,12 @@ class transmission_emission(object):
     def get_trans_emit(self,wl, bright=False, no=False):
         """
         Return the transmission or brightness of the object depending on th bright keyword
-        wl            : The wavelength channels to compute [m]
-        bright        : If True: compute the brightness
-                        if False: compute the transmission
+        
+        **Parameters:**
+        
+        * wl            : The wavelength channels to compute [m]
+        * bright        : If True: compute the brightness
+          if False: compute the transmission
         """
         if isinstance(wl, np.ndarray):
             if bright:
@@ -86,11 +93,14 @@ class transmission_emission(object):
     def get_mean_trans_emit(self, wl, bandwidth=None, bright=False,n_sub=10):
         """
         Similar begaviour as get_trans_emit() but averages the effect over each spectral channel.
-        wl            : The center of each wavelength channel. If bandwidth is not provided
-                        (prefered situation) the width of each channel will be set as the spacing
-                        between them (through np.gradient())
-        bandwidth     : (deprecated) array of floats providing the width of each spectral channe.
-        n_sub         : The number of sub-channel to compute for the calculation. A minimum of 10 is recommended.
+        
+        **Parameters:**
+        
+        * wl            : The center of each wavelength channel. If bandwidth is not provided
+          (prefered situation) the width of each channel will be set as the spacing
+          between them (through np.gradient())
+        * bandwidth     : (deprecated) array of floats providing the width of each spectral channe.
+        * n_sub         : The number of sub-channel to compute for the calculation. A minimum of 10 is recommended.
                         
         """
         #
@@ -156,8 +166,11 @@ class transmission_emission(object):
         """
         Used when chaining different media.
         Returns the total of the transmission function of the chain downstream of the object.
-        wl   : The wavelengths to be computed
-        inclusive: Whether to includ the transmission of the object itself
+        
+        **Parameters:**
+        
+        * wl   : The wavelengths to be computed
+        * inclusive: Whether to includ the transmission of the object itself
         """
         if inclusive:
             own_trans = self.get_own_transmission(wl)
@@ -175,8 +188,11 @@ def chain(A, B):
     """
     This function helps define which occulting / emitting source
     is in front ro behind which. 
-    A       : An upstream transmission_emission object
-    B       : A downstream transmission_emission object.
+    
+    **Parameters:**
+    
+    * A       : An upstream transmission_emission object
+    * B       : A downstream transmission_emission object.
     """
     A.downstream = B
     B.upstream = A
@@ -195,13 +211,18 @@ def set_sink(A):
 class _blackbody(object):
     def __init__(self, modules="numexpr"):
         """
-        Builds the spectral radiance as a function of T and \nu, k, and \lambda
-        Call self.get_Bxxx to get the function B = f(lambda , T)
+        Builds the spectral radiance as a function of :math:`T` and :math:`\\nu`, :math:`k`, and :math:`\\lambda`
         
-           GENIEsim  0         B_lamb_Jy      - result in Jy / sr
-                     1         B_lamb_W       -           W / m^2 / m / sr
-                     2         B_lamb_ph      -           ph / s / m^2 / m / sr
-                     3         B_nu_ph        -           ph / s / m^2 / Hz / sr
+        Call ``self.get_Bxxx`` to get the function ``B = f(lambda , T)``
+        
+        ========== =============== ======================================
+        GENIEsim   Attribute        Results in
+        ========== =============== ====================================== 
+         0         B_lamb_Jy       - Jy / sr
+         1         B_lamb_W        - W / m^2 / m / sr
+         2         B_lamb_ph       - ph / s / m^2 / m / sr
+         3         B_nu_ph         - ph / s / m^2 / Hz / sr
+        ========== =============== ======================================
         """
         
         self.h, self.nu, self.c, self.k_b, self.T = sp.symbols("h, nu, c, k_b, T", real=True)
@@ -358,18 +379,20 @@ class resolved_source(object):
                  angular_res=10, radial_res=15, offset=(0.,0.),
                  build_map=True, resolved=True):
         """
-        distance             : Distance of the source [pc]
-        radius             : The radius of the source [R_sun]
-        T                    : Blackbody temperature [K]
-        angular_res          : Number of bins in position angle
-        radial_res           : Number of bins in radius
-        offset               : Offset of the source radial ([mas], [deg])
-        build_map            : Whether to precompute a mapped spectrum 
-        resolved             : If false, computes a single point-source
+        **Parameters:**
+        
+        * distance             : Distance of the source [pc]
+        * radius             : The radius of the source [R_sun]
+        * T                    : Blackbody temperature [K]
+        * angular_res          : Number of bins in position angle
+        * radial_res           : Number of bins in radius
+        * offset               : Offset of the source radial ([mas], [deg])
+        * build_map            : Whether to precompute a mapped spectrum 
+        * resolved             : If false, computes a single point-source
         
         
-        After building the map, self.ss (wl, pos_x, pos_y) contains the map
-        of flux density corresponding to positions self.xx, self.yy
+        After building the map, ``self.ss`` (wl, pos_x, pos_y) contains the map
+        of flux density corresponding to positions ``self.xx``, ``self.yy``
         """
         self.lambda_range = lambda_range
         self.T = T
@@ -392,8 +415,9 @@ class resolved_source(object):
     def build_point(self,):
         """
         Routine used to construct unresolved source:
-        Creates self.xx, self.yy, self.ds, self.theta [rad], self.r [rad]
-        Shapes of xx, yy are preserved, but they will contain a single element
+        
+        **Creates** ``self.xx``, ``self.yy``, ``self.ds``, ``self.theta`` [rad], ``self.r`` [rad]
+        Shapes of ``xx``, ``yy`` are preserved, but they will contain a single element
         corresponding to the unresolved point source.
         
         """
@@ -410,7 +434,8 @@ class resolved_source(object):
     def build_grid(self, angular_res, radial_res):
         """
         Routine used to construct resolved source:
-        Creates self.xx, self.yy, self.ds, self.theta, self.r
+        
+        **Creates** self.xx, self.yy, self.ds, self.theta, self.r
         
         """
         radial_step = self.ang_radius/radial_res
@@ -428,7 +453,8 @@ class resolved_source(object):
     def get_spectrum_map(self):
         """
         Maps self.total_flux_density
-        This produces numerical integration over solid angle elements
+        
+        This **produces** numerical integration over solid angle elements
         """
         themap =  self.total_flux_density[:,None,None]*self.ds[None,:,:,] #self.r[None,:,:]*self.dr[None,:,:]*self.dtheta[None,:,:]
         return themap

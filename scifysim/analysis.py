@@ -19,8 +19,8 @@ class noiseprofile(object):
         """
         An object to dynamically compute a parametric noise floor
         
-        Patameters:
-        -----------
+        **Patameters:**
+        
         * integ     : An integrator object augmented by some mean
                         and static measurements (see below)
         * asim      : A simulator object (mostly used to get some combiner
@@ -29,11 +29,11 @@ class noiseprofile(object):
                         intensity (e.g. `diffobs = np.einsum("ij, mkj->mk",asim.combiner.K, dit_intensity)`)
         
         
-        Creation makes use of:
-        ----------------------
-        * integ.mean_starlight (run `integ.mean_starlight = np.mean(starlights, axis=0)`)
-        * integ.mean_planetlight (run `integ.mean_planetlight = np.mean(planetlights, axis=0)`)
-        * integ.get_static() (run `integ.static = asim.computed_static`)
+        **Creation makes use of:**
+        
+        * integ.mean_starlight (run ``integ.mean_starlight = np.mean(starlights, axis=0)``)
+        * integ.mean_planetlight (run ``integ.mean_planetlight = np.mean(planetlights, axis=0)``)
+        * integ.get_static() (run ``integ.static = asim.computed_static``)
         
         """
         # Read noise
@@ -70,20 +70,20 @@ class noiseprofile(object):
 
     def get_noises(self, m_star, dit, matrix=False):
         """Returns the different noises
-        WARNING: if matrix is True, then sigma_phi_d is
-        a covariance matrix (beware of variances on diagonal)
         
-        Parameters:
-        -----------
+        .. admonition:: Warning!
+        
+            If matrix is True, then sigma_phi_d is a covariance matrix (beware of variances on diagonal)
+        
+        **Parameters:**
         
         * m_star       : Magnitude of the star
         * dit          : Detector integration time [s]
         
-        Returns:
-        --------
+        **Returns:**
         
-        `sigma_phot_d, sigma_phi_d` : standard deviation vectors (or
-        covariance matrix for sigma_phi_d)
+        ``sigma_phot_d, sigma_phi_d`` : standard deviation vectors (or
+        covariance matrix for ``sigma_phi_d``)
         """
         Fs = mag2F(m_star)
         
@@ -109,17 +109,15 @@ class noiseprofile(object):
         WARNING: if matrix is True, then the result is
         a covariance matrix (beware of variances on diagonal)
         
-        Parameters:
-        -----------
+        **Parameters:**
         
         * m_star       : Magnitude of the star
         * dit          : Detector integration time [s]
         
-        Returns:
-        --------
+        **Returns:**
         
-        Either `sigma_tot_diff` or `cov_tot_diff` depending on
-        `matrix`.
+        Either ``sigma_tot_diff`` or ``cov_tot_diff`` depending on
+        ``matrix``.
         """
         
         #print(self.sigma_ron_d.shape)
@@ -194,11 +192,10 @@ class spectral_context(object):
     def __init__(self, vegafile="config/vega.ini"):
         """Spectral context for magnitude considerations
         
-        Parameters:
-        -----------
+        **Parameters:**
         
-        vegafile    : The configuration file for observation of Vega
-                        in the same spectral configuration
+        * vegafile    : The configuration file for observation of Vega
+          in the same spectral configuration
         """
 
         self.avega = sf.utilities.prepare_all(vegafile, update_params=False,
@@ -218,10 +215,10 @@ class spectral_context(object):
     def get_mags_of_sim(self, asim):
         """Magnitudes of planet and star of a simulator object
         
-        Parameters:
-        -----------
+        **Parameters:**
         
-        asim     : A simulator object
+        * asim     : A simulator object
+        
         """
         ss_star = asim.src.star.ss
         ss_planet = asim.src.planet.ss
@@ -256,10 +253,13 @@ def F2mag(F):
 def pdet_e(lamb, xsi, rank):
     """
     Computes the residual of Pdet
-    lamb     : The noncentrality parameter representing the feature
-    xsi      : The location of threshold
-    rank     : The rank of observable
-    Returns the Pdet difference
+    **Parameters:**
+    
+    * lamb     : The noncentrality parameter representing the feature
+    * xsi      : The location of threshold
+    * rank     : The rank of observable
+    
+    **Returns** the Pdet difference
     """
     respdet = 1 - ncx2.cdf(xsi,rank,lamb)
     return respdet
@@ -267,15 +267,14 @@ def residual_pdet_Te(lamb, xsi, rank, targ):
     """
     Computes the residual of Pdet
     
-    Parameters:
-    -----------
+    **Parameters:**
     
     * lamb     : The noncentrality parameter representing the feature
     * targ     : The target Pdet to converge to
     * xsi      : The location of threshold
     * rank     : The rank of observable
     
-    Returns the Pdet difference. See Ceau et al. 2019 for more information
+    **Returns** the Pdet difference. See *Ceau et al. 2019* for more information
     """
     respdet = 1 - ncx2.cdf(xsi,rank,lamb) - targ
     return respdet
@@ -286,6 +285,7 @@ def get_sensitivity_Te(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.
     The throughput for the signal of interest is given by the map at a reference magnitude.
     The effective noise floor is implicitly described by the whitening matrix.
     
+    **Parameters**
     
     * maps       : Differential map for a given reference magnitude
     * pfa        : The false alarm rate used to determine the threshold
@@ -294,7 +294,13 @@ def get_sensitivity_Te(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.
     * ref_mag    : The reference mag for the given map
     * verbose    : Print some information along the way
     
-     See Ceau et al. 2019 for more information
+     See *Ceau et al. 2019* for more information
+     
+    **Returns**
+    
+    * mags : The magnitude at which Te crosses the threshold
+    * fluxs: The fluxes at which Te crosses the threshold
+    * Tes  : The values of the test statistic on the map at the reference magnitude
     
     """
     W = postproc_mat
@@ -368,14 +374,14 @@ def get_Tnp_threshold_map(xTx_map, Pfa):
 def residual_pdet_Tnp(xTx, xsi, targ):
     """
     Computes the residual of Pdet in a NP test.
-    Parameters:
-    ----------
+    
+    **Parameters:**
     
     * xTx     : The noncentrality parameter representing the feature
     * targ     : The target Pdet to converge to
     * xsi      : The location of threshold
     
-    Returns the Pdet difference.
+    **Returns** the Pdet difference.
     
     """
     
@@ -388,6 +394,7 @@ def get_sensitivity_Tnp(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10
     The throughput for the signal of interest is given by the map at a reference magnitude.
     The effective noise floor is implicitly described by the whitening matrix.
     
+    **Parameters:**
     
     * maps       : Differential map for a given reference magnitude
     * pfa        : The false alarm rate used to determine the threshold
@@ -395,6 +402,8 @@ def get_sensitivity_Tnp(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10
     * postproc_mat : The matrix of the whitening transformation ($\Sigma^{-1/2}$)
     * ref_mag    : The reference mag for the given map
     * verbose    : Print some information along the way
+    
+    **Returns**: A magnitude map
     
     """
     from scipy.stats import norm
@@ -441,13 +450,14 @@ def correlation_map(signal, maps, postproc=None, K=None, n_diffobs=1, verbose=Fa
     """
     Returns the raw correlation map of a signal with a map.
     
-    Parameters:
-    -----------
+    **Parameters:**
     
-    signal      : The signal measured on sky shape:
+    * signal      : The signal measured on sky shape:
                     (n_slots, n_wl, n_outputs)
-    maps        : The maps for comparison shape:
+    * maps        : The maps for comparison shape:
                     (n_slots, n_wl, n_outputs, x_resolution, y_resolution)
+    
+    **Returns** The correlation map
     """
     assert (len(signal.shape) == 3), "Input shape (slots, wavelengths, outputs)"
     assert (len(maps.shape) == 5), "Maps shape (slots, wavelengths, outputs, position, position)"

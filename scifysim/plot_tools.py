@@ -39,9 +39,12 @@ def getcolortrace(cmap, value, length, alpha=None):
 def piston2size(piston, dist=140., psz=8., usize=150.):
     """
     Pretty visualization of projected array: Emulates perspective
-    dist  : The distance of the observer to the array
-    psz   : The diameters of the pupils
-    usize : A scaling parameter default = 150
+    
+    **Parameters:**
+    
+    * dist  : The distance of the observer to the array
+    * psz   : The diameters of the pupils
+    * usize : A scaling parameter default = 150
     """
     d = dist + piston
     alpha = np.arctan(psz/d)
@@ -56,20 +59,25 @@ def plot_pupil(thearray, thepistons=None, psz=8.,
                compass=None, grid=None):
     """
     Plots the projected 
-    dist  : The distance of the observer to the array
-    psz   : The diameters of the pupils
-    usize : A scaling parameter default = 150
-    perspective: whether to simulate an effect of perspective
-                with the size of the markers
-    compass: A pair of positions indicating the direction of North and East
-             after transformation by the same projection as the array
-             [North_vector[e,n], East_vector[e,n]]
-    grid   : Similar to the compass but for a bunch of parallels and meridians
-            [parallels[[e0,n0], [e1, n1], ... ],
-             meridians[[e0,n0], [e1, n1], ...]]
     
-    Returns:
-    fig   : The figure 
+    **Parameters:**
+    
+    * dist  : The distance of the observer to the array
+    * psz   : The diameters of the pupils
+    * usize : A scaling parameter default = 150
+    * perspective: whether to simulate an effect of perspective
+      with the size of the markers
+    * compass: A pair of positions indicating the direction of North and East
+      after transformation by the same projection as the array
+      [North_vector[e,n], East_vector[e,n]]
+    * grid   : Similar to the compass but for a bunch of parallels and meridians
+      [parallels[[e0,n0], [e1, n1], ... ],
+      meridians[[e0,n0], [e1, n1], ...]]
+    
+    **Returns:**
+    
+    * fig   : The figure 
+    
     """
     # Without piston information, impossible to plot the fake perspective
     if thepistons is None:
@@ -128,12 +136,14 @@ def plot_projected_pupil(asim, seq_index,
     The plots are made of the array as seen from the target in meters 
     projected to RA-Dec coordinates.
     
-    asim    : Simulator object
-    seq_index: The index in the observing sequence (This feature may evolve)
-    grid    : Whether to plot a grid of ground position
-    grid_res: The number of lines in the grid for each direction
-    compass : Whether to plot a little North and East symbol for direction
-    compoass_length: In meters the length of the compass needles.
+    **Parameters:**
+    
+    * asim    : Simulator object
+    * seq_index: The index in the observing sequence (This feature may evolve)
+    * grid    : Whether to plot a grid of ground position
+    * grid_res: The number of lines in the grid for each direction
+    * compass : Whether to plot a little North and East symbol for direction
+    * compoass_length: In meters the length of the compass needles.
     """
     anarray = asim.obs.statlocs
     
@@ -184,13 +194,15 @@ def plot_projected_uv(asim, seq_indices=None,
     The plots are made of the array as seen from the target in meters 
     projected to RA-Dec coordinates.
     
-    asim    : Simulator object
-    seq_indices: The index in the observing sequence (This feature may evolve)
-                if None: the whole sequence is mapped
-    grid    : Whether to plot a grid of ground position
-    grid_res: The number of lines in the grid for each direction
-    compass : Whether to plot a little North and East symbol for direction
-    compoass_length: In meters the length of the compass needles.
+    **Parameters:**
+    
+    * asim    : Simulator object
+    * seq_indices: The index in the observing sequence (This feature may evolve)
+      if None: the whole sequence is mapped
+    * grid    : Whether to plot a grid of ground position
+    * grid_res: The number of lines in the grid for each direction
+    * compass : Whether to plot a little North and East symbol for direction
+    * compoass_length: In meters the length of the compass needles.
     """
     anarray = asim.obs.statlocs
     
@@ -245,8 +257,7 @@ def plot_phasescreen(theinjector, show=True, noticks=True, screen_index=True):
 
 def plot_injection(theinjector, show=True, noticks=True):
     """
-    Provides a view of the injector status.
-    Plots the phase screen for each pupil.
+    Provides a view of the injector status. Plots the phase screen for each pupil.
     """
     import matplotlib.pyplot as plt
     import scifysim as sf
@@ -313,16 +324,19 @@ def plot_response_map(asim, outputs=None,
                       **kwargs):
     """
     Plot the response map of the instrument for the target and sequence
-    wavelength   : np.ndarray containing wl indices (if None: use all the wavelength channels)
-    sequence_index : The indices of the sequence to plot
-    show         : Whether to call plt.show() for each plot
-    save         : either False or a string containing the root of a path like "maps/figures_"
-    figsize      : 2 tuple to pass to plt.figure()
-    dpi          : The dpi for the maps
-    **kwargs     : Additional kwargs to pass to imshow
-    add_central_marker: Add a marker at the 0,0 location
-    central_marker_size: The size parameter to give the central marker
-    central_marker_type: The type of marker to use
+    
+    **Parameters:**
+    
+    * wavelength   : np.ndarray containing wl indices (if None: use all the wavelength channels)
+    * sequence_index : The indices of the sequence to plot
+    * show         : Whether to call plt.show() for each plot
+    * save         : either False or a string containing the root of a path like "maps/figures_"
+    * figsize      : 2 tuple to pass to plt.figure()
+    * dpi          : The dpi for the maps
+    * **kwargs     : Additional kwargs to pass to imshow
+    * add_central_marker: Add a marker at the 0,0 location
+    * central_marker_size: The size parameter to give the central marker
+    * central_marker_type: The type of marker to use
     """
     base_params = {'x':0, 'y':0, 's':10., 'c':"w", 'marker':"*"}
     if central_marker is True:
@@ -425,8 +439,16 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     """
     Plots some information on the tuning of the combiner using geometric piston
     and chromatic corrector plates.
-    Plots:
-    ------
+    
+    **Parameters:**
+    
+    * corrector : A corrector object
+    * lambs     : The wavelengths to plot [m]
+    * combiner  : A combiner object
+    * show      : Whether to call ``plt.show``
+    
+    **Plots:**
+    
     - Nulling contrast (before and after correction)
     - The corrected matrix matrix plot
     - The length of correction, compensation, and offset

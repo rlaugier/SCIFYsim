@@ -6,3 +6,4 @@ scifysim.control\_loop module
    :undoc-members:
    :show-inheritance:
    :special-members:
+   :private-members:

@@ -18,8 +18,11 @@ class simulator(object):
                 #tarname="No name", tarpos=None, n_spec_ch=100):
         """
         The object meant to assemble and operate the simulator. Construct the injector object from a config file
-        file      : A pre-parsed config file
-        fpath     : The path to a config file
+        
+        **Parameters:**
+        
+        * file      : A pre-parsed config file. See ``parsefile`` submodule
+        * fpath     : The path to a config file
         
         """
         from scifysim import parsefile
@@ -52,6 +55,11 @@ class simulator(object):
     def prepare_observatory(self, file=None, fpath=None):
         """
         Preprare the observatory object for the simulator.
+        
+        **Parameters:**
+        
+        * file : A parsed config file (see parsefile)
+        * fpath: (string) A path to the config file to parse
         """
         if file is not None:
             theconfig = file
@@ -97,10 +105,11 @@ class simulator(object):
                  crop = 1.,
                  injector=None, seed=None):
         """
-        Either: 
-            * Provide all parameters
-            * Provide a config file
-            * provide the injector
+        **Either:**
+        
+        * Provide all parameters
+        * Provide a config file
+        * provide the injector
         """
         if file is not None:
             logit.warning("tt_correction not implemented")
@@ -134,7 +143,13 @@ class simulator(object):
     
     def prepare_combiner(self, file, **kwargs):
         """
-        Constructs self.combiner
+        Constructs ``self.combiner``
+        
+        **Parameters:**
+        
+        * file : A parsed config file (see parsefile)
+        * **kwargs to pass to the combiner ``__init__`` method
+        
         """
         self.combiner_type = file.get("configuration","combiner")
         self.ph_tap = file.get("configuration", "photometric_tap")
@@ -149,7 +164,8 @@ class simulator(object):
     def prepare_sources(self, file=None):
         """
         Prepares a src object containing star, planet, sky and UT.
-        file     : A parsed config file (default: None will reuse the config file in self.)
+        
+        * file     : A parsed config file (default: None will reuse the config file in self.)
         """
         if file is None:
             file = self.config
@@ -159,10 +175,13 @@ class simulator(object):
         """
         Prepares the integraro object that rules the pixel properties
         of the detector.
-        config    : A parsed config file (default: None will reuse the config file in self.)
-        keepall   : [boolean] Whether to keep each of the steps accumulated.
-                            False is recommended for faster computation and memory efficiency
-        n_sources : Number of sources sequencially accumulated. (deprecated, do not
+        
+        **Parameters:**
+        
+        * config    : A parsed config file (default: None will reuse the config file in self.)
+        * keepall   : [boolean] Whether to keep each of the steps accumulated.
+          False is recommended for faster computation and memory efficiency
+        * n_sources : Number of sources sequencially accumulated. (deprecated, do not
                             rely on this number)
         """
         if config is None:
@@ -176,9 +195,12 @@ class simulator(object):
     def prepare_spectrograph(self, config=None, n_chan=None):
         """
         Prepares the spectrograph object that maps the light over the detector.
-        file     : A parsed config file (default: None will reuse the config file in self.)
-        n_chan   : The number of outputs from the chip. If None: tries to get it from
-                 the shape of self.combiner.M
+        
+        **Parameters:**
+        
+        * file     : A parsed config file (default: None will reuse the config file in self.)
+        * n_chan   : The number of outputs from the chip. If None: tries to get it from
+          the shape of ``self.combiner.M``
         """
         if config is None:
             config = self.config
@@ -193,13 +215,15 @@ class simulator(object):
         Prepare the corrector object for the simulator, based
         on a config file.
         
-        Parameters:
-        -----------
-        config   : Either:
+        **Parameters:**
+        
+        * config   : Either:
+        
                     - None (default) to use the simulators config
                     - A parsed config file
-        optimize : Boolean. If True, will optimize both depth and shape
-        apply    : Boolean. If True, apply the optimization 
+                    
+        * optimize : Boolean. If True, will optimize both depth and shape
+        * apply    : Boolean. If True, apply the optimization 
         """
         if config is None:
             config = self.config
@@ -223,19 +247,28 @@ class simulator(object):
                                  monitor_phase=True, dtype=np.float32,
                                  perfect=False):
         """
-        Warning: at the moment, this assumes pointing has already been performed.
-        
         Simulate an exposure with source of interest and sources of noise
-        interest  : sf.sources.resolved_source object representing the source of intereest (planet)
-        star      : sf.sources.resolved_source object representing the star
-        diffuse   : a list of sf.transmission_emission objects linked in a chain.
-        texp      : Exposure time (seconds)
-        t_co      : Coherence time (seconds) 
-        monitor_phase : If true, will also record values of phase errors from injection and fringe tracking
+        
+        .. Warning::
+        
+            At the moment, this assumes pointing has already been performed.
+        
+        
+        
+        **Parameters:**
+        
+        * interest  : sf.sources.resolved_source object representing the source of intereest (planet)
+        * star      : sf.sources.resolved_source object representing the star
+        * diffuse   : a list of sf.transmission_emission objects linked in a chain.
+        * texp      : Exposure time (seconds)
+        * t_co      : Coherence time (seconds) 
+        * monitor_phase : If true, will also record values of phase errors from injection and fringe tracking
         
         Chained diffuse objects are used both for transmission and thermal background. 
         Result is returned as an integrator object. Currently the integrator object is only a
         vessel for the individual subexposures, and not used to do the integration.
+        
+        **Returns** ``self.integrator``
         """
         t_co = self.injector.screen[0].step_time
         self.n_subexps = int(texp/t_co)
@@ -321,14 +354,17 @@ class simulator(object):
         Computes the combination for a discretized light source object 
         for all the wavelengths of interest.
         Returns the intensity in all outputs at all wavelengths.
-        inputs:
-        asource     : Source object or transmission_emission object
-                        including ss and xx_r attributes
-        injected    : complex phasor for the instrumental errors
-        input_arra  : The projected geometric configuration of the array
-                        use observatory.get_projected_array()
-        collected   : The intensity across wavelength and the difference source origins
-        dtype       : The data type to use (use np.float32 for maps)
+        
+        **Parameters:**
+        
+        * asource     : Source object or transmission_emission object
+          including ss and xx_r attributes
+        * injected    : complex phasor for the instrumental errors
+        * input_arra  : The projected geometric configuration of the array
+          use observatory.get_projected_array()
+        * collected   : The intensity across wavelength and the difference source origins
+        * dtype       : The data type to use (use np.float32 for maps)
+        
         """
         # Ideally, this collected operation should be factorized over all subexps
         intensity = asource.ss * collected[:,None]
@@ -359,19 +395,21 @@ class simulator(object):
         for all the wavelengths of interest. The computation is done 
         out of core using dask.
         Returns the intensity in all outputs at all wavelengths.
-        inputs:
-        asource     : Source object or transmission_emission object
-                        including ss and xx_r attributes as dask arrays
-        injected    : complex phasor for the instrumental errors
-        input_array  : The projected geometric configuration of the array
-                        use observatory.get_projected_array()
-        collected   : Dask version of the intensity across wavelength
-                        and the difference source origins
-        map_index   : The index of the pointing in the sequence. Mostly use for numbering
+        
+        **inputs:**
+        
+        * asource     : Source object or transmission_emission object
+          including ss and xx_r attributes as dask arrays
+        * injected    : complex phasor for the instrumental errors
+        * input_array  : The projected geometric configuration of the array
+          use observatory.get_projected_array()
+        * collected   : Dask version of the intensity across wavelength
+          and the difference source origins
+        * map_index   : The index of the pointing in the sequence. Mostly use for numbering
                         of the temporary disk file
         
-        # Note that in "dask" mode the `collected` and `source.ss` are expected as dask arrays
-        # 
+        .. note:: In "dask" mode the `collected` and `source.ss` are expected as dask arrays
+        
         """
         # Ideally, this collected operation should be factorized over all subexps
         intensity = asource.ss * collected[:,None]
@@ -404,12 +442,17 @@ class simulator(object):
         Computes the output INTENSITY based on the input AMPLITUDE
         This version provides a result in np.float32 format for smaller
         memory footprint (for maps)
-        inst_phasor   : The instrumental phasor to apply to the inputs
-                        dimension (n_wl, n_input)
-        geom_phasor   : The geometric phasor due to source location
-                        dimension (n_wl, n_input)
-        amplitude     : Complex amplitude of the spectrum of the source
-                        dimension (n_wl, n_src)
+        
+        **Parameters:**
+        
+        * inst_phasor   : The instrumental phasor to apply to the inputs
+          dimension (n_wl, n_input)
+        * geom_phasor   : The geometric phasor due to source location
+          dimension (n_wl, n_input)
+        * amplitude     : Complex amplitude of the spectrum of the source
+          dimension (n_wl, n_src)
+        
+        **Returns** Output complex amplitudes
         
         """
         #from pdb import set_trace
@@ -422,12 +465,18 @@ class simulator(object):
     def combine(self, inst_phasor, geom_phasor, amplitude=None):
         """
         Computes the output INTENSITY based on the input AMPLITUDE
-        inst_phasor   : The instrumental phasor to apply to the inputs
-                        dimension (n_wl, n_input)
-        geom_phasor   : The geometric phasor due to source location
-                        dimension (n_wl, n_input)
-        amplitude     : Complex amplitude of the spectrum of the source
-                        dimension (n_wl, n_src)
+        or maps)
+        
+        **Parameters:**
+        
+        * inst_phasor   : The instrumental phasor to apply to the inputs
+          dimension (n_wl, n_input)
+        * geom_phasor   : The geometric phasor due to source location
+          dimension (n_wl, n_input)
+        * amplitude     : Complex amplitude of the spectrum of the source
+          dimension (n_wl, n_src)
+        
+        **Returns** Output complex amplitudes
         
         """
         if amplitude is None:
@@ -439,9 +488,14 @@ class simulator(object):
         """
         Returns the complex phasor corresponding to the locations
         of the family of sources
-        alpha         : The coordinate matched to X in the array geometry
-        beta          : The coordinate matched to Y in the array geometry
-        anarray       : The array geometry (n_input, 2)
+        
+        **Parameters:**
+        
+        * alpha         : The coordinate matched to X in the array geometry
+        * beta          : The coordinate matched to Y in the array geometry
+        * anarray       : The array geometry (n_input, 2)
+        
+        **Returns** : A vector of complex phasors
         """
         a = np.array((alpha, beta), dtype=np.float64)
         phi = self.k[:,None] * anarray.dot(a)[None,:]
@@ -451,11 +505,13 @@ class simulator(object):
         """
         Returns the complex phasor corresponding to the locations
         of the family of sources
-        alpha         : The coordinate matched to X in the array geometry
-                        as a dask array (field positions)
-        beta          : The coordinate matched to Y in the array geometry
-                        as a dask array (field positions)
-        anarray       : The array geometry (n_input, 2)
+        
+        **Parameters:**
+        * alpha         : The coordinate matched to X in the array geometry
+          as a dask array (field positions)
+        * beta          : The coordinate matched to Y in the array geometry
+          as a dask array (field positions)
+        * anarray       : The array geometry (n_input, 2)
         """
         # making a dask array of field positions (nfield, 2)
         alphabeta = da.from_array((alphas, betas)).T
@@ -475,16 +531,19 @@ class simulator(object):
         Warning: at the moment, this assumes pointing has already been performed.
         
         Simulate an exposure with source of interest and sources of noise
-        interest  : sf.sources.resolved_source object representing the source of intereest (planet)
-        star      : sf.sources.resolved_source object representing the star
-        diffuse   : a list of sf.transmission_emission objects linked in a chain.
-        texp      : Exposure time (seconds)
-        t_co      : Coherence time (seconds) 
-        monitor_phase : If true, will also record values of phase errors from injection and
-                        fringe tracking
-        dtype     : Data type to use for results
-        spectro   : spectrograph object to use. If None, the method will assume one pixel 
-                        per output and per spectral channel
+        
+        **Parameters:**
+        
+        * interest  : sf.sources.resolved_source object representing the source of intereest (planet)
+        * star      : sf.sources.resolved_source object representing the star
+        * diffuse   : a list of sf.transmission_emission objects linked in a chain.
+        * texp      : Exposure time (seconds)
+        * t_co      : Coherence time (seconds) 
+        * monitor_phase : If true, will also record values of phase errors from injection and
+          fringe tracking
+        * dtype     : Data type to use for results
+        * spectro   : spectrograph object to use. If None, the method will assume one pixel 
+          per output and per spectral channel
         
         Chained diffuse objects are used both for transmission and thermal background. 
         Result is returned as an integrator object. Currently the integrator object is only a
@@ -580,8 +639,13 @@ class simulator(object):
         """
         Prepare an observing sequence
         
-        coordinates  : read from file by default
-                        if skycoord object provided, then use that.
+        **Parameters:**
+        * file : Parsed config file
+        * times : deprecated
+        * remove_daytimes : (*default* : False) Whether to remove from
+          the sequence the daytime occurences
+        * coordinates  : read from file by default
+          if skycoord object provided, then use that.
         """
         if file is not None:
             logit.info("Building sequence from new config file")
@@ -623,15 +687,18 @@ class simulator(object):
         pass
     def make_sequence(self):
         """
-        Run an observing sequence
+        Deprecated
         """
         pass
     
     def point(self, time, target):
         """
-        Points the array towards the target. Updates the 
-        time    : The time to make the observation
-        target  : The skycoord object to point
+        Points the array towards the target. Updates the combiner
+        
+        **Parameters:**
+        
+        * time    : The time to make the observation
+        * target  : The skycoord object to point
         """
         self.obs.point(time, target)
         self.reset_static()
@@ -642,19 +709,24 @@ class simulator(object):
                        dtype=np.float32):
         """
         Builds the transmission maps for the combiner for all the pointings
-        on self.target at the times of self.sequence
-        mapres        : The resolution of the map in pixels
-        mapcrop       : Adjusts the extent of the map
-        Returns (also stored in self.map) a transmission map of shape:
-        [n_sequence,
-        n_wl_chanels,
-        n_outputs,
-        mapres,
-        mapres]
+        on self.target at the times of ``self.sequence``
         
-        To get final flux of a point source :
-        Map/ds_sr * p.ss * DIT
-        ds_sr can be found in director.vigneting_map
+        **Parameters:**
+        
+        * mapres        : The resolution of the map in pixels
+        * mapcrop       : Adjusts the extent of the map
+        
+        **Returns** (also stored in self.map) a transmission map of shape:
+        
+            - [n_sequence,
+            - n_wl_chanels,
+            - n_outputs,
+            - mapres,
+            - mapres]
+        
+        To get final flux of a point source : ``Map/ds_sr * p.ss * DIT``
+        
+        ``ds_sr`` can be found in ``director.vigneting_map``
         """
         vigneting_map = sf.injection.injection_vigneting(self.injector, mapres, mapcrop)
         # Warning: this vigneting map for the maps are in the simulator.vigneting_map
@@ -693,19 +765,19 @@ class simulator(object):
         call self.maps[element indices].compute() to compute specific elements
         without computing the whole map.
         
-        mapres        : The resolution of the map in pixels
-        mapcrop       : Adjusts the extent of the map
-        Returns (also stored in self.map) a transmission map of shape:
-        [n_sequence,
-        n_wl_chanels,
-        n_outputs,
-        mapres,
-        mapres]
+        **Parameters:**
+        * mapres        : The resolution of the map in pixels
+        * mapcrop       : Adjusts the extent of the map
         
-        To get final flux of a point source :
-        Map/ds_sr * p.ss * DIT
-        ds_sr is the scene surface element in steradian
-        and can be found in director.vigneting_map
+        **Returns** (also stored in self.map) a transmission map of shape:
+        * [n_sequence,
+        * n_wl_chanels,
+        * n_outputs,
+        * mapres,
+        * mapres]
+        
+        To get final flux of a point source : ``Map/ds_sr * p.ss * DIT``
+        ``ds_sr`` is the scene surface element in steradian and can be found in ``director.vigneting_map``
         """
         vigneting_map = sf.injection.injection_vigneting(self.injector, mapres, mapcrop)
         # Warning: this vigneting map for the maps are in the simulator.vigneting_map
@@ -738,7 +810,7 @@ class simulator(object):
     def persist_maps_to_disk(self, fname="/tmp/full_maps.zarr"):
         """
         Computes and stores the map to disk. The file is then loaded
-        out of core and is still accessible in the same way (but without
+        *out of core* and is still accessible in the same way (but without
         the computing times).
         """
         print("Computing and writing full map", flush=True)
@@ -756,9 +828,14 @@ class simulator(object):
         """
         Create sensitivity map in ph/s/sr per spectral channel.
         To get final flux of a point source :
-        Map/ds_sr * p.ss * DIT
-        blockindex : The index in the observing sequence to create the map
-        vigneting_map : The vigneting map drawn used for resolution
+        
+        ``Map/ds_sr * p.ss * DIT``
+        
+        **Parameters:**
+        
+        * blockindex : The index in the observing sequence to create the map
+        * vigneting_map : The vigneting map drawn used for resolution
+        
         """
         self.point(self.sequence[blockindex], self.target)
         array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
@@ -791,9 +868,14 @@ class simulator(object):
         """
         Create sensitivity map in ph/s/sr per spectral channel.
         To get final flux of a point source :
-        Map/ds_sr * p.ss * DIT
-        blockindex : The index in the observing sequence to create the map
-        vigneting_map : The vigneting map drawn used for resolution
+        ``Map/ds_sr * p.ss * DIT``
+        
+        **Parameters:**
+        
+        * blockindex : The index in the observing sequence to create the map
+        * vigneting_map : The vigneting map drawn used for resolution
+        
+        **Returns** the ``static_output``: the map
         """
         self.point(self.sequence[blockindex], self.target)
         array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)

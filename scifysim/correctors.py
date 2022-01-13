@@ -27,11 +27,11 @@ def extract_corrector_params(corrector, params):
     Utility function to reconstruct the *b* and *c*
     vectors from the lmfit Parameters object.
     
-    Parameters:
-    -----------
-    corrector : The corrector object
-    params   :  at lmfit Parameters object
-                containing b_i and c_i terms
+    **Parameters:**
+    
+    * corrector : The corrector object
+    * params   :  at lmfit Parameters object
+      containing b_i and c_i terms
     """
     
     ntel = corrector.b.shape[0]
@@ -50,13 +50,15 @@ def get_depth(combiner, Is,):
     The masks in the combiner definition
     are used to determine the role of the different outputs.
     
-    Parameters:
-    -----------
-    combiner : A combiner object.
-    Is       : An array of intensities
+    **Parameters:**
     
-    Note: This definition might need some adjustments for
-    use in kernel-nullers?
+    * combiner : A combiner object.
+    * Is       : An array of intensities
+    
+    .. admonition: Note:
+    
+        This definition might need some adjustments for
+        use in kernel-nullers?
     """
     bright = Is[:,combiner.bright].sum(axis=1)
     dark = Is[:,combiner.dark].sum(axis=1)
@@ -71,14 +73,16 @@ def get_Is(params, combiner, corrector, lambs):
     
     **dcomp is computed automatically be default.**
     
-    Parameters:
-    -----------
-    params   : either
+    **Parameters:**
+    
+    * params   : either
+    
                 - A Parameters object from the optimization
                 - A tuple of vectors bvec, cvec
-    combiner : A combiner object.
-    corrector : The corrector object
-    lambs    : The wavelengths considered.
+                
+    * combiner : A combiner object.
+    * corrector : The corrector object
+    * lambs    : The wavelengths considered.
     """
     
     if isinstance(params, Parameters):
@@ -109,18 +113,19 @@ def get_es(params, combiner, corrector, lambs):
     """
     Returns the enantiomorph excursion taking into account the corrections provided in
     params.
+    
     **Currently works only for double-bracewell 3-4 architecures**
         
-    **dcomp is computed automatically be default.**
+    **dcomp is computed automatically by default.**
     
-    Parameters:
-    -----------
-    params   : either
-                - A Parameters object from the optimization
-                - A tuple of vectors bvec, cvec
-    combiner : A combiner object.
-    corrector : The corrector object
-    lambs    : The wavelengths considered.
+    **Parameters:**
+    
+    - params   : either
+            * A Parameters object from the optimization
+            * A tuple of vectors bvec, cvec
+    - combiner : A combiner object.
+    - corrector : The corrector object
+    - lambs    : The wavelengths considered.
     """
     
     if isinstance(params, Parameters):
@@ -155,19 +160,19 @@ class corrector(object):
         piston *b* and ZnSe piston substitution *c*. Note that
         the ZnSe length replaces some air length.
         
-        Parameters:
-        -----------
-        config:     A parsed config file
-        lambs :     The wavelength channels to consider [m]
-                    (At the __init__ stage, it is only used for
-                    the computation of a mean refractive index for
-                    the dispersive material)
+        **Parameters:**
+        
+        * config:     A parsed config file
+        * lambs :     The wavelength channels to consider [m]
+          (At the __init__ stage, it is only used for
+          the computation of a mean refractive index for
+          the dispersive material)
                     
-        Internal parameters:
-        --------------------
-        a     :     Vector of the amplitude term
-        b     :     Vetor of the geometric piston term [m]
-        c     :     Vetor of the dispersive piston term [m]
+        **Internal parameters:**
+        
+        * a     :     Vector of the amplitude term
+        * b     :     Vetor of the geometric piston term [m]
+        * c     :     Vetor of the dispersive piston term [m]
         """
         self.config = config
         nznse_file = np.loadtxt(znse_file,delimiter=";")
@@ -188,9 +193,11 @@ class corrector(object):
         Returns the complex phasor corresponding
         to the current a, b, c, and dcomp phasors.
         
-        Parameters:
-        -----------
-        lambs :     The wavelength channels to consider [m]
+        **Parameters:**
+        
+        * lambs :     The wavelength channels to consider [m]
+        
+        **Returns:** alpha
         """
         ns = self.nznse(lambs)
         alpha = self.a[None,:]*np.exp(-1j*2*np.pi/lambs[:,None]*(self.b[None,:]+self.dcomp[None,:] +self.c[None,:]*(ns[:,None]-1)))
@@ -213,12 +220,12 @@ class corrector(object):
         Returns the complex phasor corresponding
         to the current a, b, c, and dcomp phasors.
         
-        Parameters:
-        -----------
-        lambs :     The wavelength channels to consider [m]
-        a     :     Vector of the amplitude term
-        b     :     Vetor of the geometric piston term [m]
-        c     :     Vetor of the dispersive piston term [m]
+        **Parameters:**
+        
+        * lambs :     The wavelength channels to consider [m]
+        * a     :     Vector of the amplitude term
+        * b     :     Vetor of the geometric piston term [m]
+        * c     :     Vetor of the dispersive piston term [m]
         """
         ns = self.nznse(lambs)
         if a is None:
@@ -238,12 +245,14 @@ class corrector(object):
         array geometry projected on axis based on the wet atmosphere
         model.
         
-        Parameters:
-        -----------
-        lambs :     The wavelength channels to consider [m]
-        proj_opds  : The projected piston obtained by projection
-                    (Get from simulator.obs.get_projected_geometric_pistons)
-        wet_atmo   : The wet atmosphere model (see n_air.wet_atmo object)
+        **Parameters:**
+        
+        * lambs :     The wavelength channels to consider [m]
+        * proj_opds  : The projected piston obtained by projection
+          (Get from simulator.obs.get_projected_geometric_pistons)
+        * wet_atmo   : The wet atmosphere model (see n_air.wet_atmo object)
+        
+        **Returns:** phase
         """
         nair = n_air.n_air(lambs)
         phase = 2*np.pi/lambs*nair*proj_opds
@@ -252,12 +261,14 @@ class corrector(object):
     def solve_air(self, lambs, wet_atmo):
         """
         Computes a least squares compensation model (see
-        Koresko et al. 2003 DOI: 10.1117/12.458032)
+        **Koresko et al. 2003 DOI: 10.1117/12.458032**)
         
-        Parameters:
-        -----------
-        lambs :     The wavelength channels to consider [m]
-        wet_atmo   : The wet atmosphere model (see n_air.wet_atmo object)
+        **Parameters:**
+        
+        * lambs :     The wavelength channels to consider [m]
+        * wet_atmo   : The wet atmosphere model (see n_air.wet_atmo object)
+        
+        **Returns:** :math:`\Big( \mathbf{A}^T\mathbf{A}\mathbf{A}^T \Big)^{-1}`
         """
         nair = n_air.n_air(lambs)
         ns = np.array([nair, self.nznse(lambs)]).T
@@ -274,18 +285,20 @@ class corrector(object):
         If "apply" is set to True, a, b, c, and dcomp are also
         set to the best fit value.
         
-        Parameters:
-        -----------
-        lambs :     The wavelength channels to consider [m]
-        combiner :  A combiner object (chromatic)  
-        apply    :  Boolean deciding whether to set the local
-                    parameters to best fit value (default: True)
-        freeze_params : The name of parameters to be freezed.
-                    Should be used to account for the larger than
-                    necessary number of degrees of freedom.
+        **Parameters:**
+        
+        * lambs :     The wavelength channels to consider [m]
+        * combiner :  A combiner object (chromatic)  
+        * apply    :  Boolean deciding whether to set the local
+          parameters to best fit value (default: True)
+        * freeze_params : The name of parameters to be freezed.
+          Should be used to account for the larger than
+          necessary number of degrees of freedom.
                     
-        Note: For obtaining a more practical direct results, some
-        more complicated balancing guidelines should be followed.
+        .. admonition:: Note:
+            
+            For obtaining a more practical direct results, some
+            more complicated balancing guidelines should be followed.
         """
         params = Parameters()
         for i in range(self.b.shape[0]):
@@ -315,29 +328,33 @@ class corrector(object):
         Optimize the compensator to correct chromatism in the 
         model of the combiner to obtain enantomporph combinations
         at the outputs. Returns a lmfit solution object.
-        If "apply" is set to True, a, b, c, and dcomp are also
+        If ``apply`` is set to True, a, b, c, and dcomp are also
         set to the best fit value.
         
         **Currently only works for double Bracewell 3-4 architectures.**
         
-        Parameters:
-        -----------
-        lambs :     The wavelength channels to consider [m]
-        combiner :  A combiner object (chromatic)  
-        apply    :  Boolean deciding whether to set the local
-                    parameters to best fit value (default: True)
-        Note: For obtaining a more practical direct results, some
-        more complicated balancing guidelines should be followed.
+        **Parameters:**
         
-        Example:
-        --------
-        ```
-        sol = asim.corrector.tune_static_shape(asim.lambda_science_range,
+        * lambs :     The wavelength channels to consider [m]
+        * combiner :  A combiner object (chromatic)  
+        * apply    :  Boolean deciding whether to set the local
+          parameters to best fit value (default: True)
+          
+        .. admonition:: Note:
+        
+            For obtaining a more practical direct results, some
+            more complicated balancing guidelines should be followed.
+        
+        **Example:**
+        
+        .. code-block::
+            
+            sol = asim.corrector.tune_static_shape(asim.lambda_science_range,
                              asim.combiner,
                              sync_params=[("b3", "b2", asim.corrector.b[3] - asim.corrector.b[2]),
                                          ("c3", "c2", asim.corrector.c[3] - asim.corrector.c[2])],
                              apply=True)
-        ```
+        
         """
         params = Parameters()
         print("inside_tuning", self.b, self.c)

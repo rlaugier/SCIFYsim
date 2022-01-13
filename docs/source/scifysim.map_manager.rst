@@ -6,3 +6,4 @@ scifysim.map\_manager module
    :undoc-members:
    :show-inheritance:
    :special-members:
+   :private-members:

@@ -11,12 +11,14 @@ def convert_config_file(file_in, path_out, new_name=None, test=True):
     """
     A simple routine to convert .prm config file to .ini config files
     
-    file_in    : the complet path of the file to convert
-    path_out   : the destination directory (not including file name)
-    new_name   : the new name to give the file (if None: change only extension)
-    test       : If True, only print the result
+    **Paramters**
     
-    example : convert_config_file("../../geniesim/examples/tau_Boo_89m.prm", "examples/", test=False)
+    * file_in    : the complet path of the file to convert
+    * path_out   : the destination directory (not including file name)
+    * new_name   : the new name to give the file (if None: change only extension)
+    * test       : If True, only print the result
+    
+    *example* : ``convert_config_file("../../geniesim/examples/tau_Boo_89m.prm", "examples/", test=False)``
     """
     if test:
         print("Test run: no file will be written")

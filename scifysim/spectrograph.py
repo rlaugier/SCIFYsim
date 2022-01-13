@@ -18,13 +18,15 @@ class integrator():
         Contains the pixel model of the detector.
         Currently it does not implement a system gain (1ADU = 1photoelectron)
         
-        keepall    : [boolean] Whether to keep each of the steps accumulated
-        eta        :            The quantum efficiency
-        ron        : [photoelectrons] The read-out noise 
-        ENF        :            The Excess Noise Factor 1 if not applicable
-        mgain      :            The amplification gain (for EMCCDs or APD/eAPD sensors)
-        well       : [photelectrons] The well depth
-        n_sources  :            The number of different sources propagated through the instrument
+        **Parameters:**
+        
+        * keepall    : [boolean] Whether to keep each of the steps accumulated
+        * eta        :            The quantum efficiency
+        * ron        : [photoelectrons] The read-out noise 
+        * ENF        :            The Excess Noise Factor 1 if not applicable
+        * mgain      :            The amplification gain (for EMCCDs or APD/eAPD sensors)
+        * well       : [photelectrons] The well depth
+        * n_sources  :            The number of different sources propagated through the instrument
         
         
         """
@@ -56,9 +58,9 @@ class integrator():
         """
         Accumulates some signal.
         
-        Parameters:
-        -----------
-        value   : The signals to accumulate
+        **Parameters:**
+        
+        * value   : The signals to accumulate
         """
         self.acc += value
         self.runs += 1
@@ -82,14 +84,14 @@ class integrator():
         """
         Made a little bit complicated by the ability to simulate CRED1 camera
         
-        Parameters:
-        -----------
-        spectrograph  : A spectrograph object to map the spectra on
-                    a 2D detector
-        t_exp         : [s]  Integration time to take into account dark current
-                        This is only used if self.exposure is close to 0. (if 
-                        the )
-        n_pixsplit    : The number of pixels 
+        **Parameters:**
+        
+        * spectrograph  : A spectrograph object to map the spectra on
+          a 2D detector
+        * t_exp         : [s]  Integration time to take into account dark current
+          This is only used if self.exposure is close to 0. (if 
+          the )
+        * n_pixsplit    : The number of pixels 
         """
         if n_pixsplit is not None: # Splitting the signal over a number pixels
             thepixels = self.acc.copy()
@@ -148,8 +150,10 @@ class integrator():
         Computes some basic laws regarding exposure times
         for the current configuration:
         
+        **Parameters:**
+        
         - self.expr_snr_t       : expression of SNR as function of time
-                                    which also gets printed
+          which also gets printed
         - self.expr_t_for_snr   : time to get a given SNR
         - self.expr_well_fraction : Fraction of well filled by the number of Ph considered
         - self.expr_t_max       : Maximum exposure time to fill the well
@@ -158,8 +162,10 @@ class integrator():
         - self.well_fraction    : lambdified version of expr_well_faction 
         - self.t_exp_max        : lambdified version of expr_t_max
         
-        eta, f_planet, n_pix, f_tot, ron, =  sp.symbols("eta, f_{planet}, n_p, f_{tot}, ron", real=True)
-        n_planet, n_tot, t_exp0, t_exp = sp.symbols("n_{planet}, n_{tot}, t_{esxp0}, t_{exp}", real=True)
+        .. code-block::
+        
+            eta, f_planet, n_pix, f_tot, ron, =  sp.symbols("eta, f_{planet}, n_p, f_{tot}, ron", real=True)
+            n_planet, n_tot, t_exp0, t_exp = sp.symbols("n_{planet}, n_{tot}, t_{esxp0}, t_{exp}", real=True)
         
         """
         eta, f_planet, n_pix, f_tot, ron, =  sp.symbols("eta, f_{planet}, n_p, f_{tot}, ron", real=True)
@@ -187,18 +193,18 @@ class integrator():
     def consolidate_metrologic(self, ):
         """
         Compiles the results of metrologic exposure. 
-        Paramters compiled:
-        -------------------
-        self.nsamples    : The number of integration steps
-        self.summed_signal : The total integration of 
-                            all sources throughout the time steps
-        self.total_summed_signal : The total integration over
-                            both sources and time steps
-        self.sums        : The list of signals from each of the sources
-                            summed over the time steps
-        self.source_labels : The labels of the sources corresIFEST.in
--rwxrwx--x  1 rlaugier rlaugier 1,1K mai   27 14:50 REAponding to 
-                            sums.
+        
+        **Paramters compiled:**
+        
+        * ``self.nsamples``    : The number of integration steps
+        * ``self.summed_signal`` : The total integration of 
+          all sources throughout the time steps
+        * ``self.total_summed_signal`` : The total integration over
+          both sources and time steps
+        * ``self.sums``        : The list of signals from each of the sources
+          summed over the time steps
+        * ``self.source_labels`` : The labels of the sources
+          corresponding to sums.
         
         """
         self.nsamples = self.n_subexps

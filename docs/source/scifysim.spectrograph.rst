@@ -6,3 +6,4 @@ scifysim.spectrograph module
    :undoc-members:
    :show-inheritance:
    :special-members:
+   :private-members:

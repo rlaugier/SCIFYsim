@@ -20,13 +20,15 @@ logit = logging.getLogger(__name__)
 """
 Basic usage:
 
-import kernuller.observatory
-myobs = kernuller.observatory.observatory(kernuller.VLTI)
-tarnames = "Spica"
-targets = [kernuller.observatory.astroplan.FixedTarget.from_name(tar) for tar in tarnames]
-obstimes = myobs.build_observing_sequence()
-target_positions = myobs.get_positions(targets[0], obstimes)
-newarray = myobs.get_projected_array(myobs.get_positions(targets, obstimes)[0,0])
+.. code-block::
+
+    import kernuller.observatory
+    myobs = kernuller.observatory.observatory(kernuller.VLTI)
+    tarnames = "Spica"
+    targets = [kernuller.observatory.astroplan.FixedTarget.from_name(tar) for tar in tarnames]
+    obstimes = myobs.build_observing_sequence()
+    target_positions = myobs.get_positions(targets[0], obstimes)
+    newarray = myobs.get_projected_array(myobs.get_positions(targets, obstimes)[0,0])
 """
 
 
@@ -36,17 +38,20 @@ class observatory(object):
     """
     def __init__(self, statlocs=None, location=None, verbose=False, multi_dish=True, config=None):
         """
-        statlocs : The station locations 
-                    (east, north) for each aperture shape is (Na, 2)
-        location : An astropy.coordinatEarthLocation (default = Paranal)
-                    example: myloc = astroplan.Observer.at_site("Paranal", timezone="UTC")
-        multi_dish : When True, the geometry of the pupil varies depending on the relative position
-                        of the target, expecially in terms of projection of the pupil on the plane
-                        orthogonal to the line of sight.
-                        When False, (not implemented yet) the array is expected to be always facing
-                        the line of sight, as is the case for example with a systme like GLINT. 
-        config    : A parsed config object.
-        verbose  : Activate verbosity in the log
+        
+        Parameters:
+        
+        * statlocs : The station locations 
+          (east, north) for each aperture shape is (Na, 2)
+        * location : An astropy.coordinatEarthLocation (default = Paranal)
+          example: myloc = astroplan.Observer.at_site("Paranal", timezone="UTC")
+        * multi_dish : When True, the geometry of the pupil varies depending on the relative position
+          of the target, expecially in terms of projection of the pupil on the plane
+          orthogonal to the line of sight.
+          When False, (not implemented yet) the array is expected to be always facing
+          the line of sight, as is the case for example with a systme like GLINT. 
+        * config    : A parsed config object.
+        * verbose  : Activate verbosity in the log
         
         """
         self.verbose = verbose
@@ -81,10 +86,12 @@ class observatory(object):
         Points the array towards the target, updating its position angle (PA) and altaz (used for airmass).
         These are later used by other methods to compute the projection of the array.
         
-        obstime   : The astropy.time.Time object corresponding to the moment of observation
-                    (usually picked from the sequence provided by self.build_observing_sequence())
-        target    : The astroplan.FixedTarget object of interest. Usually resolved in the 
-                    self.build_observign_sequence() routine with astroplan.FixedTarget.from_name()
+        **Parameters:**
+        
+        * obstime   : The astropy.time.Time object corresponding to the moment of observation
+          (usually picked from the sequence provided by self.build_observing_sequence())
+        * target    : The astroplan.FixedTarget object of interest. Usually resolved in the 
+          self.build_observign_sequence() routine with astroplan.FixedTarget.from_name()
         """
         self.altaz = self.observatory_location.altaz(target=target,
                                                    time=obstime)
@@ -95,14 +102,18 @@ class observatory(object):
     def build_observing_sequence(self, times=None,
                             npoints=20, remove_daytime=False):
         """
-        Returns the series of obstimes needed to compute the altaz positions
-        times : a list of UTC time strings ("2020-04-13T00:00:00")
-                that define an interval (if npoints is not None,
-                or the complete list of times (if npoints is None)
-        npoints : The number of samples to take on the interval
-                 None means that the times is the whole list
-                 
-        remove_daytime : Whether to remove the points that fall during the day
+        
+        **Parameters:**
+        
+        * times : a list of UTC time strings ("2020-04-13T00:00:00")
+          that define an interval (if npoints is not None,
+          or the complete list of times (if npoints is None)
+        * npoints : The number of samples to take on the interval
+          None means that the times is the whole list
+        * remove_daytime : Whether to remove the points that fall during the day
+        
+        **Returns** the series of obstimes needed to compute the altaz positions
+        
         """
         if times is None:
             times = ["2020-04-13T00:00:00","2020-04-13T10:30:00"]
@@ -138,9 +149,12 @@ class observatory(object):
         """
         Deprecated
         
-        Returns the astropy.coordinates.AltAz for a given target
-        targets: A list of SkyCoord objects 
-        obstimes: A list of astropy.Times to make the observations
+        **Parameters:**
+        
+        * targets: A list of SkyCoord objects 
+        * obstimes: A list of astropy.Times to make the observations
+        
+        **Returns** the astropy.coordinates.AltAz for a given target
         """
         taraltaz = self.observatory_location.altaz(target=targets,
                                                    time=obstimes,
@@ -149,10 +163,13 @@ class observatory(object):
         return taraltaz#, tarPA
     
     def get_position(self, target, time, grid_times_targets=False):
-        """
-        Returns the astropy.coordinates.AltAz for a given target
-        target:   one or a list of of targets
-        obstimes: one or a list of astropy.Times to make the observations
+        """        
+        **Parameters:**
+        
+        * target:   one or a list of of targets
+        * obstimes: one or a list of astropy.Times to make the observations
+        
+        **Returns** the ``astropy.coordinates.AltAz`` for a given target
         """
         taraltaz = self.observatory_location.altaz(time, target=target,
                                                       grid_times_targets=grid_times_targets)
@@ -166,10 +183,13 @@ class observatory(object):
         
     def get_projected_array(self, taraltaz, PA=None, loc_array=None):
         """
-        Returns the new coordinates for the projected array
-        taraltaz : the astropy.coordinates.AltAz of the target
-        PA       : parallactic angle to derotate 
-        loc_array: the array of points to use (None: use self.statlocs)
+        **Parameters:**
+        
+        * taraltaz : the astropy.coordinates.AltAz of the target
+        * PA       : parallactic angle to derotate 
+        * loc_array: the array of points to use (None: use self.statlocs)
+        
+        **Returns** the new coordinates for the projected array
         """
         if loc_array is None:
             loc_array = self.statlocs
@@ -191,9 +211,12 @@ class observatory(object):
         return newarray
     def get_projected_geometric_pistons(self, taraltaz):
         """
-        Returns the geomtric piston resutling from the pointing
+        **Parameters:**
+        
+        * taraltaz : the astropy.coordinates.AltAz of the target
+        
+        **Returns** the geomtric piston resutling from the pointing
         of the array.
-        taraltaz : the astropy.coordinates.AltAz of the target
         """
         arrayaz = self.R((180 - taraltaz.az.value)*np.pi/180).dot(self.statlocs.T).T
         pistons = self.C(taraltaz.alt.value * np.pi/180).dot(arrayaz.T).T
@@ -212,10 +235,13 @@ def test_observatory(tarname="Tau cet",
     
     """
     Runs some test for the core functions of observatory
-    tarname    : The name of the target to use
-    startend   : A list or tuple of two time strings inspressed in UTC matching the format:
-                    "2020-10-20T00:00:00"
-    nblocs     : The number of observing blocs to compute
+    
+    **Parameters:**
+    
+    * tarname    : The name of the target to use
+    * startend   : A list or tuple of two time strings inspressed in UTC matching the format:
+      "2020-10-20T00:00:00"
+    * nblocs     : The number of observing blocs to compute
     """
     from kernuller import VLTI
     from . import plot_tools as pt

@@ -3,17 +3,22 @@ import astropy.io.fits as fits
 import matplotlib.pyplot as plt
 
 """
-Usage:
-------
+** Usage:**
 
 import map_manager
 themap = map_manager.map_meta(file="data/metamap_dec_XXXX.fits")
 
-# You can directly query the map like so:
-sensitivity = themap.get_value((10,14), 7.)
+**You can directly query the map like so:**
 
-# You may also plot the map
-fig = themap.plot_map(mag=8.)
+.. code-blocks::
+    
+    sensitivity = themap.get_value((10,14), 7.)
+
+**You may also plot the map:**
+
+.. code-blocks::
+
+    fig = themap.plot_map(mag=8.)
 """
 
 
@@ -25,20 +30,20 @@ class map_meta(object):
         """
         Create or load a meta map object:
         
-        LOAD:
-        -----
-            Parameters:
-            -----------
-            file    :  The path to a fits file
+        **LOAD:**
+        
+            **Parameters:**
             
-        CREATE:
-        -------
-            Parameters:
-            -----------
-            asim    : Simulator object from which map parameters are taken
-            starmags : An array of star magnitudes
-            mgs     : The planet magnitude maps
-            mgs_TNP : The planet magnitude maps for the NeymanPearson test
+            * file    :  The path to a fits file
+            
+        **CREATE:**
+        
+            **Parameters:**
+            
+            * asim    : Simulator object from which map parameters are taken
+            * starmags : An array of star magnitudes
+            * mgs     : The planet magnitude maps
+            * mgs_TNP : The planet magnitude maps for the NeymanPearson test
             
         """
         if isinstance(file, str):
@@ -54,9 +59,11 @@ class map_meta(object):
         """
         Builds the meta map from simulator
         
-        asim    : Simulator object from which map parameters are taken
-        starmags : An array of star magnitudes
-        mgs     : The planet magnitude maps
+        **Parameters:**
+        
+        * asim    : Simulator object from which map parameters are taken
+        * starmags : An array of star magnitudes
+        * mgs     : The planet magnitude maps
         """
         self.minx, self.maxx = np.min(asim.map_extent), np.max(asim.map_extent)
         self.resx = asim.maps.shape[-1]
@@ -97,7 +104,9 @@ class map_meta(object):
         """
         Loads meta map from file
         
-        file    :  The path to a fits file
+        **Parameters:**
+        
+        * file    :  The path to a fits file
         """
         hdul = fits.open(file)
         self.minx, self.maxx = hdul[0].header["MINX"], hdul[0].header["MAXX"]
@@ -121,12 +130,12 @@ class map_meta(object):
     def get_loc(self, loc, mag):
         """
         Get the index location from a relative location and star magnitude. Returns 
-        a tuple index to query self.mgs
+        a tuple index to query ``self.mgs``
         
-        Parameters:
-        -----------
-        loc      : 2-tuple Relative location on sky in the band of interest
-        mag      : Magnitude of the host star 
+        **Parameters:**
+        
+        * loc      : 2-tuple Relative location on sky in the band of interest
+        * mag      : Magnitude of the host star 
         """
         magindex = np.argmin(np.abs(self.mags-mag))
         xindex = np.argmin(np.abs(self.xs-loc[1]))
@@ -138,17 +147,17 @@ class map_meta(object):
         Get the limiting magnitude for a planet at the relative location **loc**
         around a star of magnitude **mag**.
         
-        Parameters:
-        -----------
-        loc      : 2-tuple Relative location on sky in the band of interest
-        mag      : Magnitude of the host star 
-        detector   : The type of detector test: "E" for energy detector
-                                                "N" for Neyman-Pearson
+        **Parameters:**
+        
+        * loc      : 2-tuple Relative location on sky in the band of interest
+        * mag      : Magnitude of the host star 
+        * detector   : The type of detector test: "E" for energy detector
+          "N" for Neyman-Pearson
         
         
-        Examples:
-        --------
-        pmag_limit = mymap.get_value((5.2, 4.8), 4.)
+        **Examples:**
+        
+        * pmag_limit = mymap.get_value((5.2, 4.8), 4.)
         """
         if "E" in detector:
             mag = self.mgs[self.get_loc(loc, mag)]
@@ -160,16 +169,15 @@ class map_meta(object):
         """
         Uses matplotlib to show a map at a given star magnitude.
         
-        Parameters:
-        -----------
-        mag      : The star magnitude
-        cmap       : The colormap to use
-        detector   : The type of detector test: "E" for energy detector
-                                                "N" for Neyman-Pearson
+        **Parameters:**
         
+        * mag      : The star magnitude
+        * cmap       : The colormap to use
+        * detector   : The type of detector test: "E" for energy detector
+          "N" for Neyman-Pearson
+        * **kwargs : Keyword arguments to pass to plt.figure()
         
-        **kwargs : Keyword arguments to pass to plt.figure()
-        Returns the figure object
+        **Returns** the figure object
         """
         
         magindex = np.argmin(np.abs(self.mags-mag))

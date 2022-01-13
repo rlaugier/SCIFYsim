@@ -63,19 +63,18 @@ class combiner(object):
         Work in progress. This helps define the chromatic behaviour of the combiner even
         when it is define achromatic.
         
-        Parameters:
-        -----------
+        **Parameters:**
+        
         * wl      : An array of wavelengths for which to compute the matrix
         
-        Result:
-        -------
-        Several matrices are stored in `combiner`
+        **Result:** Several matrices are stored in `combiner`
+        
         * self.Mcs    : a symbolic formula for the combiner matrix (2D sympy array)
-                        as a function of the wavenumber k
+          as a function of the wavenumber k
         * self.Mcl    : The matrix as a lambda-function of (k, 0) 
-                            The extra 0 parameter passed helps to cast the correct shape
+          The extra 0 parameter passed helps to cast the correct shape
         * self.Mcn    : The numpy ndarray of the matrix of interest
-                            shape is (n_wl, n_out, n_in)
+          shape is (n_wl, n_out, n_in)
         
         """
         # Defining a chromatic version of the matrix
@@ -141,23 +140,21 @@ class combiner(object):
         """
         A 
         
-        Parameters:
-        -----------
+        **Parameters:**
 
         - file         : The config file
         - ph_shifters  : Phase shifters between first and second stage default: (0,0)
                         These correspond to the "internal modulation"
 
-        Config keywords:
-        ----------------
+        **Config keywords:**
 
         * ``configuration.combiner`` 						Name of the combiner architecture
         * ``configuration.photometric_tap`` 		Fraction of light (power) sent to the photometric channels
 
         * ``configuration.input_phase_offset``	Additional phase offset as part of the design of the combiner
 
-        Accepted combiners:
-        -------------------
+        **Accepted combiners:**
+        
         Managed by ``configuration.combiner``
 
         - angel_woolf_ph,
@@ -251,6 +248,7 @@ class combiner(object):
                  mask_photometric=photo,
                  lamb=lamb)
         return obj
+
 def test_combiner(combiner, nwl=10):
     hr = kernuller.mas2rad(16)
     xx, yy = np.meshgrid(np.linspace(-hr, hr, 1024),

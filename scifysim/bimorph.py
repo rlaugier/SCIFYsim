@@ -5,6 +5,11 @@ import matplotlib.pyplot as plt
 
 import logging
 
+"""
+**DEPRECATED** This submodule is a remnant from GENIEsim translation. 
+
+"""
+
 logit = logging.getLogger(__name__)
 def set_logging_level(level=logging.WARNING):
     logit.setLevel(level=level)

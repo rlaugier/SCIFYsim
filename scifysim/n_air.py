@@ -28,44 +28,51 @@ def n_air(lambda_ , temp=273.15+15., pres=1000.,
          rhum=0., co2=450., ph2o=None, eso=False,
          column=False, nws=None):
     """
-    ; DESCRIPTION
-    ;   Returns the phase refractive index (n-1) of air a function of (IR) wavelength (in m),
-    ;   and optionally, temperature (in K), pressure (in bar), relative humidity (%) and CO2 content (in ppm).
-    ;   Note that the used approximation for air applies in the range from 300 to 1690 nm,
-    ;   hence their use at much longer wavelengths should be done with caution.
-    ;   For wavelengths longer than 1.7 micron, use the Hill & Lawrence approximation for water vapor,
-    ;   which has been verified with experimental data up to 15 micron.
-    ;
-    ; INPUT
-    ;   lambda_ : wavelength vector in meters
-    ;
-    ; KEYWORDS
-    ;   temp   : air temperature [K]
-    ;   pres   : air pressure [mbar]
-    ;   rhum   : relative humidity of the air [%]
-    ;   co2    : CO2 content in the air [ppm]
-    ;   ph2o   : partial pressure of water vapour [in Pa = 0.01 mbar]
-    ;            if set, overrules RHUM -- if not defined, partial pressure will be given on output
-    ;   eso    : set this keyword to use E. Marchetti's moist air refractive index instead of Ciddor + Hill & Lawrance
-    ;   column : set this keyword to convert to input into fs/(mopl/m²), instead of the standard unitless n-1 value
-    ;   nws    : on output, returns the refractive index of pure water vapour (unless ESO keyword is set)
-    ;
-    ; CALLS
-    ;   MOL_DENS
-    ;   N_H2O
-    ;
-    ; REFERENCE
-    ;   J.E. Decker et al. "Updates to the NRC gauge block interferometer", NRC document 42753, 8 August 2000
-    ;   P.E. Ciddor, "The refractive index of air: new equations for the visible and near infrared", Appl. Opt. 35 (9), 1566-1573
-    ;   J. Meisner & R. Le Poole, "Dispersion affecting the VLTI and 10 micron interferometry using MIDI", Proc. SPIE 4838
-    ;   http://www.eso.org/gen-fac/pubs/astclim/lasilla/diffrefr.html
-    ;
-    ; MODIFICATION HISTORY
-    ;   Version 1.0, 17-SEP-2002, by Roland den Hartog, ESA / ESTEC /  Genie team, rdhartog@rssd.esa.int
-    ;   Version 1.1, 09-OCT-2002, RdH: conversion to column densities (Meisner's n^hat) implemented
-    ;   Version 1.2, 01-NOV-2002, RdH: water vapor index based on approximation also valid in the IR
-    ;   Version 1.3, 03-JUL-2003, OA:  PostScript output of test harness modified
-    ;   Version 1.4, 15-DEC-2009, OA:  Removed discontinuity at 1.7µm by using tabulated water vapour refraction index instead of models + improved header
+    This function is a translation of a function of GENIEsim.
+    
+    **DESCRIPTION**
+        Returns the phase refractive index (n-1) of air a function of (IR) wavelength (in m),
+        and optionally, temperature (in K), pressure (in bar), relative humidity (%) and CO2 content (in ppm).
+        Note that the used approximation for air applies in the range from 300 to 1690 nm,
+        hence their use at much longer wavelengths should be done with caution.
+        For wavelengths longer than 1.7 micron, use the Hill & Lawrence approximation for water vapor,
+        which has been verified with experimental data up to 15 micron.
+    
+    **Argument**
+    
+    * lambda_ : wavelength vector in meters
+    
+    **Keyword arguments**
+    
+    * temp   : air temperature [K]
+    * pres   : air pressure [mbar]
+    * rhum   : relative humidity of the air [%]
+    * co2    : CO2 content in the air [ppm]
+    * ph2o   : partial pressure of water vapour [in Pa = 0.01 mbar]
+      if set, overrules RHUM -- if not defined, partial pressure will be given on output
+    * eso    : set this keyword to use E. Marchetti's moist air refractive index instead of Ciddor + Hill & Lawrance
+    * column : set this keyword to convert to input into fs/(mopl/m²), instead of the standard unitless n-1 value
+    * nws    : on output, returns the refractive index of pure water vapour (unless ESO keyword is set)
+    
+    **CALLS**
+    
+    * MOL_DENS
+    * N_H2O
+    
+    **REFERENCE**
+    
+    * J.E. Decker et al. "Updates to the NRC gauge block interferometer", NRC document 42753, 8 August 2000
+    * P.E. Ciddor, "The refractive index of air: new equations for the visible and near infrared", Appl. Opt. 35 (9), 1566-1573
+    * J. Meisner & R. Le Poole, "Dispersion affecting the VLTI and 10 micron interferometry using MIDI", Proc. SPIE 4838
+    * `<http://www.eso.org/gen-fac/pubs/astclim/lasilla/diffrefr.html>`_
+    
+    **MODIFICATION HISTORY**
+    
+    * Version 1.0, 17-SEP-2002, by Roland den Hartog, ESA / ESTEC /  Genie team, rdhartog@rssd.esa.int
+    * Version 1.1, 09-OCT-2002, RdH: conversion to column densities (Meisner's n^hat) implemented
+    * Version 1.2, 01-NOV-2002, RdH: water vapor index based on approximation also valid in the IR
+    * Version 1.3, 03-JUL-2003, OA:  PostScript output of test harness modified
+    * Version 1.4, 15-DEC-2009, OA:  Removed discontinuity at 1.7µm by using tabulated water vapour refraction index instead of models + improved header
 
     """
     
@@ -240,49 +247,62 @@ def n_h2o(lambda_, approx=False, column=False,
             co2=450., pres=1013.25, rad=False, rhum=0.,
             table=False, temp=296.15, wda=False, freq=False):
     """
-    ; PURPOSE:
-    ;   Returns the refractive index (n-1) of water vapor a function of (IR) wavelength (in m),
-    ;   in the range from 3.3 to 10.6 micron,
-    ;   and optionally, temperature (in K), and vapor density in (kg/m3)
-    ;
-    ; KEYWORDS:
-    ;   TEMP:   temperature in K
-    ;   PRES:   pressure in mbar
-    ;   RHUM:   relative humidity in %
-    ;   CO2:    CO2 fraction in ppm
-    ;   APPROX: if not set, the table from Mathar will be interpolated at the input wavelengths
-    ;           if set to 1, use approximate formula by Hill & Lawrence
-    ;           if set to 2, use approximate formula by Ciddor
-    ;   TABLE:  set this keyword to use the full Mathar table -- warning, this modifies the lambda array on output (ONLY FOR TEST PURPOSE)
-    ;   COLUMN: convert units to fs / (mol/m�), such that t_delay = n_H20 * column density
-    ;   RAD:    convert units to radians
-    ;   WDA:    the refraction index is given for water vapour displacing air instead of bare water vapour, in units of fs/(mol/m�)
-    ;
-    ; RESTRICTIONS:
-    ;   Does require a file 'n_mathar.dat' to be present in same directory
-    ;   The Mathar data table does not include wavelengths smaller than 1.819 �m.
-    ;   At wavelengths smaller than 1.819 �m, the Hill & Lawrence approximation is used instead.
-    ;   This produces a discontinuity of N_H2O at 1.819 �m.
-    ;
-    ; CALLS:
-    ;   N_AIR
-    ;
-    ; REFERENCE:
-    ;   R.J. Hill, R.S. Lawrence, "Refractive index of water vapor in infrared windows", Infrared Phys. 26, 371 - 376 (1986)
-    ;   P.E. Ciddor, "The refractive index of air: new equations for the visible and near infrared", Appl. Opt. 35 (9), 1566-1573
-    ;   F. Hase, R.J. Mathar, "Water vapor dispersion in the atmospheric window at 10 um", Preprint, 06-FEB-2002
-    ;
-    ; MODIFICATION HISTORY:
-    ;   Version 1.0, 13-SEP-2002, by Roland den Hartog, ESA / ESTEC /  Genie team, rdhartog@rssd.esa.int
-    ;   Version 2.0, 09-OCT-2002, RdH: included tabulated data by R.J. Mathar (obtained via J. Meisner)
-    ;   Version 2.1, 29-OCT-2002, RdH: conversion to WDA implemented
-    ;   Version 2.2, 01-NOV-2002, RdH: Ciddor's approximation implemented
-    ;   Version 2.3, 15-DEC-2009, OA:  Improved header
-    ;
-    ; TESTED
-    ;   13-SEP-2002, RdH: comparison with measurements by Hase and Mathar
-    ;   09-OCT-2002, RdH: direct comparison between Hill & Lawrence's approximation and Mathar's data
-    ;   15-NOV-2004, RdH: implemented option to convert output directly into radians
+    **PURPOSE:**
+    
+    Returns the refractive index (n-1) of water vapor a function of (IR) wavelength (in m),
+    in the range from 3.3 to 10.6 micron,
+    and optionally, temperature (in K), and vapor density in (kg/m3)
+        
+    **Argument**
+    
+    * lambda_ : wavelength vector in meters
+    
+    **Keyword arguments:**
+    
+    * temp:   temperature in K
+    * pres:   pressure in mbar
+    * rhum:   relative humidity in %
+    * co2:    CO2 fraction in ppm
+    * approx: 
+    
+            - if not set, the table from Mathar will be interpolated at the input wavelengths
+            - if set to 1, use approximate formula by Hill & Lawrence
+            - if set to 2, use approximate formula by Ciddor
+            
+    * table:  set this keyword to use the full Mathar table -- warning, this modifies the lambda array on output (ONLY FOR TEST PURPOSE)
+    * column: convert units to fs / (mol/m^2), such that t_delay = n_H20 * column density
+    * rad:    convert units to radians
+    * wda:    the refraction index is given for water vapour displacing air instead of bare water vapour, in units of fs/(mol/m^2)
+    
+    **RESTRICTIONS:**
+       Does require a file 'n_mathar.dat' to be present in same directory
+       The Mathar data table does not include wavelengths smaller than 1.819 µm.
+       At wavelengths smaller than 1.819 µm, the Hill & Lawrence approximation is used instead.
+       This produces a discontinuity of N_H2O at 1.819 µm.
+    
+    **CALLS:**
+    
+        * n_air
+    
+    **REFERENCE:**
+    
+    * R.J. Hill, R.S. Lawrence, "Refractive index of water vapor in infrared windows", Infrared Phys. 26, 371 - 376 (1986)
+    * P.E. Ciddor, "The refractive index of air: new equations for the visible and near infrared", Appl. Opt. 35 (9), 1566-1573
+    * F. Hase, R.J. Mathar, "Water vapor dispersion in the atmospheric window at 10 um", Preprint, 06-FEB-2002
+    
+    **MODIFICATION HISTORY:**
+    
+    * Version 1.0, 13-SEP-2002, by Roland den Hartog, ESA / ESTEC /  Genie team, rdhartog@rssd.esa.int
+    * Version 2.0, 09-OCT-2002, RdH: included tabulated data by R.J. Mathar (obtained via J. Meisner)
+    * Version 2.1, 29-OCT-2002, RdH: conversion to WDA implemented
+    * Version 2.2, 01-NOV-2002, RdH: Ciddor's approximation implemented
+    * Version 2.3, 15-DEC-2009, OA:  Improved header
+    
+    **TESTED**
+    
+    * 13-SEP-2002, RdH: comparison with measurements by Hase and Mathar
+    * 09-OCT-2002, RdH: direct comparison between Hill & Lawrence's approximation and Mathar's data
+    * 15-NOV-2004, RdH: implemented option to convert output directly into radians
     """
     cvac = 299792458.
     # !RL we need to do something for global variables

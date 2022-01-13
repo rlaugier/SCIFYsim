@@ -6,3 +6,4 @@ scifysim.plot\_tools module
    :undoc-members:
    :show-inheritance:
    :special-members:
+   :private-members:

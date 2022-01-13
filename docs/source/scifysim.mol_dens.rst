@@ -6,3 +6,4 @@ scifysim.mol\_dens module
    :undoc-members:
    :show-inheritance:
    :special-members:
+   :private-members:

@@ -24,8 +24,10 @@ def lambdifyz(symbols, expr, modules="numpy"):
     """
     Circumvents a bug in lambdify where silent 
     variables will be simplified and therefore
-    aren't broadcasted. https://github.com/sympy/sympy/issues/5642
+    aren't broadcasted. `<https://github.com/sympy/sympy/issues/5642>`_
+    
     Use an extra argument = 0 when calling
+    
     Please, keep the function synchronous with kernuller
     """
     assert isinstance(expr, sp.Matrix)
@@ -41,13 +43,13 @@ def lambdifyz(symbols, expr, modules="numpy"):
 class ee(object):
     """
     Additional functionnality needed:
-    see comments starting 2021/02/24 https://github.com/sympy/sympy/issues/5642 .
+    see comments starting 2021/02/24 `<https://github.com/sympy/sympy/issues/5642>`_
     """
     def __init__(self, expression):
         """
         ee is for Executable expression
         Encapsulates an expression for flexible lambda evaluation.
-        expression  : a sympy expression to 
+        expression  : a sympy expression to lambdify
         """
         self.expr = expression
         if self.expr.is_Matrix:
@@ -62,8 +64,11 @@ class ee(object):
         """
         Creates the lambda function. Currently, lambdification to numexpr
         does not support multiple outputs, so we create a list of lambda functions.
-        args    : a tuple of sympy for symbols to use as inputs
-        modules : The module to use for computation.
+        
+        **Parameters:**
+        
+        * args    : a tuple of sympy for symbols to use as inputs
+        * modules : The module to use for computation.
         """
         #Here, we have to decide if we need the function to all 
         if ("numexpr" in modules) and (self.outlen != 1):
@@ -104,24 +109,24 @@ def prepare_all(afile, thetarget=None, update_params=False,
                modificators=None):
     """
     A shortcut to prepare a simulator object
-    Parameters:
-    -----------
+    **Parameters:**
+    
     - afile      : Config file 
     - thetarget  : target name to replace in config file
     - instrumental_errors : Bool. Whether to include instrumental
-                    errors
+      errors
     - seed       : seed to pass when generating the 
-                    time series of instrumental errors
+      time series of instrumental errors
     - crop       : factor to pass to the injector
     - target_coords : Coordinates of the target 
-                    default:None : finds the target from catalog
+      default:None : finds the target from catalog
     - compensate_chromatic : Bool Whether to run the optimization
-                    of the actuators to compensate for chromaticity
-                    in the combiner
+      of the actuators to compensate for chromaticity
+      in the combiner
     - modificators : a dict of parameters to supersede the config file
     
-    Returns:
-    --------
+    **Returns:**
+    
     - asim        : A simulator object
     """
     from scifysim import director
@@ -160,7 +165,10 @@ import itertools
 def get_uv(puparray):
     """
     Computes the uv baselines for a given pupil configuration.
-    puparray    : An array representing the location of each pupil
+    
+    **Parameters:**
+    
+    * puparray    : An array representing the location of each pupil
     """
     uv = []
     for pair in itertools.combinations(puparray, 2):
@@ -265,19 +273,22 @@ def random_series_fft(ps, matchto=None, matchlength=10, keepall=False, seed=None
     Returns a new series of data based on the provided power spectrum.
     If matchto is provided, the new series is adjusted for continuity 
     to that data.
-    Parameters:
-    ps       : A power spectrum
-    matchto  : np.ndarray of preceding series. The mean of the first
-                n (matchlength) values of the new series are matched
-                to the mean of the last n values of this array.
-    matchlength : integer. The number of values to match 
-    keepall  : Boolean. If true, will return the concatenation of the
-                new array with the old. If False, will return only the
-                new array.
+    
+    **Parameters:**
+    
+    * ps       : A power spectrum
+    * matchto  : np.ndarray of preceding series. The mean of the first
+      n (matchlength) values of the new series are matched
+      to the mean of the last n values of this array.
+    * matchlength : integer. The number of values to match 
+    * keepall  : Boolean. If true, will return the concatenation of the
+      new array with the old. If False, will return only the
+      new array.
     
     
-    output:
-    a numpy ndarray of the time series
+    **Returns:**
+    
+    * a numpy ndarray of the time series
     """
     rng = np.random.default_rng(np.random.SeedSequence(seed))
     newphi = rng.uniform(low=-np.pi, high=np.pi, size=ps.shape[0])
@@ -299,11 +310,13 @@ def matchseries(a, b, nmatch=10):
     """
     Matches series b with series a with the nmatch last samples of a and
     the nmatch first samples of b.
-    Returns the concatenation.
     
-    a        : 1D array the root of the series
-    b        : 1D array the tail of the series 
-    nmatch   : integer  The number of samples used to match the mean 
+    
+    * a        : 1D array the root of the series
+    * b        : 1D array the tail of the series 
+    * nmatch   : integer  The number of samples used to match the mean 
+    
+    **Returns** the concatenation.
     """
     adj0 = a[-nmatch:].mean()
     adj1 = b[:nmatch].mean()
@@ -435,13 +448,17 @@ def get_star_params(star, verbose=True, showtable=False):
     """
     Queries GAIA DR2 catalog for distance, radius and 
     temperature of star:
-    star   : str   the name of the star
-    verbose: Whether to print the details found
     
-    returns:
-    dist [pc]   : Distance
-    T    [K]    : Effective temperature
-    R    [Rsun] : Radius
+    **Parameters:**
+    
+    * star   : str   the name of the star
+    * verbose: Whether to print the details found
+    * showtable: Whether to show the table in list form
+    
+    ** returns:**
+    * dist [pc]   : Distance
+    * T    [K]    : Effective temperature
+    * R    [Rsun] : Radius
     """
     from astroquery.vizier import Vizier
     import astropy.units as u
@@ -461,17 +478,23 @@ def get_star_params(star, verbose=True, showtable=False):
         print("T = ", T, "[K]")
         print("R = ", Rad, "[R_sun]")
     return dist, T, Rad
+
 def get_star_params_GAIA_JMMC(star, verbose=True, showtable=False):
     """
     Queries GAIA DR2 catalog for distance, radius and 
     temperature of star:
-    star   : str   the name of the star
-    verbose: Whether to print the details found
     
-    returns:
-    dist [pc]   : Distance
-    T    [K]    : Effective temperature
-    R    [Rsun] : Radius
+    **Parameters:**
+    
+    * star   : str   the name of the star
+    * verbose: Whether to print the details found
+    * showtable: Whether to show the table in list form
+    
+    **returns:**
+    
+    * dist [pc]   : Distance
+    * T    [K]    : Effective temperature
+    * R    [Rsun] : Radius
     """
     from astroquery.vizier import Vizier
     import astropy.units as u
@@ -525,7 +548,17 @@ def update_star_params(config, verbose=True):
     
 def find_best_night(obs, target, showplot=True, duration=None):
     """
-    duration   [h] : duration of the observing run
+    **Parameters:**
+    
+    * obs : Observatory object
+    * showplot : Whether to show a plot of the max elevation 
+    * duration   [h] : duration of the observing run
+    
+    **Returns:**
+    
+    * if duration is None (default) : ``besttime`` an ``astropy.Time`` object
+    * else : ``(Tstart, Tend)`` Start and end of the observing run
+    
     """
     import astropy.units
     from astropy.time import Time, TimeDelta
@@ -554,9 +587,17 @@ def find_best_night(obs, target, showplot=True, duration=None):
 def update_observing_night(config, time=None, duration=6.,  verbose=True,
                           target_coords=None):
     """
-    config               The parsed config file to modify
-    time      [fits format] (if None, will optimize for elevation)
-    duration  [h] 
+    **Parameters**
+    
+    * config  : The parsed config file to modify
+    * time : [fits format] (if None, will optimize for elevation)
+    * duration : [h] *Default*: 6.h
+    * verbose : Whether to print some of the intermediate results
+    * target_coords : Coordinates of the object of interst.
+    
+        - **None** *Default*: Uses the target in the config file
+        - ``astropy.SkyCoords`` object.
+    
     """
     from scifysim.observatory import observatory
     from astroplan import FixedTarget
@@ -608,19 +649,18 @@ def mag2sig(mag, dit, lead_transmission,context, eta=1., spectrum="flat", ds_sr=
     Obtains the coefficients including object magnitude, detector integration time,
     transmission, spectral channels, pixel solid angle, and quantum efficiency (default: 1.).
     
-    Parameters:
-    -----------
+    **Parameters:**
     
     * mag     : Magnitude of object (Vega)
     * dit     : detector integration time [s]
     * lead_transmission : The transmission of the leading element (often sky) of the 
-                transmission-emission chain
+      transmission-emission chain
     * context : The spectral context of the instrument (defining the vega magnitudes)
     * eta     : (default=1.) The quantum efficiency of the detector
     * spectrum : The type of spectrum of the object defaults to flat as opposed to the 
-                temperature of Vega.
+      temperature of Vega.
     * ds_sr   : When working with a map the solid angle of a pixel [sr]
-                Can be found in `simulator.vigneting_map.ds_sr` after maps have been computed
+      Can be found in `simulator.vigneting_map.ds_sr` after maps have been computed
     """
     
     aspectrum = context.sflux_from_vegamag(mag) #asim.src.planet.ss.flatten()
@@ -636,18 +676,17 @@ def coeff(dit, lead_transmission,context, eta=1., spectrum="flat", ds_sr=1.):
     Obtains the coefficients including detector integration time,
     transmission, spectral channels, pixel solid angle, and quantum efficiency (default: 1.).
     
-    Parameters:
-    -----------
+    **Parameters:**
     
     * dit     : detector integration time [s]
     * lead_transmission : The transmission of the leading element (often sky) of the 
-                transmission-emission chain
+      transmission-emission chain
     * context : The spectral context of the instrument (defining the vega magnitudes)
     * eta     : (default=1.) The quantum efficiency of the detector
     * spectrum : The type of spectrum of the object defaults to flat as opposed to the 
-                temperature of Vega.
+      temperature of Vega.
     * ds_sr   : When working with a map the solid angle of a pixel [sr]
-                Can be found in `simulator.vigneting_map.ds_sr` after maps have been computed
+      Can be found in `simulator.vigneting_map.ds_sr` after maps have been computed
     """
     acoeff = (1/(ds_sr) *\
                   dit * eta *\
@@ -659,7 +698,8 @@ def extract_diffobs_map(maps, simulator, dit=1., mag=None, postprod=None, eta=1.
     """
     Here in photons per dit (default=1s)
     
-    Parameters:
+    **Parameters:**
+    
     * maps     : Transmission maps for 1 ph/s/m2 
                         at the entrance of atmo
     * simulator : a sumulator object (see comments below)
@@ -673,6 +713,7 @@ def extract_diffobs_map(maps, simulator, dit=1., mag=None, postprod=None, eta=1.
                 simulator.combiner.K
     
     Simulator object is used for
+    
     * The head transmission (simulator.src.sky)
     * The solid angle of the pisel
     * The spectral context (for the spectral channels)
@@ -743,32 +784,33 @@ def eval_perf(afile,t_exp,n_frames=100,
                use_tqdm=False):
     """
     Evaluate the noise profile for a given parameter file.
-    Parameters:
-    -----------
+    
+    **Parameters:**
+    
     - afile      : Config file 
     - t_exp      : Exposure time
     - n_frames   : The number of frames for MC simulation
-                to evaluate the instrumental noise
+      to evaluate the instrumental noise
     - instrumental_errors : Bool. Whether to include instrumental
-                    errors
+      errors
     - seed       : seed to pass when generating the 
-                    time series of instrumental errors
+      time series of instrumental errors
     - crop       : factor to pass to the injector
     - target_coords : Coordinates of the target 
-                    default:None : finds the target from catalog
+      default:None : finds the target from catalog
     - compensate_chromatic : Bool Whether to run the optimization
-                    of the actuators to compensate for chromaticity
-                    in the combiner
+      of the actuators to compensate for chromaticity
+      in the combiner
     - plotall    : Whether to plot a bunch of charts
     - use_tqdm   : Whether tqdm should be used at the step of the
-                    MC simulations. (use false for parameter exploration)
+      MC simulations. (use false for parameter exploration)
                 
-    Returns:
-    --------
+    **Returns:**
+    
     - asim       : The simulator object
     - prof       : The noise profile object
     - characteristics : A dictionary containing a collection of
-                performance statistics
+      performance statistics
     """
     import scifysim as sf
     import numpy as np
@@ -959,13 +1001,14 @@ def produce_maps(asim, prof, adit=1.,
     """
     Utility macro that packages the production of multiple sensitivity
     maps for a given director object and noise profile
-    Parameters:
-    -----------
+    
+    **Parameters:**
+    
     - asim     : Simulator director object
     - prof     : Noise profile
     
-    Returns:
-    --------
+    **Returns:**
+    
     - metamap   : T
     - themap    : The energy detector map in magnitude
     - theNPmap  : The Neyman-Pearson detector map in magnitude

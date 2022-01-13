@@ -21,7 +21,7 @@ This documentation was generated through the following sequence.
 		* release = version
 
 
-	export SPHINX_APIDOC_OPTIONS=members,undoc-members,show-inheritance,special-members __init__
+	export SPHINX_APIDOC_OPTIONS=members,undoc-members,show-inheritance,special-members,private-members
 	sphinx-apidoc -f --separate -o source/ ../scifysim
 
 	# We must create a log file in source so that conf.py can import SCIFYsim to get the version

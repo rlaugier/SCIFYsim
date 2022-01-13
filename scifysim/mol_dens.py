@@ -10,18 +10,23 @@ def set_logging_level(level=logging.WARNING):
 def mol_dens( temp, pres, rhum, co2, ph2o=None,
             wvdens=False):
     """
-    ; PURPOSE:
-    ;   Returns the molair density of air and watervapor as a function temperature (in K), pressure (in mbar), relative humidity (%) and CO2 content (in ppm).
-    ;
-    ; REFERENCE:
-    ;   P.E. Ciddor, "The refractive index of air: new equations for the visible and near infrared", Appl. Opt. 35 (9), 1566-1573
-    ;
-    ; MODIFICATION HISTORY:
-    ;   Version 1.0, 09-OCT-2002, by Roland den Hartog, ESA / ESTEC /  Genie team, rdhartog@rssd.esa.int
+    **PURPOSE:**
+    Returns the molair density of air and watervapor as a function temperature (in K), pressure (in mbar), relative humidity (%) and CO2 content (in ppm).
     
-    # !RL ???? :
-    ON_ERROR,2
-    ptot=pres*100.
+    **Parameters:**
+    
+    * temp : Temperature
+    * pres : Pressure
+    * rhum : Relative humidity
+    * co2  : 
+    
+    
+    **REFERENCE:**
+        P.E. Ciddor, "The refractive index of air: new equations for the visible and near infrared", Appl. Opt. 35 (9), 1566-1573
+    
+    **MODIFICATION HISTORY:**
+        Version 1.0, 09-OCT-2002, by Roland den Hartog, ESA / ESTEC /  Genie team, rdhartog@rssd.esa.int
+    
     """
     
     
