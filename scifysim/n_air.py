@@ -73,6 +73,7 @@ def n_air(lambda_ , temp=273.15+15., pres=1000.,
     * Version 1.2, 01-NOV-2002, RdH: water vapor index based on approximation also valid in the IR
     * Version 1.3, 03-JUL-2003, OA:  PostScript output of test harness modified
     * Version 1.4, 15-DEC-2009, OA:  Removed discontinuity at 1.7µm by using tabulated water vapour refraction index instead of models + improved header
+    * SCIFYsim , Oct. 2020, : Translated to python by R. Laugier for SCIFYsim
 
     """
     

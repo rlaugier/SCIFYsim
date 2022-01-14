@@ -14,72 +14,83 @@ class control_loop(object):
                  n_dif=None, t_sens=None, act_name=None, t_late=None, t_dac=None,
                  ctrl_name=None):
         """
-        PURPOSE:
-        ;   General routine for emulating a classical, continuous closed feedback control loop,
-        ;   taking into account the noise from the sensor and the actuator,
-        ;   and effects from latency and digital-to-analog conversion.
-        ;   The controller is modelled as a cascade of PID stages, defined by the keyword PID
-        ;
-        ; INPUTS:
-        ;   freq: array with frequencies on which the input powerspectrum,
-        ;   psd :  is defined
-        ;
-        ; OUTPUT:
-        ;   The corrected psd, filter by the closed loop transfer function
-        ;
-        ; KEYWORDS:
-        ;   config:    the parsefile config object used mostly to recover the PID parameters
-        ;   section:   the section of the config object containing the controler parameters
-        ;   suffix:    the suffix used in the parameter names in this section 
-                       (Must be the same for the whole section)
-        ;   act_name:  the name of the function used to compute the transfer function of the actuator
-        ;   AFTER:     if set, enter the actuator noise at the output. Default is the input.
-        ;   BUTTER:    parameters that define the Butterworth filter to suppress known resonances
-        ;              for each resonance two parameters are specified: a center frequency f and a quality factor q,
-        ;              such that on input BUTTER is a 2N array [f1, q1, f2, q2, ..., fN, qN]
-        ;   CALIBRATE: automatic gain calibration so as to obtain a 30� margin (ensuring optimum performance of the loop)
-        ;              when CALIBRATE is set, the optimum PID parameters are passed on output through the parameter PID
-        ;   CTRL_NAME: the name of the function that describes the open loop tranfer function of the controller
-        ;   f_range:   set this keyword to [f_min, f_max] to set the frequency range inside which the PID settings should be calibrated
-        ;   INFO:      set this keyword to a value > 2 to print detailed info to the screen
-        ;   P_ACT:     noise spectrum of the actuator at frequencies 'freq'
-        ;   F_CUT:     cut-off frequency of the actuator
-        ;   P_SENS:    noise spectrum of the sensor at frequencies 'freq'
-        ;   PID:       On input: scalar or a 3 x N array that defines the transfer function (TF) of the controller as a cascade of PID stages
-        ;              If scalar, it contains only a proportional gain
-        ;              If 3-element array, it defines the TF as TF(s)=PID[0]+PID[1]/s+PID[2]*s
-        ;              If a 3 x N array, TF(s)=(PID[0,0]+PID[1,0]/s+PID[2,0]*s) * (PID[0,1]+PID[1,1]/s+PID[2,1]*s) * ... * (PID[0,N]+PID[1,N]/s+PID[2,N]*s)
-        ;              On output, if CALIBRATE is set: optimum PID parameters for the loop
-        ;   n_dif      If set, the differential term of the PID part is modified to PID[2]*s / (1D0 + (PID[2]*s)/(N_DIF*PID[0]))
-        ;   PLOT:      set this keyword to plot the transfer functions of the sensor, controller, actuator and of the open loop
-        ;   t_dac:     hold time for the DA converter
-        ;   t_late:    time constant for the latency, the time delay between the controller and the actuator
-        ;   t_sens:    time constant for the sensor (previously called the repetition time)
-        ;   TF_ACT:    on output: closed-loop transfer function for the actuator noise
-        ;   TF_SENS:   on output: closed-loop transfer function for the sensor noise
-        ;   TF_CL:     on output: closed-loop transfer function of the whole servo loop
-        ;
-        ; MODIFICATION HISTORY:
-        ;   Version 1.0,  26-NOV-2003, Roland den Hartog, ESA/ESTEC Genie team, rdhartog@rssd.esa.int
-        ;   Version 1.1,  04-DEC-2003, OA:  avoid division by 0 for frequency = 0
-        ;   Version 1.2,  22-DEC-2003, OA:  implemented gain optimization
-        ;   Version 1.3,  15-JAN-2003, OA:  updated parameters for intensity matching loop
-        ;   Version 1.4,  08-MAR-2004, OA:  Compensation of VLTI DL resonance peaks implemented (keyword COMP_RES)
-        ;   Version 1.5,  22-APR-2004, OA:  New parameter F_CUT for actuator cut-off frequency
-        ;   Version 1.6,  17-MAY-2004, RdH: General controller definition allowed
-        ;   Version 1.7,  02-JUN-2004, RdH: Corrected the transfer function for the actuator noise. Removed bug.
-        ;   Version 1.8,  07-JUN-2004, RdH: Implemented option between applying actuator noise at input of output. Default is input.
-        ;   Version 1.9,  09-JUN-2004, RdH: Frequency range for PID calibration can now be entered via a keyword
-        ;   Version 1.10, 14-JUN-2004, OA:  Butterworth filtering removed from calibration part
-        ;   Version 1.11, 01-JUL-2004, RdH: Give MARGINS several chances to come up with a stability criterion
-        ;   Version 1.12, 19-AUG-2004, RdH: Small error in line 259, pointed out by Oswald Wallner, corrected
-        ;   Version 1.13, 10-NOV-2004, OA:  DAC term corrected.
-        ;   Version 1.14, 21-DEC-2004, RdH: Modified differential term in PID cf. PF's criticism
-        ;   Version 1.15, 05-MAR-2005, RdH: Implemented test output for PF's control loop assessment
-        ;   Version 1.16, 06-OCT-2009, OA:  Avoid foating underflows
-        ;
-        ; TESTING:
-        ;   22-DEC-2003, OA:  Tested through VLTI_OPD, GENIE_OPD and GENIE_DISP. Frequency range and sampling still to be optimized.
+        **PURPOSE:**
+        
+            General routine for emulating a classical, continuous closed feedback control loop,
+            taking into account the noise from the sensor and the actuator,
+            and effects from latency and digital-to-analog conversion.
+            
+            The controller is modelled as a cascade of PID stages, defined by the keyword PID
+         
+        **INPUTS:*
+        
+        * freq: array with frequencies on which the input powerspectrum,
+        * psd :  is defined
+         
+        **OUTPUT:**
+        
+            The corrected psd, filter by the closed loop transfer function
+         
+        **KEYWORDS:**
+        
+        * config:    the parsefile config object used mostly to recover the PID parameters
+        * section:   the section of the config object containing the controler parameters
+        * suffix:    the suffix used in the parameter names in this section 
+          (Must be the same for the whole section)
+        * act_name:  the name of the function used to compute the transfer function of the actuator
+        * after:     if set, enter the actuator noise at the output. Default is the input.
+        * butter:    parameters that define the Butterworth filter to suppress known resonances
+          for each resonance two parameters are specified: a center frequency f and a quality factor q,
+          such that on input BUTTER is a 2N array [f1, q1, f2, q2, ..., fN, qN]
+        * calibrate: automatic gain calibration so as to obtain a 30� margin (ensuring optimum performance of the loop)
+          when calibrate is set, the optimum PID parameters are passed on output through the parameter PID
+        * ctrl_name: the name of the function that describes the open loop tranfer function of the controller
+        * f_range:   set this keyword to [f_min, f_max] to set the frequency range inside which the PID settings should be calibrated
+        * info:      set this keyword to a value > 2 to print detailed info to the screen
+        * p_act:     noise spectrum of the actuator at frequencies 'freq'
+        * f_cut:     cut-off frequency of the actuator
+        * p_sens:    noise spectrum of the sensor at frequencies 'freq'
+        * pid:       On input: scalar or a 3 x N array that defines the transfer function (TF) of the controller as a cascade of PID stages
+        
+                       - If scalar, it contains only a proportional gain
+                       - If 3-element array, it defines the TF as TF(s)=PID[0]+PID[1]/s+PID[2]*s
+                       - If a 3 x N array, TF(s)=(PID[0,0]+PID[1,0]/s+PID[2,0]*s) * (PID[0,1]+PID[1,1]/s+PID[2,1]*s) * ... * (PID[0,N]+PID[1,N]/s+PID[2,N]*s)
+                       - On output, if CALIBRATE is set: optimum PID parameters for the loop
+                       
+        * n_dif      If set, the differential term of the PID part is modified to PID[2]*s / (1D0 + (PID[2]*s)/(N_DIF*PID[0]))
+        * plot:      set this keyword to plot the transfer functions of the sensor, controller, actuator and of the open loop
+        * t_dac:     hold time for the DA converter
+        * t_late:    time constant for the latency, the time delay between the controller and the actuator
+        * t_sens:    time constant for the sensor (previously called the repetition time)
+        * tf_act:    on output: closed-loop transfer function for the actuator noise
+        * tf_sens:   on output: closed-loop transfer function for the sensor noise
+        * tf_cl:     on output: closed-loop transfer function of the whole servo loop
+         
+        **MODIFICATION HISTORY:**
+            
+            * Version 1.0,  26-NOV-2003, Roland den Hartog, ESA/ESTEC Genie team, rdhartog@rssd.esa.int
+            * Version 1.1,  04-DEC-2003, OA:  avoid division by 0 for frequency = 0
+            * Version 1.2,  22-DEC-2003, OA:  implemented gain optimization
+            * Version 1.3,  15-JAN-2003, OA:  updated parameters for intensity matching loop
+            * Version 1.4,  08-MAR-2004, OA:  Compensation of VLTI DL resonance peaks implemented (keyword COMP_RES)
+            * Version 1.5,  22-APR-2004, OA:  New parameter F_CUT for actuator cut-off frequency
+            * Version 1.6,  17-MAY-2004, RdH: General controller definition allowed
+            * Version 1.7,  02-JUN-2004, RdH: Corrected the transfer function for the actuator noise. Removed bug.
+            * Version 1.8,  07-JUN-2004, RdH: Implemented option between applying actuator noise at input of output. Default is input.
+            * Version 1.9,  09-JUN-2004, RdH: Frequency range for PID calibration can now be entered via a keyword
+            * Version 1.10, 14-JUN-2004, OA:  Butterworth filtering removed from calibration part
+            * Version 1.11, 01-JUL-2004, RdH: Give MARGINS several chances to come up with a stability criterion
+            * Version 1.12, 19-AUG-2004, RdH: Small error in line 259, pointed out by Oswald Wallner, corrected
+            * Version 1.13, 10-NOV-2004, OA:  DAC term corrected.
+            * Version 1.14, 21-DEC-2004, RdH: Modified differential term in PID cf. PF's criticism
+            * Version 1.15, 05-MAR-2005, RdH: Implemented test output for PF's control loop assessment
+            * Version 1.16, 06-OCT-2009, OA:  Avoid foating underflows
+            * SCIFYsim , Oct. 2020, : Translated to python by R. Laugier for SCIFYsim
+            
+         
+          **TESTING:**
+          
+            22-DEC-2003, OA:  Tested through VLTI_OPD, GENIE_OPD and GENIE_DISP. Frequency range and sampling still to be optimized.
         """
         
         self.min_amargin = 45. # Minimum phase margin: 45 deg
@@ -224,8 +235,8 @@ class control_loop(object):
     def cleanup(self):
         """
         Can use this method to remove unnecessary memory usage.
-        Will remove self.H_sens,  self.H_act, self.H_late, self.H_dac
-        and leave only self.H_ctrl and self.TF_openloop
+        Will remove ``self.H_sens``,  ``self.H_act``, ``self.H_late``, ``self.H_dac``
+        and leave only ``self.H_ctrl`` and ``self.TF_openloop``
         """
         try: del self.H_act
         except nameError:
@@ -306,13 +317,18 @@ def dB2amp(gain):
 def bode(f, H, labels=None, getfig=False):
     """
     Just a shortcut to plot a bunch of Bode plots easily
-    f     : Hz n_samples np.array The frequency samples
-    H     :    array-like containing either:
-            One array of amplitudes
-            n_series x n_samples (2D array)
-    Plots the Bode plot
     
-    Note: future improvements: option to save the plots or return the figure.
+    **Parameters:**
+    * f     : Hz n_samples np.array The frequency samples
+    * H     :    array-like containing either:
+      One array of amplitudes
+      n_series x n_samples (2D array)
+      
+    **Plots** the Bode plot
+    
+    .. Note::
+    
+        Future improvements: option to save the plots or return the figure.
     """
     import matplotlib.pyplot as plt
     
@@ -377,7 +393,8 @@ def get_error_from_margins(amargin, pmargin, no_pmar=False, no_amar=False):
 def test_error_margins():
     """
     Test harness for the margins cost function
-    Plots a map of the error returned by get_error_from_margins()
+    
+    **Plots** a map of the error returned by get_error_from_margins()
     """
     aa, pp = np.meshgrid(np.linspace(-20., 0., 200), np.linspace(0., 60., 200))
     errormap = get_error_from_margins(aa, pp)
