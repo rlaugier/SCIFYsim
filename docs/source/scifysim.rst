@@ -8,14 +8,11 @@ Submodules
    :maxdepth: 4
 
    scifysim.analysis
-   scifysim.bimorph
    scifysim.combiner
    scifysim.combiners
    scifysim.confconverter
-   scifysim.control_loop
    scifysim.correctors
    scifysim.director
-   scifysim.dummy
    scifysim.injection
    scifysim.map_manager
    scifysim.mol_dens

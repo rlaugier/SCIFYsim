@@ -17,25 +17,25 @@ The simulator object is organized as follows:
 
 - simulator
 
-	* **source** "``src``": Computes and holds the parameters of the target
-	* **injector** "``injector``"
+	* **source** ``src``: Computes and holds the parameters of the target
+	* **injector** ``injector``
 	
-		+ **atmo** "``screen``": list of wavefront screens
-		+ **fiber_head** "``fiber``": Computes and holds the information
+		+ **atmo** ``screen``: list of wavefront screens
+		+ **fiber_head** ``fiber``: Computes and holds the information
 			of the waveguide for the injection
-		+ **focuser** "``focal_plane``": The system to simulate injection
+		+ **focuser** ``focal_plane``: The system to simulate injection
 		
-	* **corrector** "``corrector``": Models the adjustments we can make to
+	* **corrector** ``corrector``: Models the adjustments we can make to
 	  the independent beams:
 	  
 	  + Optical path
 	  + Longituninal dispersion
 	  + etc. 
-	* **fringe_tracker** "``fringe_tracker``":
-	* **observatory** "``obs``": Contains the information on the array and its projection depending on the direction of observation.
-	* **combiner** "``combiner``": Computes and holds the combiner matrix
-	* **spectrograph** "``spectro``":
-	* **integrator** "``integrator``": Simulates the integrating behavior of light sensitive pixels.
+	* **fringe_tracker** ``fringe_tracker``:
+	* **observatory** ``obs``: Contains the information on the array and its projection depending on the direction of observation.
+	* **combiner** ``combiner``: Computes and holds the combiner matrix
+	* **spectrograph** ``spectro``:
+	* **integrator** ``integrator``: Simulates the integrating behavior of light sensitive pixels.
 	
 Simulating an exposure
 ----------------------
