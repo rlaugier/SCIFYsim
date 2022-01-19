@@ -40,7 +40,7 @@ def piston2size(piston, dist=140., psz=8., usize=150.):
     """
     Pretty visualization of projected array: Emulates perspective
     
-    **Parameters:**
+    **Arguments:**
     
     * dist  : The distance of the observer to the array
     * psz   : The diameters of the pupils
@@ -60,7 +60,7 @@ def plot_pupil(thearray, thepistons=None, psz=8.,
     """
     Plots the projected 
     
-    **Parameters:**
+    **Arguments:**
     
     * dist  : The distance of the observer to the array
     * psz   : The diameters of the pupils
@@ -136,7 +136,7 @@ def plot_projected_pupil(asim, seq_index,
     The plots are made of the array as seen from the target in meters 
     projected to RA-Dec coordinates.
     
-    **Parameters:**
+    **Arguments:**
     
     * asim    : Simulator object
     * seq_index: The index in the observing sequence (This feature may evolve)
@@ -194,7 +194,7 @@ def plot_projected_uv(asim, seq_indices=None,
     The plots are made of the array as seen from the target in meters 
     projected to RA-Dec coordinates.
     
-    **Parameters:**
+    **Arguments:**
     
     * asim    : Simulator object
     * seq_indices: The index in the observing sequence (This feature may evolve)
@@ -325,8 +325,10 @@ def plot_response_map(asim, outputs=None,
     """
     Plot the response map of the instrument for the target and sequence
     
-    **Parameters:**
+    **Arguments:**
     
+    * asim         : simulator object. The simulator must contains ``self.maps``
+    * outputs      : array-like : An array of outputs for which the maps will be plotted
     * wavelength   : np.ndarray containing wl indices (if None: use all the wavelength channels)
     * sequence_index : The indices of the sequence to plot
     * show         : Whether to call plt.show() for each plot
@@ -378,6 +380,91 @@ def plot_response_map(asim, outputs=None,
                          i))
         else:
             plt.suptitle(r"The maps at %.2f $\mu m$"%(asim.lambda_science_range[wavelength]*1e6))
+
+        plt.tight_layout()
+        if save is not False:
+            plt.savefig(save+"Compound_maps_%04d.png"%(i), dpi=dpi)
+        if show:
+            plt.show()
+            
+def plot_differential_map(asim, kernel=None,
+                      wavelength=None,
+                      sequence_index=None,
+                      show=True,
+                      save=False,
+                      figsize=(12,3),
+                      dpi=100,
+                      central_marker=True,
+                      **kwargs):
+    """
+    Plot the differential response map of the instrument for the target and sequence
+    
+    **Arguments:**
+    
+    * asim         : simulator object. The simulator must contains ``self.maps``
+    * kernel       : A kernel matrix indicating the output combinations to take. defaults to ``None``
+      which uses the ``asim.combiner.K`` matrix.
+    * wavelength   : np.ndarray containing wl indices (if None: use all the wavelength channels)
+    * sequence_index : The indices of the sequence to plot
+    * show         : Whether to call plt.show() for each plot
+    * save         : either False or a string containing the root of a path like "maps/figures_"
+    * figsize      : 2 tuple to pass to plt.figure()
+    * dpi          : The dpi for the maps
+    * **kwargs     : Additional kwargs to pass to imshow
+    * add_central_marker: Add a marker at the 0,0 location
+    * central_marker_size: The size parameter to give the central marker
+    * central_marker_type: The type of marker to use
+    """
+    base_params = {'x':0, 'y':0, 's':10., 'c':"w", 'marker':"*"}
+    if central_marker is True:
+        central_marker = base_params
+    elif isinstance(central_marker, dict):
+        # Update the params with the passed dict
+        for akey in central_marker:
+            base_params[akey] = central_marker[akey]
+        central_marker = base_params
+    if sequence_index is None:
+        sequence_index = range(len(asim.sequence))
+    if wavelength is None:
+        sumall = True
+    else:
+        sumall = False
+    n_outputs = asim.maps.shape[2]
+    if kernel is None:
+        if hasattr(asim.combiner, "K"):
+            kernel = asim.combiner.K
+        else:
+            logit.error("Could not find a relevant kernel matrix to plot the map.")
+            logit.error("Please pass it to the function or add it as simulator.combiner.K")
+            raise AttributeError("could not find the kernel matrix.")
+    n_kernels = kernel.shape[0]
+    outputs = np.arange(n_kernels)
+            
+    difmaps = np.einsum("k o, s w o x y -> s w k x y", kernel,  asim.maps)
+    
+    figs = []
+    for i in sequence_index:
+        fig = plt.figure(figsize=figsize, dpi=dpi)
+        for oi, o in enumerate(outputs):
+            seqmap = difmaps[i,:,o,:,:]
+            plt.subplot(1,outputs.shape[0], oi+1)
+            #outmap = seqmap[:,:,:]
+            if sumall:
+                themap = seqmap.sum(axis=0)
+            else :
+                themap = seqmap[wavelength,:,:]
+            plt.imshow(themap, extent=asim.map_extent, **kwargs)
+            if central_marker is not False:
+                plt.scatter(**central_marker)
+            plt.title("Output %d"%(o))
+            plt.xlabel("Position [mas]")
+        if sumall:
+            plt.suptitle("The compound differential maps for all wavelengths %.1f to %.1f $\mu m$ for block %d"%\
+                        (np.min(asim.lambda_science_range)*1e6,
+                         np.max(asim.lambda_science_range)*1e6,
+                         i))
+        else:
+            plt.suptitle(r"The differential maps at %.2f $\mu m$"%(asim.lambda_science_range[wavelength]*1e6))
 
         plt.tight_layout()
         if save is not False:
@@ -440,7 +527,7 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     Plots some information on the tuning of the combiner using geometric piston
     and chromatic corrector plates.
     
-    **Parameters:**
+    **Arguments:**
     
     * corrector : A corrector object
     * lambs     : The wavelengths to plot [m]

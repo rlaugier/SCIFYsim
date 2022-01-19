@@ -189,7 +189,7 @@ class noiseprofile(object):
         
 
 class spectral_context(object):
-    def __init__(self, vegafile="config/vega.ini"):
+    def __init__(self, vegafile="config/vega.ini", compensate_chromatic=True):
         """Spectral context for magnitude considerations
         
         **Parameters:**
@@ -199,7 +199,7 @@ class spectral_context(object):
         """
 
         self.avega = sf.utilities.prepare_all(vegafile, update_params=False,
-                            instrumental_errors=False)
+                            instrumental_errors=False, compensate_chromatic=compensate_chromatic)
         self.thevegassflux = self.avega.src.star.ss.sum(axis=1)
 
     def sflux_from_vegamag(self, amag):

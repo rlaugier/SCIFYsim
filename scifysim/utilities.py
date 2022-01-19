@@ -816,7 +816,6 @@ def eval_perf(afile,t_exp,n_frames=100,
     import numpy as np
     import matplotlib.pyplot as plt
     from scipy.linalg import sqrtm
-    from scipy.stats import shapiro
     from tqdm import tqdm
     
 #    asim = prepare_all(afile, thetarget=thetarget, update_params=update_params,
@@ -932,31 +931,49 @@ def eval_perf(afile,t_exp,n_frames=100,
     diffdata = datacube[:,:,4] - datacube[:,:,3]
     shapirops = np.array([shapiro(diffdata[:,i]).pvalue \
               for i in range(asim.lambda_science_range.shape[0])])
-    from scipy.optimize import curve_fit
+    
+    historgrams = []
+    gauss_params = []
     for i, awl in enumerate(asim.lambda_science_range[:]):
         print(i)
         print(f"Shapiro p = {shapirops[i]:.3f}")
+        print(f"Shapiro p-value: {np.format_float_scientific(shapirops[i], precision=3)}")
+        p0 = (np.mean(diffdata[:,i]), np.std(diffdata[:,i]))
+        myhist, edges = np.histogram(diffdata[:,i], bins=30, density=True)
+        bincenters = np.mean([edges[:-1], edges[1:]], axis=0)
+        nsamples = diffdata[:,i].shape[0]
+        histerror_base = np.sqrt(nsamples*myhist)/nsamples
+        # We further replace the 0 values (empty bins) with the maximum standard deviation.
+        histerror = np.where(histerror_base>0., histerror_base, np.max(histerror_base))
+        parameters, covariance = curve_fit(Gauss, bincenters, myhist,
+                                           p0=p0, sigma=histerror)
+        parameters_cauchy, covariance_cauchy = curve_fit(Cauchy, bincenters, myhist,
+                                           p0=p0, sigma=histerror)
         if plotall:
-            myhist, edges = np.histogram(diffdata[:,i], bins=30)
-            parameters, covariance = curve_fit(Gauss, edges[:-1], myhist,p0=(300.,1.0e-8, 0.))
+            print(p0)
             print(parameters)
-            plt.figure(figsize=(8,4), dpi=50)
+            print(parameters_cauchy)
+            plt.figure(figsize=(8,4), dpi=100)
             plt.subplot(121)
-            plt.plot(edges[:-1], myhist, label="Differential null (simulation)")
-            plt.plot(edges[:-1], Gauss(edges[:-1], parameters[0], parameters[1], parameters[2]), label="Gaussian fit")
+            plt.plot(bincenters, myhist, label="diff-null (MC)")
+            plt.plot(bincenters, Gauss(bincenters, parameters[0], parameters[1]), label="Gaussian fit")
+            plt.plot(bincenters, Cauchy(bincenters, parameters_cauchy[0], parameters_cauchy[1]), label="Cauchy fit")
+
             #plt.yscale("log")
             plt.title(f"Wavelength: $\lambda = {awl:.2e}$ m")
             plt.xlabel(f"Differential observable value [e-]")
-            plt.axvline(parameters[2],color="k")
+            plt.axvline(parameters[0],color="k")
             plt.axvline(np.mean(diffdata[:,i]),color="k", linestyle="--")
             plt.legend()
             plt.subplot(122)
-            plt.plot(edges[:-1], myhist, label="Differential null (simulation)")
-            plt.plot(edges[:-1], Gauss(edges[:-1], parameters[0], parameters[1], parameters[2]), label="Gaussian fit")
+            plt.plot(bincenters, myhist, label="MC_sim (diff-null)")
+            plt.plot(bincenters, Gauss(bincenters, parameters[0], parameters[1]), label="Gaussian fit")
+            plt.plot(bincenters, Cauchy(bincenters, parameters_cauchy[0], parameters_cauchy[1]), label="Cauchy fit")
+
             plt.yscale("log")
             plt.title(f"Wavelength: $\lambda = {awl:.2e}$ m")
             plt.xlabel(f"Differential observable value [e-]")
-            plt.axvline(parameters[2],color="k")
+            plt.axvline(parameters[0],color="k")
             plt.axvline(np.mean(diffdata[:,i]),color="k", linestyle="--")
             plt.savefig(f"/tmp/plots/gaussian_fit_{1e6*awl:.2f}microns.pdf")
             plt.show()
@@ -986,7 +1003,8 @@ def eval_perf(afile,t_exp,n_frames=100,
                   "inter-frame_ft_phase":np.mean(np.std(phase_means, axis=0)),
                   "intra-frame_ft_phase":np.mean(phase_stds),
                   "inter-frame_inj_phase":np.mean(np.std(injphase_means, axis=0)),
-                  "shapirops":shapirops
+                  "shapirops":shapirops,
+                  "fit_params":parameters
                   }
     
     return asim, prof, characteristics
@@ -1081,7 +1099,12 @@ def produce_maps(asim, prof, adit=1.,
     return ameta, themaps, theNPmaps
     
 
-    
-def Gauss(x, A, B, C):
-    y = A*np.exp(-1*B*(x-C)**2)
+from scipy.optimize import curve_fit
+from scipy.stats import shapiro, norm, cauchy
+
+def Gauss(x, loc, scale):
+    y = norm.pdf(x, loc=loc, scale=scale)
+    return y
+def Cauchy(x, loc, scale):
+    y = cauchy.pdf(x, loc=loc, scale=scale)
     return y

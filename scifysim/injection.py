@@ -857,8 +857,7 @@ class injector(object):
             pupil = tel_pupil(pres, pres, radius, file=theconfig, tel_index=0)
         
         ntelescopes = theconfig.getint("configuration", "n_dish")
-        if ntelescopes != 4:
-            raise NotImplementedError("Currently only supports 4 telescopes")
+        
         rm_inj_piston = theconfig.getboolean("atmo", "remove_injection_piston")
         
         obj = cls(pupil=pupil,
