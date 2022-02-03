@@ -18,6 +18,23 @@ You can obtain ``kernuller`` from its `github page <https://github.com/rlaugier/
 	git clone https://github.com/rlaugier/kernuller
 	cd kernuller
 	python setup.py install
+    
+XAOSIM
+-------
+
+You can obtain ``xaosim`` from its `github page <https://github.com/fmartinache/xaosim>`_
+
+.. code-block::
+    
+    git clone https://github.com/fmartinache/xaosim
+    cd xaosim
+    python setup.py install
+
+.. warning::
+    
+    The xaosim fails to install on windows, but the part that is problematic is
+    not used in SCIFYsim. If you encounter a problem here, open the ``setup.py`` file,
+    remove the line that stars with ``data_files`` and try again.
 
 Installing SCIFYsim
 -------------------

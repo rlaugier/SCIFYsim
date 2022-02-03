@@ -51,17 +51,18 @@ Dependencies:
 
 The following packages are required:
 
- - kernuller `<https://github.com/rlaugier/kernuller>`_
- - numpy
- - sympy
- - scipy
- - numexpr
- - matplotlib
- - tqdm
- - lmfit
- - astropy
- - astroplan
- - astroquery
+- kernuller `<https://github.com/rlaugier/kernuller>`_
+- numpy
+- sympy
+- scipy
+- numexpr
+- matplotlib
+- tqdm
+- lmfit
+- astropy
+- astroplan
+- astroquery
+- einops
 
 Optional:
 
