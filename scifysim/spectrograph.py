@@ -28,6 +28,23 @@ class integrator():
         * well       : [photelectrons] The well depth
         * n_sources  :            The number of different sources propagated through the instrument
         
+        **Content:**
+        
+        * ``planetlight``: The planet light with shape (n_wavelength, n_outputs)
+        * ``starlight``: The starlight light with shape (n_wavelength, n_outputs)
+        * ``static`` : The list for all sources (see ``self.source_labels``) of the
+          *background diffuse* light propagated through all ouptuts. Shape is
+          (n_wavelength, n_outputs) each. This is only gets updated once per pointing
+          (at the start of the first make_exposure, upon detection of the absence of a
+          ``xx_r`` attribute on the first diffuse source).
+        
+        
+        For each subexposure (if ``full_record`` is True in calling ``director.make_exposure`` or ``director.make_metrologic_exposure``.
+        
+        * ``ft_phase``: Phase error [rad] *from fringe-tracking* of the first wavelength bin.
+        * ``inj_phase``: Phase error [rad] *at injection* of the first wavelength bin.
+        * ``inj_amp``: Amplitude of the injection phasor *from injection*
+        * ``vals``: **Only** if ``self.keepall`` is true
         
         """
         
@@ -60,7 +77,7 @@ class integrator():
         
         **Parameters:**
         
-        * value   : The signals to accumulate
+        * value   : The signals to accumulate [photons]
         """
         self.acc += value
         self.runs += 1
@@ -82,7 +99,8 @@ class integrator():
     def get_total(self, spectrograph=None, t_exp=None,
                  n_pixsplit=None):
         """
-        Made a little bit complicated by the ability to simulate CRED1 camera
+        Made a little bit complicated by the ability to simulate CRED1 camera. It is
+        at this stage that the quantum efficiency ``self.eta`` is taken into account.
         
         **Parameters:**
         
@@ -91,7 +109,8 @@ class integrator():
         * t_exp         : [s]  Integration time to take into account dark current
           This is only used if self.exposure is close to 0. (if 
           the )
-        * n_pixsplit    : The number of pixels 
+        * n_pixsplit    : The number of pixels over which to spread the
+          signal of each spectral bin.
         """
         if n_pixsplit is not None: # Splitting the signal over a number pixels
             thepixels = self.acc.copy()
@@ -119,8 +138,9 @@ class integrator():
         return read
     def get_static(self):
         """
-        Returns the total value of integrated light from static sources.
-        Not affected by noises
+        **Returns** the total value of integrated light from static sources.
+        
+        **Not affected by noises**
         """
         static = np.array(self.static)
         total_static = self.n_subexps * static.sum(axis=0)
@@ -134,6 +154,19 @@ class integrator():
     def reset(self,):
         """
         Reset the values of the accumulation of signal in the detector.
+        
+        **Values reset:**
+        
+        * ``self.vals = []``
+        * ``self.acc = 0.``
+        * ``self.runs = 0``
+        * ``self.forensics = {}``
+        * ``self.mean = None``
+        * ``self.std = None``
+        * ``self.exposure = 0.``
+        * ``self.starlight = None``
+        * ``self.planetlight = None``
+        
         """
         self.vals = []
         self.acc = 0.

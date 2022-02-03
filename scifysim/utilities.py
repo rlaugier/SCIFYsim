@@ -19,6 +19,33 @@ def vec2diag(vec):
         A[i,i]= vec[i]
     return A
 
+def range2R(spectral_range, mode="bins"):
+    """
+    Convenience function to convert a sequence of wavelengths to the
+    target spectral resolution.
+    
+    **Arguments:**
+    
+    * spectral_range : (array-like) The series of wavelength channels [m]
+    * mode : Decides what is considered a step in the series.
+    
+        - "bins" : The simulator wl bins as found in
+          ``simulator.lambda_science_range``:
+          2 pixels per bin in Hi-5
+        - "chans" : The individual wavelength step
+        - "pixs" : The individual pixels (2.5 pixel per spectral channel)
+    
+    **Returns** an array of the individual spectral resolutions
+    """
+    if mode == "chans":
+        deltalamb = np.gradient(spectral_range)
+    elif mode == "bins":
+        deltalamb = np.gradient(spectral_range)/2*2.5
+    elif mode == "pixs":
+        deltalamb = np.gradient(spectral_range)*2.5
+    R = spectral_range/deltalamb
+    return R
+
 
 def lambdifyz(symbols, expr, modules="numpy"):
     """
@@ -130,7 +157,10 @@ def prepare_all(afile, thetarget=None, update_params=False,
     - asim        : A simulator object
     """
     from scifysim import director
-    asim = director.simulator(fpath=afile)
+    if isinstance(afile, str):
+        asim = director.simulator(fpath=afile)
+    else:
+        asim = director.simulator(file=afile)
     #asim.config = loaded_config
     if thetarget is not None:
         asim.config.set("target", "target", value=thetarget)
@@ -694,8 +724,9 @@ def coeff(dit, lead_transmission,context, eta=1., spectrum="flat", ds_sr=1.):
     return acoeff
 
 
-def extract_diffobs_map(maps, simulator, dit=1., mag=None, postprod=None, eta=1., K=None):
+def extract_diffobs_map_old(maps, simulator, dit=1., mag=None, postprod=None, eta=1., K=None):
     """
+    
     Here in photons per dit (default=1s)
     
     **Parameters:**
@@ -712,7 +743,7 @@ def extract_diffobs_map(maps, simulator, dit=1., mag=None, postprod=None, eta=1.
                 By default, the matrix is obtained from 
                 simulator.combiner.K
     
-    Simulator object is used for
+    Simulator object is used for:
     
     * The head transmission (simulator.src.sky)
     * The solid angle of the pisel
@@ -744,6 +775,64 @@ def extract_diffobs_map(maps, simulator, dit=1., mag=None, postprod=None, eta=1.
             ymap.append(ay)
     ymap = np.array(ymap)
     ymap = ymap.reshape(nt, nwl, 1, ny, nx)
+    ymap = ymap*acoeff[None,:,None,None, None]
+    
+    if postprod is not None:
+        print(ymap.shape)
+        for (k, i, j), a in np.ndenumerate(ymap[:,0,0,:,:]):
+            ymap[k,:,:,i,j] =  postprod[k,:,:].dot(ymap[k,:,:,i,j])
+    return ymap
+def extract_diffobs_map(maps, simulator, mod=np, dit=1., mag=None, postprod=None, eta=1., K=None):
+    """
+    Here in photons per dit (default=1s)
+    
+    **Parameters:**
+    
+    * maps     : Transmission maps for 1 ph/s/m2 
+                        at the entrance of atmo
+    * simulator : a sumulator object (see comments below)
+    * dit      : Detector integration time [s]
+    * mag      : The magnitude of a source on the map
+    * postprod : A post-processing (whitening matrix)
+    * eta      : The quantum efficiency of the detector
+    * K        : A matrix to extract the differential
+                observable quantities (kernel matrix).
+                By default, the matrix is obtained from 
+                simulator.combiner.K
+    
+    Simulator object is used for:
+    
+    * The head transmission (simulator.src.sky)
+    * The solid angle of the pisel
+    * The spectral context (for the spectral channels)
+    """
+    if len(maps.shape) == 5:
+        nt, nwl, nout, ny, nx = maps.shape
+    elif len(maps.shape) == 4:
+        nt, nwl, nout, no = maps.shape
+        raise NotImplementedError("single_datacube")
+    else : 
+        raise NotImplementedError("Shape not expected")
+    if K is None:
+        K = simulator.combiner.K
+        
+    acoeff = coeff(dit, simulator.src.sky,
+                               simulator.context,ds_sr=simulator.vigneting_map.ds_sr,
+                               eta=eta, spectrum="flat")
+    
+    
+#    coeff = (1/(asim.vigneting_map.ds_sr) *\
+#                  dit * eta *\
+#                  diffuse[0].get_downstream_transmission(asim.lambda_science_range))
+    ymap = []
+    ymap = mod.einsum("k o , s w o x y -> s w k x y", K, maps)
+    #for at in range(nt):
+    #    for awl in range(nwl):
+    #        ay = K.dot(maps[at,awl,:,:,:].reshape(nout,ny*nx))
+    #        ay = ay.reshape(1,ny,nx)
+    #        ymap.append(ay)
+    #ymap = np.array(ymap)
+    #ymap = ymap.reshape(nt, nwl, 1, ny, nx)
     ymap = ymap*acoeff[None,:,None,None, None]
     
     if postprod is not None:
@@ -932,23 +1021,26 @@ def eval_perf(afile,t_exp,n_frames=100,
     shapirops = np.array([shapiro(diffdata[:,i]).pvalue \
               for i in range(asim.lambda_science_range.shape[0])])
     
-    historgrams = []
+    nsamples = diffdata.shape[0]
+    medians = np.median(diffdata, axis=0)
+    histograms = []
+    edgess = []
     gauss_params = []
+    p0s = []
     for i, awl in enumerate(asim.lambda_science_range[:]):
         print(i)
         print(f"Shapiro p = {shapirops[i]:.3f}")
         print(f"Shapiro p-value: {np.format_float_scientific(shapirops[i], precision=3)}")
         p0 = (np.mean(diffdata[:,i]), np.std(diffdata[:,i]))
         myhist, edges = np.histogram(diffdata[:,i], bins=30, density=True)
-        bincenters = np.mean([edges[:-1], edges[1:]], axis=0)
-        nsamples = diffdata[:,i].shape[0]
-        histerror_base = np.sqrt(nsamples*myhist)/nsamples
-        # We further replace the 0 values (empty bins) with the maximum standard deviation.
-        histerror = np.where(histerror_base>0., histerror_base, np.max(histerror_base))
-        parameters, covariance = curve_fit(Gauss, bincenters, myhist,
-                                           p0=p0, sigma=histerror)
-        parameters_cauchy, covariance_cauchy = curve_fit(Cauchy, bincenters, myhist,
-                                           p0=p0, sigma=histerror)
+        bincenters = get_bincenters(edges)
+        parameters, histerror, covariance = fit_distribution(myhist, bincenters, Gauss,
+                                           p0=p0, nsamples=nsamples)
+        parameters_cauchy, histerror, covariance_cauchy = fit_distribution(myhist, bincenters, Cauchy,
+                                           p0=p0, nsamples=nsamples)
+        histograms.append(myhist)
+        edgess.append(edges)
+        p0s.append(p0)
         if plotall:
             print(p0)
             print(parameters)
@@ -975,12 +1067,14 @@ def eval_perf(afile,t_exp,n_frames=100,
             plt.xlabel(f"Differential observable value [e-]")
             plt.axvline(parameters[0],color="k")
             plt.axvline(np.mean(diffdata[:,i]),color="k", linestyle="--")
-            plt.savefig(f"/tmp/plots/gaussian_fit_{1e6*awl:.2f}microns.pdf")
+            #plt.savefig(f"/tmp/plots/gaussian_fit_{1e6*awl:.2f}microns.pdf")
             plt.show()
     ####################
     # More elipsis
     #####################
-    
+    histograms = np.array(histograms)
+    edgess = np.array(edgess)
+    p0s = np.array(p0s)
     from kernuller import pairwise_kernel
     ak = pairwise_kernel(2)
     myk = np.hstack((np.zeros((1,3)), ak, np.zeros((1,3))))
@@ -1004,7 +1098,12 @@ def eval_perf(afile,t_exp,n_frames=100,
                   "intra-frame_ft_phase":np.mean(phase_stds),
                   "inter-frame_inj_phase":np.mean(np.std(injphase_means, axis=0)),
                   "shapirops":shapirops,
-                  "fit_params":parameters
+                  "fit_params":parameters,
+                  "histograms":histograms,
+                  "hist_edges":edgess,
+                  "nsamples":nsamples,
+                  "p0":p0,
+                  "medians":medians
                   }
     
     return asim, prof, characteristics
@@ -1102,9 +1201,64 @@ def produce_maps(asim, prof, adit=1.,
 from scipy.optimize import curve_fit
 from scipy.stats import shapiro, norm, cauchy
 
+Gauss = norm.pdf
+Cauchy = cauchy.pdf
+
 def Gauss(x, loc, scale):
+    """
+    Shortcut to ``scipy.stats.norm.pdf``
+    """
     y = norm.pdf(x, loc=loc, scale=scale)
     return y
 def Cauchy(x, loc, scale):
+    """
+    Shortcut to ``scipy.stats.cauchy.pdf``
+    """
     y = cauchy.pdf(x, loc=loc, scale=scale)
     return y
+
+def get_bincenters(edges):
+    """
+    Quickly converts bin edges to bin centers:
+    
+    **Arguments:**
+    
+    * edges: *Array* of size n
+      
+    **Returns:**
+    
+    * bincenters: Centers of the intervals (size n-1)
+    """
+    bincenters = np.mean([edges[:-1], edges[1:]], axis=0)
+    return bincenters
+def fit_distribution(hist, bincenters, mypdf, nsamples=None, p0=(0.,0.)):
+    """
+    Fits the histogram to a given pdf
+    
+    **Arguments:**
+    
+    * hist : *array-like*  The empirical histogram given in density
+      so that it has unity integral
+    * bincenters : *array-like* The center of bins. Same shape as hist.
+      tip: use ``get_bincenters`` to convert edges to bin centers
+    * mypdf : *function* A function of the histogram to fit
+    * p0 : *array-like* Starting parameters for the fit. Typically
+      a couple (loc, scale). Recommended is (mean, std).
+      
+    **Returns:**
+    
+    * parameters: The best fit parameters (typically (loc, scale).
+    * histerror : An estimation of the errors on the bins, based on 
+      Poissonian statistics (and set to the max for empty bins.
+    * covariance: The covariance of the parameters.
+    """
+
+    if nsamples is None:
+        histerror=None
+    else:
+        histerror_base = np.sqrt(nsamples*hist)/nsamples
+        # We further replace the 0 values (empty bins) with the maximum standard deviation.
+        histerror = np.where(histerror_base>0., histerror_base, np.max(histerror_base))
+    parameters, covariance = curve_fit(mypdf, bincenters, hist,
+                                       p0=p0, sigma=histerror)
+    return parameters, histerror, covariance 

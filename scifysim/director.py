@@ -314,7 +314,7 @@ class simulator(object):
         self.integrator.ft_phase = []
         self.integrator.inj_phase = []
         self.integrator.inj_amp = []
-        logit.warning("Ugly management of injection/tracking")
+        
         for i in tqdm(range(self.n_subexps)):
             injected = next(self.injector.get_efunc)(self.lambda_science_range)
             tracked = next(self.fringe_tracker.phasor)

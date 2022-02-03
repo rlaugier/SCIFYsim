@@ -56,7 +56,7 @@ def piston2size(piston, dist=140., psz=8., usize=150.):
     
 def plot_pupil(thearray, thepistons=None, psz=8.,
                usize=150., dist=140., perspective=True,
-               compass=None, grid=None):
+               compass=None, grid=None, show=True):
     """
     Plots the projected 
     
@@ -73,6 +73,7 @@ def plot_pupil(thearray, thepistons=None, psz=8.,
     * grid   : Similar to the compass but for a bunch of parallels and meridians
       [parallels[[e0,n0], [e1, n1], ... ],
       meridians[[e0,n0], [e1, n1], ...]]
+    * show   : whether to call ``plt.show`` before returning
     
     **Returns:**
     
@@ -121,7 +122,8 @@ def plot_pupil(thearray, thepistons=None, psz=8.,
         plt.legend()
     #plt.xlim(np.min([0,:]), np.max([0,:]))
     #plt.ylim(np.min([1,:]), np.max([1,:]))
-    plt.show()
+    if show:
+        plt.show()
     return fig
 
 def plot_projected_pupil(asim, seq_index,
@@ -185,7 +187,8 @@ def plot_projected_pupil(asim, seq_index,
 def plot_projected_uv(asim, seq_indices=None,
                          grid=False, grid_res=5,
                          compass=True, compass_length=10.,
-                         usize=150., dist=140., perspective=True):
+                         usize=150., dist=140., perspective=True,
+                         show=True):
     """
     Designed as a wrapper around plot_pupil that also handles
     additional illustration.
@@ -199,10 +202,7 @@ def plot_projected_uv(asim, seq_indices=None,
     * asim    : Simulator object
     * seq_indices: The index in the observing sequence (This feature may evolve)
       if None: the whole sequence is mapped
-    * grid    : Whether to plot a grid of ground position
-    * grid_res: The number of lines in the grid for each direction
-    * compass : Whether to plot a little North and East symbol for direction
-    * compoass_length: In meters the length of the compass needles.
+    * show    : Whether to call ``plt.show`` before returning
     """
     anarray = asim.obs.statlocs
     
@@ -225,7 +225,11 @@ def plot_projected_uv(asim, seq_indices=None,
         for i, abl in enumerate(at):
             plt.scatter(abl[0], abl[1], color=f"C{i}", label=i)
             plt.scatter(-abl[0], -abl[1], color=f"C{i}", label=i)
-    plt.show()
+    plt.gca().set_aspect("equal")
+    plt.xlabel("Baseline U (RA) [m]")
+    plt.ylabel("Baseline V (dec) [m]")
+    if show:
+        plt.show()
     
     return fig, alluvs
 
@@ -311,6 +315,57 @@ def plot_injection(theinjector, show=True, noticks=True):
         plt.show()
         
     return focal_plane, amplitudes, phases
+
+def plot_output_sources(integ, lambda_range, margins=4, show=True):
+    """
+    Plot the content of all outputs for each of the different sources:
+    
+    **Arguments:**
+    
+    * integ  : An integrator object
+    * lambda_range : (*array-like*) The wavelength of interest.
+      Find it in ``simulator.lambda_science_range``
+    * margins : The margins to leave between the spectra of outputs
+      (in number of bar widths)
+    * show : (*boolean*) Whether to call ``plt.show`` before returning.
+    
+    
+    **Returns:**
+    
+    * signalplot:  A pyplot figure
+    
+    """
+    
+    shift_step = 1/(lambda_range.shape[0]+2)
+    outputs = np.arange(integ.summed_signal.shape[2])
+    isources = np.arange(len(integ.sums))
+    bottom = np.zeros_like(integ.sums[0])
+    pup = 1 # The pupil for which to plot the piston
+    print(integ.sums[0].shape)
+    signalplot = plt.figure(dpi=100)
+    bars = []
+    for ksource, (thesource, label) in enumerate(zip(integ.sums, integ.source_labels)):
+        for ilamb in range(lambda_range.shape[0]):
+            if ilamb == 0:
+                bars.append(plt.bar(outputs+shift_step*ilamb, thesource[ilamb,:], bottom=bottom[ilamb,:],
+                    label=label, width=shift_step, color="C%d"%ksource)) #yerr=noise[ilamb,:]
+            else:
+                bars.append(plt.bar(outputs+shift_step*ilamb, thesource[ilamb,:], bottom=bottom[ilamb,:],
+                    width=shift_step,  color="C%d"%ksource)) #yerr=noise[ilamb,:]
+        bottom += thesource
+    #plt.legend((bars[i][0] for i in range(len(bars))), source_labels)
+    #Handled the legend with an condition in the loop
+    plt.legend(loc="upper left")
+    plt.xticks(outputs)
+    plt.xlabel(r"Output and spectral channel %.1f to %.1f $\mu m$ ($R\approx %.0f$)"%(lambda_range[0]*1e6,
+                                                                                     lambda_range[-1]*1e6,
+                                                                                     asim.R.mean()))
+    plt.title("Integration of %.2f s on %s"%(t_exp, asim.tarname))
+    plt.ylabel("Number of photons")
+    if show:
+        plt.show()
+    
+    return signalplot
 
     
 def plot_response_map(asim, outputs=None,

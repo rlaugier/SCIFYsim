@@ -3,6 +3,7 @@ import numpy as np
 import scifysim as sf
 import logging
 from einops import rearrange
+import dask.array as da
 
 from scipy.linalg import sqrtm
 
@@ -75,7 +76,7 @@ class noiseprofile(object):
         
             If matrix is True, then sigma_phi_d is a covariance matrix (beware of variances on diagonal)
         
-        **Parameters:**
+        **Arguments:**
         
         * m_star       : Magnitude of the star
         * dit          : Detector integration time [s]
@@ -109,7 +110,7 @@ class noiseprofile(object):
         WARNING: if matrix is True, then the result is
         a covariance matrix (beware of variances on diagonal)
         
-        **Parameters:**
+        **Arguments:**
         
         * m_star       : Magnitude of the star
         * dit          : Detector integration time [s]
@@ -192,16 +193,58 @@ class spectral_context(object):
     def __init__(self, vegafile="config/vega.ini", compensate_chromatic=True):
         """Spectral context for magnitude considerations
         
-        **Parameters:**
+        **Arguments:**
         
-        * vegafile    : The configuration file for observation of Vega
-          in the same spectral configuration
+        * vegafile    : Either
+            
+            - The parsed config file of the original simulator:
+              a modified copy will be created for the reference 
+              Vega observations.
+            - The path *str* to a file for observation of Vega
+              in the same spectral configuration.
+        
+        * compensate_chromatic: Argument to be passed to the new simulator
+        
         """
-
-        self.avega = sf.utilities.prepare_all(vegafile, update_params=False,
+        if isinstance(vegafile, str):
+            self.avega = sf.utilities.prepare_all(vegafile, update_params=False,
                             instrumental_errors=False, compensate_chromatic=compensate_chromatic)
+        elif isinstance(vegafile, sf.parsefile.ConfigParser):
+            vega_config = self.create_vega_config(vegafile)
+            self.avega = sf.utilities.prepare_all(vega_config, update_params=False,
+                            instrumental_errors=False, compensate_chromatic=compensate_chromatic)
+            
+        else :
+            raise TypeError()
         self.thevegassflux = self.avega.src.star.ss.sum(axis=1)
-
+        
+    def create_vega_config(self, config, tarloc="Kraz"):
+        """
+        Builds the config file for a reference observation of Vega
+        
+        **Arguments:**
+        
+        * config: A parsed config file from the simulator itself.
+        * tarloc: A star used as a proxy to observe close to Zenith.
+          Kraz is a good fit for Paranal.
+        
+        **Returns** a modified parsed ``config`` file that has the same settings but that
+        is designed to reproduce an observation of Vega near zenith. Most parameters
+        describing the instrument are the same. A shorter sequence is created (only 
+        the central one is to be used: index 3). The target is chosen so that it passes
+        near zenith at observatory.
+        """
+        from copy import deepcopy
+        veg_config = deepcopy(config)
+        veg_config.set("target", "target", "Kraz")
+        veg_config.set("target", "star_radius", "2.36")
+        veg_config.set("target", "star_distance", "7.68")
+        veg_config.set("target", "star_temperature", "9600.")
+        veg_config.set("target", "planet_radius", "0.000001")
+        veg_config.set("target", "planet_temperature", "0.")
+        veg_config.set("target", "n_points", "7")
+        return veg_config
+    
     def sflux_from_vegamag(self, amag):
         """inverse of vegamag_from_ss()"""
         f = self.thevegassflux*10**(-amag/2.5)
@@ -215,7 +258,7 @@ class spectral_context(object):
     def get_mags_of_sim(self, asim):
         """Magnitudes of planet and star of a simulator object
         
-        **Parameters:**
+        **Arguments:**
         
         * asim     : A simulator object
         
@@ -253,7 +296,8 @@ def F2mag(F):
 def pdet_e(lamb, xsi, rank):
     """
     Computes the residual of Pdet
-    **Parameters:**
+    
+    **Arguments:**
     
     * lamb     : The noncentrality parameter representing the feature
     * xsi      : The location of threshold
@@ -267,7 +311,7 @@ def residual_pdet_Te(lamb, xsi, rank, targ):
     """
     Computes the residual of Pdet
     
-    **Parameters:**
+    **Arguments:**
     
     * lamb     : The noncentrality parameter representing the feature
     * targ     : The target Pdet to converge to
@@ -278,9 +322,11 @@ def residual_pdet_Te(lamb, xsi, rank, targ):
     """
     respdet = 1 - ncx2.cdf(xsi,rank,lamb) - targ
     return respdet
-def get_sensitivity_Te(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.,
+def get_sensitivity_Te_old(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.,
                 verbose=True):
     """
+    **Deprecated**
+    
     Magnitude map at which a companion is detectable for a given map and whitening matrix.
     The throughput for the signal of interest is given by the map at a reference magnitude.
     The effective noise floor is implicitly described by the whitening matrix.
@@ -355,6 +401,71 @@ def get_sensitivity_Te(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.
     #print(wsig.shape)
     
     return mags, fluxs, Tes
+def get_sensitivity_Te(maps, mod=np, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.,
+                verbose=True):
+    """
+    Magnitude map at which a companion is detectable for a given map and whitening matrix.
+    The throughput for the signal of interest is given by the map at a reference magnitude.
+    The effective noise floor is implicitly described by the whitening matrix.
+    
+    **Parameters**
+    
+    * maps       : Differential map for a given reference magnitude
+    * mod        : The math module to use for vector ops default=numpy
+    * pfa        : The false alarm rate used to determine the threshold
+    * pdet       : The detection probability used to determine the threshold
+    * postproc_mat : The matrix of the whitening transformation ($\Sigma^{-1/2}$)
+    * ref_mag    : The reference mag for the given map
+    * verbose    : Print some information along the way
+    
+     See *Ceau et al. 2019* for more information
+     
+    **Returns**
+    
+    * mags : The magnitude at which Te crosses the threshold
+    * fluxs: The fluxes at which Te crosses the threshold
+    * Tes  : The values of the test statistic on the map at the reference magnitude
+    
+    """
+    W = postproc_mat
+    if len(W.shape) == 3:
+        nbkp = W.shape[0]*W.shape[1]
+    elif len(W.shape)==2:
+        nbkp = W
+    else:
+        raise NotImplementedError("Wrong dimension for post-processing matrix")
+    if len(maps.shape) == 5:
+        nt, nwl, nout, ny, nx = maps.shape
+    elif len(maps.shape) == 4:
+        nt, nwl, nout, no = maps.shape
+        raise NotImplementedError("single_datacube")
+    else : 
+        raise NotImplementedError("Shape not expected")
+    f0 = sf.analysis.mag2F(ref_mag) #flux_from_vegamag(ref_mag)
+    
+    if postproc_mat is not None:
+        if len(postproc_mat.shape):
+            postproc_mat.shape[0]
+    #Xsi is the threshold
+    xsi = chi2.ppf(1.-pfa, nbkp)
+    lambda0 = 0.2**2 * nbkp
+    #The solution lamabda is the x^T.x value satisfying Pdet and Pfa
+    sol = leastsq(residual_pdet_Te, lambda0,args=(xsi,nbkp, pdet))# AKA lambda
+    lamb = sol[0][0]
+    w2 = 1/f0 * W
+    # Concatenate the wavelengths
+    kmap = maps.reshape((maps.shape[0], maps.shape[1]*maps.shape[2], maps.shape[3], maps.shape[4]))
+    # Apply the whitening
+    wsig = mod.einsum("s u k , s k y x -> s u y x", w2, kmap)
+    # Concatenate the observing sequence blocks
+    wsig = wsig.reshape(wsig.shape[0]*wsig.shape[1], wsig.shape[2], wsig.shape[3])
+    xtx = mod.einsum(" k y x , k y x -> y x ", wsig, wsig)
+    fluxs = np.sqrt(lamb) / np.sqrt(xtx)
+    mags = sf.analysis.F2mag(fluxs)
+    Tes = mod.einsum("k y x , k y x -> y x ", wsig*f0, wsig*f0)
+    
+    return mags, fluxs, Tes
+
 
 ##################################
 # The Neyman-Pearson test
@@ -375,7 +486,7 @@ def residual_pdet_Tnp(xTx, xsi, targ):
     """
     Computes the residual of Pdet in a NP test.
     
-    **Parameters:**
+    **Arguments:**
     
     * xTx     : The noncentrality parameter representing the feature
     * targ     : The target Pdet to converge to
@@ -394,7 +505,70 @@ def get_sensitivity_Tnp(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10
     The throughput for the signal of interest is given by the map at a reference magnitude.
     The effective noise floor is implicitly described by the whitening matrix.
     
-    **Parameters:**
+    **Arguments:**
+    
+    * maps       : Differential map for a given reference magnitude
+    * pfa        : The false alarm rate used to determine the threshold
+    * pdet       : The detection probability used to determine the threshold
+    * postproc_mat : The matrix of the whitening transformation ($\Sigma^{-1/2}$)
+    * ref_mag    : The reference mag for the given map
+    * verbose    : Print some information along the way
+    
+    **Returns**: A magnitude map
+    
+    """
+    from scipy.stats import norm
+    W = postproc_mat
+    if len(W.shape) == 3:
+        nbkp = W.shape[0]*W.shape[1]
+    elif len(W.shape)==2:
+        nbkp = W
+    else:
+        raise NotImplementedError("Wrong dimension for post-processing matrix")
+    if len(maps.shape) == 5:
+        nt, nwl, nout, ny, nx = maps.shape
+    elif len(maps.shape) == 4:
+        nt, nwl, nout, no = maps.shape
+        raise NotImplementedError("single_datacube")
+    else : 
+        raise NotImplementedError("Shape not expected")
+    f0 = sf.analysis.mag2F(ref_mag) #flux_from_vegamag(ref_mag)
+    # Concatenation of the wavelengths:
+    rmap = maps.reshape((maps.shape[0], maps.shape[1]*maps.shape[2], maps.shape[3], maps.shape[4]))
+    x_map = 1 * np.einsum("iok, iklm-> iolm",
+                     postproc_mat, rmap)
+    # Concatenation of the sequence
+    x_map = x_map.reshape((x_map.shape[0]*x_map.shape[1], x_map.shape[2], x_map.shape[3]))
+    #x_map = rearrange(x_map, "a b c d -> (a b) c d")
+    #Xsi is the threshold
+    xTx_map = np.einsum("olm, olm -> lm", x_map, x_map)
+    xsi_0 = get_Tnp_threshold_map(xTx_map, pfa)
+    
+    F_map = f0/np.sqrt(xTx_map) * ( norm.ppf(1-pfa, loc=0) - norm.ppf(1-pdet, loc=xTx_map, scale=np.sqrt(xTx_map)))
+    mag_map = sf.analysis.F2mag(F_map)
+    if verbose:
+        plt.figure()
+        plt.imshow(mag_map)
+        plt.colorbar()
+        plt.show()
+        print(x_map.shape)
+        print(xTx_map.dtype)
+        plt.figure()
+        plt.imshow(xsi_0)
+        plt.colorbar()
+        plt.show()
+    return mag_map
+
+def get_sensitivity_Tnp_old(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_mag=10.,
+                verbose=False, use_tqdm=True):
+    """
+    **Deprecated**
+    
+    Magnitude map at which a companion is detectable for a given map and whitening matrix.
+    The throughput for the signal of interest is given by the map at a reference magnitude.
+    The effective noise floor is implicitly described by the whitening matrix.
+    
+    **Arguments:**
     
     * maps       : Differential map for a given reference magnitude
     * pfa        : The false alarm rate used to determine the threshold
@@ -450,7 +624,7 @@ def correlation_map(signal, maps, postproc=None, K=None, n_diffobs=1, verbose=Fa
     """
     Returns the raw correlation map of a signal with a map.
     
-    **Parameters:**
+    **Arguments:**
     
     * signal      : The signal measured on sky shape:
                     (n_slots, n_wl, n_outputs)
