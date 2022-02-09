@@ -670,7 +670,7 @@ def get_location(simple_map, map_extent=None,
     r = np.abs(cpform)
     theta = np.angle(cpform)
     print("r, theta", r, theta)
-    if mode == polar:
+    if mode == "polar":
         return r, theta
     elif mode == "cartesian" :
         return pos
