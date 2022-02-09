@@ -376,6 +376,7 @@ def plot_response_map(asim, outputs=None,
                       figsize=(12,3),
                       dpi=100,
                       central_marker=True,
+                      layout="h",
                       **kwargs):
     """
     Plot the response map of the instrument for the target and sequence
@@ -390,6 +391,7 @@ def plot_response_map(asim, outputs=None,
     * save         : either False or a string containing the root of a path like "maps/figures_"
     * figsize      : 2 tuple to pass to plt.figure()
     * dpi          : The dpi for the maps
+    * layout       : "h" for horizontal array of map, "v" for vertical
     * **kwargs     : Additional kwargs to pass to imshow
     * add_central_marker: Add a marker at the 0,0 location
     * central_marker_size: The size parameter to give the central marker
@@ -417,7 +419,10 @@ def plot_response_map(asim, outputs=None,
         fig = plt.figure(figsize=figsize, dpi=dpi)
         for oi, o in enumerate(outputs):
             seqmap = asim.maps[i,:,o,:,:]
-            plt.subplot(1,outputs.shape[0], oi+1)
+            if layout == "h":
+                plt.subplot(1,outputs.shape[0], oi+1)
+            elif layout == "v":
+                plt.subplot(outputs.shape[0],1, oi+1)
             #outmap = seqmap[:,:,:]
             if sumall:
                 themap = seqmap.sum(axis=0)
@@ -526,6 +531,8 @@ def plot_differential_map(asim, kernel=None,
             plt.savefig(save+"Compound_maps_%04d.png"%(i), dpi=dpi)
         if show:
             plt.show()
+        figs.append(fig)
+    return figs
             
 def plot_opds(integ, step_time):
     """

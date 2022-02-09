@@ -656,7 +656,8 @@ def update_observing_night(config, time=None, duration=6.,  verbose=True,
     
 def get_location(simple_map, map_extent=None,
                  search_function=np.argmax, mode="polar"):
-    frac = np.array(np.unravel_index(np.argmax(simple_map), simple_map.shape))/np.array(simple_map.shape) 
+    maxraw = np.unravel_index(np.argmax(simple_map), simple_map.shape)
+    frac = np.array(maxraw)/np.array(simple_map.shape) 
     if map_extent is not None:
         gain = np.array(map_extent[1]-map_extent[0], map_extent[3]-map_extent[2])
         offset = np.array(map_extent[0], map_extent[2])
@@ -669,10 +670,13 @@ def get_location(simple_map, map_extent=None,
     r = np.abs(cpform)
     theta = np.angle(cpform)
     print("r, theta", r, theta)
-    if "polar" in mode:
+    if mode == polar:
         return r, theta
-    else :
+    elif mode == "cartesian" :
         return pos
+    
+    elif mode == "raw" :
+        return maxraw
     
 def mag2sig(mag, dit, lead_transmission,context, eta=1., spectrum="flat", ds_sr=1.):
     """

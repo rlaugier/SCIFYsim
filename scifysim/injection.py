@@ -259,7 +259,6 @@ class atmo(object):
         
         # Converting to a piston screen in microns at this point
         # r0 is now expected at the mean of the wl band
-        logit.warning("Update the way the phase screen is converted to a piston screen")
         kolm, self.modul = atmo_screen(screen_dimension=self.csz, screen_extent=self.lsz,
                                           r0=self.r0, L0=self.L0,
                                           fc=self.fc, correc=self.correc,
@@ -817,12 +816,12 @@ class injector(object):
         lambmax = lambcen + lambwidth/2
         lambda_range = np.linspace(lambmin, lambmax, nwl)
         
-        pdiams = theconfig.getarray("configuration","diam")
+        pdiams = theconfig.getarray("configuration", "diam")
         pdiam = pdiams[0]
         odiams = theconfig.getarray("configuration", "cen_obs")
         odiam = odiams[0]
         
-        separate_atmo_file = theconfig.getboolean("appendix","use_atmo")
+        separate_atmo_file = theconfig.getboolean("appendix", "use_atmo")
         if separate_atmo_file:
             rel_path = theconfig.get("appendix", "atmo_file")
             if confpath is not None:
@@ -844,8 +843,6 @@ class injector(object):
         #    r0 = theconfig.getfloat("atmo", "r0")
         
         
-        logit.warning("Setting default focal range")
-        logit.warning("focal_hrange=20.0e-6,  pscale = 4.5")
         # Focal scale and range
         focal_res = focal_res
         focal_hrange = theconfig.getfloat("fiber", "focal_hrange")
@@ -898,7 +895,8 @@ class injector(object):
                                     wind_angle=0.08+0.01*i))
             self.focal_plane.append([focuser(csz=self.phscreensz,
                                              xsz=self.focal_res, ysz=self.focal_res, pupil=self.pupil,
-                                             pscale=self.pscale, wl=wl, rm_inj_piston=self.rm_inj_piston) for wl in self.lambda_range])
+                                             pscale=self.pscale, pdiam=self.pdiam,
+                                             wl=wl, rm_inj_piston=self.rm_inj_piston) for wl in self.lambda_range])
             self.fiber = fiber_head()
         # Caluclating the focal length of the focuser
         self.focal_length = self.focal_hrange/utilities.mas2rad(self.focal_plane[0][0].fov/2)
@@ -1127,7 +1125,6 @@ class fringe_tracker(object):
         self.dry_scaling = self.config.getfloat("fringe tracker", "dry_scaling")
         self.wet_scaling = self.config.getfloat("fringe tracker", "wet_scaling")
         self.static_bias_scaling = self.config.getfloat("fringe tracker", "static_bias_scaling")
-        logit.warning("Loading keyword n_dish from [configuration] in fringe_tracking")
         self.n_tel = self.config.getint("configuration","n_dish")
         data = np.loadtxt(parent/self.reference_file, comments="#")
         self.ref_freqs = data[:,0]

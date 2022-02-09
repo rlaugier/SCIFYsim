@@ -410,7 +410,7 @@ def get_sensitivity_Te(maps, mod=np, pfa=0.002, pdet=0.9, postproc_mat=None, ref
     
     **Parameters**
     
-    * maps       : Differential map for a given reference magnitude
+    * maps       : Differential map for a given reference magnitude and exposure time
     * mod        : The math module to use for vector ops default=numpy
     * pfa        : The false alarm rate used to determine the threshold
     * pdet       : The detection probability used to determine the threshold
@@ -431,7 +431,7 @@ def get_sensitivity_Te(maps, mod=np, pfa=0.002, pdet=0.9, postproc_mat=None, ref
     if len(W.shape) == 3:
         nbkp = W.shape[0]*W.shape[1]
     elif len(W.shape)==2:
-        nbkp = W
+        nbkp = W.shape[0]
     else:
         raise NotImplementedError("Wrong dimension for post-processing matrix")
     if len(maps.shape) == 5:
@@ -447,9 +447,11 @@ def get_sensitivity_Te(maps, mod=np, pfa=0.002, pdet=0.9, postproc_mat=None, ref
         if len(postproc_mat.shape):
             postproc_mat.shape[0]
     #Xsi is the threshold
+    print("nbkp = ", nbkp)
     xsi = chi2.ppf(1.-pfa, nbkp)
+    print(xsi)
     lambda0 = 0.2**2 * nbkp
-    #The solution lamabda is the x^T.x value satisfying Pdet and Pfa
+    #The solution lambda is the x^T.x value satisfying Pdet and Pfa
     sol = leastsq(residual_pdet_Te, lambda0,args=(xsi,nbkp, pdet))# AKA lambda
     lamb = sol[0][0]
     w2 = 1/f0 * W
@@ -465,6 +467,7 @@ def get_sensitivity_Te(maps, mod=np, pfa=0.002, pdet=0.9, postproc_mat=None, ref
     Tes = mod.einsum("k y x , k y x -> y x ", wsig*f0, wsig*f0)
     
     return mags, fluxs, Tes
+
 
 
 ##################################
@@ -627,15 +630,21 @@ def correlation_map(signal, maps, postproc=None, K=None, n_diffobs=1, verbose=Fa
     **Arguments:**
     
     * signal      : The signal measured on sky shape:
-                    (n_slots, n_wl, n_outputs)
+      (n_slots, n_wl, n_outputs)
     * maps        : The maps for comparison shape:
-                    (n_slots, n_wl, n_outputs, x_resolution, y_resolution)
+      (n_slots, n_wl, n_outputs, x_resolution, y_resolution)
+    * postproc    : The whitening matrix to use 
     
-    **Returns** The correlation map
+    **Returns**
+    
+    * cmap1 : The correlation map
+    * xtx_map : The normalization map
     """
     assert (len(signal.shape) == 3), "Input shape (slots, wavelengths, outputs)"
     assert (len(maps.shape) == 5), "Maps shape (slots, wavelengths, outputs, position, position)"
     
+    print("n_diffobs", n_diffobs)
+    print("shape2", maps.shape[2])
     if signal.shape[2] != n_diffobs:
         diffobs = np.einsum("ij, mkj->mki", K, signal)
     elif signal.shape[2] == n_diffobs:
@@ -649,8 +658,12 @@ def correlation_map(signal, maps, postproc=None, K=None, n_diffobs=1, verbose=Fa
     wsig = np.einsum("ijk, ik -> ij", postproc, rearrange(diffobs, "a b c -> a (b c)"))
     print(wmap.shape)
     print(wsig.shape)
+    xsi = chi2.ppf(1.-0.01, wsig.flatten().shape[0])
+    print(f"xsi = {xsi}")
+    print(f"yty = {wsig.flatten().dot(wsig.flatten())}")
     
     cmap1 = np.einsum("ijkl, ij -> kl", wmap, wsig)
+    xtx_map = np.einsum("ijkl, ijkl -> kl", wmap, wmap)
     #cmap2 = np.einsum("ikl, i -> kl", rearrange(wmap, "a b c d -> (a b) c d"), wsig.flatten())
     
-    return cmap1
+    return cmap1, xtx_map

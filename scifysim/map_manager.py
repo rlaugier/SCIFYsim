@@ -26,7 +26,7 @@ themap = map_manager.map_meta(file="data/metamap_dec_XXXX.fits")
 class map_meta(object):
     def __init__(self, asim=None, starmags=None,
                  mgs=None, mgs_TNP=None, file=None,
-                metadata={}):
+                metadata={}, dummy=False):
         """
         Create or load a meta map object:
         
@@ -44,14 +44,19 @@ class map_meta(object):
             * starmags : An array of star magnitudes
             * mgs     : The planet magnitude maps
             * mgs_TNP : The planet magnitude maps for the NeymanPearson test
+            * dummy : If ``True`` Create an empty object. Can be use to facilitate
+              simple map operations.
             
         """
         if isinstance(file, str):
             self.from_fits(file)
         else:
-            self.from_sim(asim, starmags, metadata=metadata)
-            self.mgs = mgs
-            self.mgs_TNP = mgs_TNP
+            if not dummy:
+                self.from_sim(asim, starmags, metadata=metadata)
+                self.mgs = mgs
+                self.mgs_TNP = mgs_TNP
+            else:
+                metadata = None
         
         
         

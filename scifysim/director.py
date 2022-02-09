@@ -360,7 +360,7 @@ class simulator(object):
         * asource     : Source object or transmission_emission object
           including ss and xx_r attributes
         * injected    : complex phasor for the instrumental errors
-        * input_arra  : The projected geometric configuration of the array
+        * input_array  : The projected geometric configuration of the array
           use observatory.get_projected_array()
         * collected   : The intensity across wavelength and the difference source origins
         * dtype       : The data type to use (use np.float32 for maps)
@@ -825,6 +825,45 @@ class simulator(object):
         
         
     def make_map_dask(self, blockindex, vigneting_map, dtype="dask", map_index=0):
+        """
+        Create sensitivity map in ph/s/sr per spectral channel.
+        To get final flux of a point source :
+        
+        ``Map/ds_sr * p.ss * DIT``
+        
+        **Parameters:**
+        
+        * blockindex : The index in the observing sequence to create the map
+        * vigneting_map : The vigneting map drawn used for resolution
+        
+        """
+        self.point(self.sequence[blockindex], self.target)
+        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        #injected = self.injector.best_injection(self.lambda_science_range)
+        vigneted_spectrum = \
+                vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
+                                                  self.lambda_science_range, 1.)
+        # Caution: line is not idempotent!
+        #vigneted_spectrum = np.swapaxes(vigneted_spectrum, 0,1)
+        self.mapsource.ss = da.from_array(vigneted_spectrum.T)
+        #self.mapsource.ss = vigneted_spectrum
+        dummy_collected = da.ones(self.lambda_science_range.shape[0])
+        perfect_injection = da.ones((self.lambda_science_range.shape[0], self.ntelescopes))\
+            * self.corrector.get_phasor(self.lambda_science_range)
+        static_output = self.combine_light_dask(self.mapsource, perfect_injection,
+                                           array, dummy_collected,
+                                           dosum=False,map_index=map_index)
+        static_output = static_output.swapaxes(0, -1)
+        static_output = static_output.swapaxes(0, 1)
+        #static_output = static_output# * np.sqrt(vigneted_spectrum[:,None,:])
+        # lambdified argument order matters! This should remain synchronous
+        # with the lambdify call
+        # incoherently combining over sources
+        # Warning: modifying the array
+        #combined = np.abs(static_output*np.conjugate(static_output)).astype(np.float32)
+        return static_output
+    
+    def make_map_dask2(self, blockindex, vigneting_map, dtype="dask", map_index=0):
         """
         Create sensitivity map in ph/s/sr per spectral channel.
         To get final flux of a point source :
