@@ -612,7 +612,6 @@ class simulator(object):
                 self.integrator.accumulate(combined_starlight)
                 self.integrator.starlight += combined_starlight
             
-            
             combined_planetlight = self.combine_light(interest, injected, array, collected)
             if spectro is None:
                 self.integrator.accumulate(combined_planetlight)
@@ -691,7 +690,7 @@ class simulator(object):
         """
         pass
     
-    def point(self, time, target):
+    def point(self, time, target, refresh_array=False):
         """
         Points the array towards the target. Updates the combiner
         
@@ -699,11 +698,13 @@ class simulator(object):
         
         * time    : The time to make the observation
         * target  : The skycoord object to point
+        * refresh_array : Whether to call a lambdification of the array
         """
         self.obs.point(time, target)
         self.reset_static()
         thearray = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
-        self.combiner.refresh_array(thearray)
+        if refresh_array:
+            self.combiner.refresh_array(thearray)
     
     def build_all_maps(self, mapres=100, mapcrop=1.,
                        dtype=np.float32):

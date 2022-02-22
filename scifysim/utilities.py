@@ -1266,3 +1266,76 @@ def fit_distribution(hist, bincenters, mypdf, nsamples=None, p0=(0.,0.)):
     parameters, covariance = curve_fit(mypdf, bincenters, hist,
                                        p0=p0, sigma=histerror)
     return parameters, histerror, covariance 
+
+
+
+def parameters2table(parameters, rename=None,
+                     column_to_rename="Name", rem=True):
+    """
+    Convenience function to convert a ``lmfit.Parameters`` object to an astropy table.
+    
+    This is done by capturing stdout in a call of ``parameters.pretty_print()``
+    
+    **Arguments:**
+    
+    * parameters: a lmfit.Parameters object
+    * rename: a dict with the new names or None to do nothing
+    * column_to_rename: The name of the column for substitution
+    * rem: if:
+    
+        - True: Substitute ``column_to_replace``
+        - A ``string``: the name of the new column
+    
+    **Returns:** an astropy.table.Table object
+    
+    """
+    import io
+    from contextlib import redirect_stdout
+    from astropy.io import ascii
+    from astropy import table
+    f = io.StringIO()
+    with redirect_stdout(f):
+        parameters.pretty_print()
+    out = f.getvalue()
+    the_table = ascii.read(out)
+    
+    if rename is not None:
+        newnames = [rename[akey] for akey in list(the_table[column_to_rename])]
+        if rem is not True:
+            newcol = table.Column(newnames, name=rem)
+        elif rem is True:
+            newcol = table.Column(newnames, name=column_to_rename)
+        newcol = table.Column(newnames, name=column_to_rename,)
+        if rem is True:
+            the_table.remove_column(column_to_rename)
+        the_table.add_column(newcol, index=0)
+    return the_table
+    
+def parameters2latex(parameters, rename=None,
+                     column_to_rename="Name", rem=True,
+                     columns=None, latex_option="AA"):
+    """
+    This is done by capturing stdout in a call of ``parameters.pretty_print()``
+    
+    **Arguments:**
+    
+    * parameters: a lmfit.Parameters object
+    """
+    from astropy.io import ascii
+    my_table = parameters2table(parameters, rename=rename, 
+                                column_to_rename=column_to_rename,
+                                rem=rem)
+    if columns is None:
+        latex_output = table2latex(my_table, latex_option=latex_option)
+    else:
+        latex_output = table2latex(my_table[columns], latex_option=latex_option)
+    return latex_output
+def table2latex(table, latex_option="AA"):
+    """
+    Utility to output a latex formatted table from astropy.
+    """
+    from astropy.io import ascii
+    latex_output = ascii.write(table,
+                        Writer=ascii.Latex,
+                        latexdict=ascii.latex.latexdicts['AA'])
+    return latex_output
