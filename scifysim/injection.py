@@ -994,7 +994,6 @@ class injector(object):
         """
         This one will yield the method that interpolates all the injection phasors
         """
-        from scipy.interpolate import interp1d
         while True:
             focal_planes = []
             for i, scope in enumerate(self.focal_plane):
@@ -1018,7 +1017,6 @@ class injector(object):
         """
         This one will yield the method that interpolates all the injection phasors
         """
-        from scipy.interpolate import interp1d
         while True:
             injection_values = []
             for i, scope in enumerate(self.focal_plane):
@@ -1099,6 +1097,9 @@ class injector(object):
         """
         for ascreen in self.screen:
             ascreen.update_screen()
+            
+        # Discarding the first value : quick fix for python 3.9??
+        discard = next(self.get_efunc)(self.lambda_range)
 
     
     
