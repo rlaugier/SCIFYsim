@@ -94,7 +94,7 @@ class noiseprofile(object):
         
         
         sigma_phot = np.sqrt(self.eta * dit * (s_d + s_s))
-        sigma_phot_d = np.sqrt(np.sum(sigma_phot[:,self.mask_dark]**2, axis=-1))
+        sigma_phot_d = np.sqrt(np.sum(sigma_phot[:,self.mask_dark]**2, axis=-1)) # kernel will need different treatment here
         sigma_phot_photo = sigma_phot[:,self.mask_phot]
         sigma_phot_bright = sigma_phot[:,self.mask_bright]
         

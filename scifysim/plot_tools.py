@@ -583,8 +583,14 @@ def plot_opds(integ, step_time):
     return fig_phase, fig_amp, fig_outputs
 
 
+from kernuller.diagrams import plot_chromatic_matrix as cmpc
+import matplotlib.pyplot as plt
+from scifysim.correctors import get_Is
+
+
 def plot_corrector_tuning_angel_woolf(corrector,lambs,
-                                      combiner,show=True):
+                                      combiner,show=True,
+                                      maskout=[2,6]):
     """
     Plots some information on the tuning of the combiner using geometric piston
     and chromatic corrector plates.
@@ -606,9 +612,6 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     Currently works only with lambda_science_range
     """
     
-    from kernuller.diagrams import plot_chromatic_matrix as cmpc
-    import matplotlib.pyplot as plt
-    from scifysim.correctors import get_Is
     
     darkout_indices = np.arange(combiner.M.shape[0])[combiner.dark]
     # Normalisation factor is the peak intensity
@@ -626,7 +629,7 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     plt.yscale("log")
     plt.legend()
     plt.xlabel("Wavelength [m]")
-    plt.ylabel(f"Output contrast ($I^-/I^{{peak}}$)")
+    plt.ylabel(f"Output contrast ($\\frac{{I^-}}{{I^{{peak}}}}$)")
     plt.title("On-axis chromatic response")
     if show : plt.show()
     
@@ -634,7 +637,7 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     
     original_plt_params = plt.rcParams
     plt.style.use("default")
-    cmp_plot = cmpc(combiner.M[2:6,:], combiner.lamb, lambs,
+    cmp_plot = cmpc(combiner.M[maskout[0]:maskout[1],:], combiner.lamb, lambs,
                 plotout=corphasor, minfrac=0.9, show=show)
     plt.rcParams = original_plt_params
     
