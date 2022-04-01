@@ -153,7 +153,7 @@ def get_shape_res(params, combiner, corrector, lambs):
 
 
 class corrector(object):
-    def __init__(self, config, lambs):
+    def __init__(self, config, lambs, file=None):
         """
         A module that provides beam adjustments
         for the input. It contains amplitude *a*, geometric
@@ -167,6 +167,7 @@ class corrector(object):
           (At the __init__ stage, it is only used for
           the computation of a mean refractive index for
           the dispersive material)
+        * file A file containing the plate index
                     
         **Internal parameters:**
         
@@ -175,8 +176,11 @@ class corrector(object):
         * c     :     Vetor of the dispersive piston term [m]
         """
         self.config = config
-        nznse_file = np.loadtxt(znse_file,delimiter=";")
-        self.nznse = interp.interp1d(nznse_file[:,0]*1e-6, nznse_file[:,1],
+        if file is None:
+            nplate_file = np.loadtxt(znse_file,delimiter=";")
+        else: 
+            nplate_file = file
+        self.nplate = interp.interp1d(nplate_file[:,0]*1e-6, nplate_file[:,1],
                                      kind="linear", bounds_error=False )
         diams = self.config.getarray("configuration", "diam")
         n_tel = diams.shape[0]
@@ -184,8 +188,10 @@ class corrector(object):
         self.a = np.ones(n_tel)
         self.b = np.zeros(n_tel)
         self.c  = np.zeros(n_tel)
-        self.nmean= np.mean(self.nznse(lambs))
+        self.nmean= np.mean(self.nplate(lambs))
         self.dcomp = -(self.nmean-1)*self.c
+        
+        self.prediction_model = n_air.wet_atmo(config)
         
     
     def get_phasor(self, lambs):
@@ -199,17 +205,44 @@ class corrector(object):
         
         **Returns:** alpha
         """
-        ns = self.nznse(lambs)
+        ns = self.nplate(lambs)
         alpha = self.a[None,:]*np.exp(-1j*2*np.pi/lambs[:,None]*(self.b[None,:]+self.dcomp[None,:] +self.c[None,:]*(ns[:,None]-1)))
         return alpha
     def get_phasor_s(self, lamb):
         """
         Deprecated
         """
-        ns = self.nznse(lambs)
+        ns = self.nplate(lambs)
         alpha = self.a*np.exp(-1j*2*np.pi/lamb*(self.b + self.dcomp +self.c*(ns-1)))
         return alpha
-    
+    def get_raw_phase_correction(self, lambs, b=0,c=0, dcomp=0, model=None):
+        """
+        Returns the raw (non-wrapped) phase produced by an optical path
+        of b[m] in air and c[m] in plate material.
+        
+        **Parameters**
+        
+        * lambs :     The wavelength channels to consider [m]
+        * a     :     Vector of the amplitude term
+        * b     :     Vetor of the geometric piston term [m]
+        * c     :     Vetor of the dispersive piston term [m]
+        * dcomp :     A length of air to compensate for the plate
+        
+        
+        """
+        if model is None:
+            model = self.prediction_model
+        nair = model.get_Nair(lambs, add=1)
+        nplate = self.nplate(lambs)
+        return 2*np.pi/lambs*(nair*b + nplate*c)
+    def get_dcomp(self, c):
+        """
+        Returns the theoertical value of dcomp for a given value of compensator
+        plate, to correct for the pure piston term introduced.
+        """
+        dcomp = -(self.nmean-1)*c
+        return dcomp
+        
     def get_phasor_from_params(self, lambs, a=None,
                                b=None, c=None,
                                dcomp=None):
@@ -227,7 +260,7 @@ class corrector(object):
         * b     :     Vetor of the geometric piston term [m]
         * c     :     Vetor of the dispersive piston term [m]
         """
-        ns = self.nznse(lambs)
+        ns = self.nplate(lambs)
         if a is None:
             a = self.a
         if b is None:
@@ -235,11 +268,11 @@ class corrector(object):
         if c is None:
             c = self.c
         if dcomp is None:
-            dcomp = -(self.nmean-1)*c
+            dcomp = self.get_dcomp(c)
         alpha = a[None,:]*np.exp(-1j*2*np.pi/lambs[:,None]*(b[None,:] + dcomp[None,:] +c[None,:]*(ns[:,None]-1)))
         return alpha
     
-    def theoretical_phase(self,lambs, proj_opds, wet_atmo):
+    def theoretical_phase(self,lambs, proj_opds, model=None, add=1):
         """
         Computes the theoretical chromatic phase effect of the
         array geometry projected on axis based on the wet atmosphere
@@ -250,15 +283,18 @@ class corrector(object):
         * lambs :     The wavelength channels to consider [m]
         * proj_opds  : The projected piston obtained by projection
           (Get from simulator.obs.get_projected_geometric_pistons)
-        * wet_atmo   : The wet atmosphere model (see n_air.wet_atmo object)
+        * model      : A model for humid air (see n_air.wet_atmo object).
+          If None, defaults to self.model, created upon init.
+        * add        : returns n-1+add (add=0 gives the relative
+          optical path compared to vacuum)
         
         **Returns:** phase
         """
-        nair = n_air.n_air(lambs)
+        nair = model.get_Nair(lambs, add=add)
         phase = 2*np.pi/lambs*nair*proj_opds
-        return phase
+        return phase.T
         
-    def solve_air(self, lambs, wet_atmo):
+    def solve_air(self, lambs, model):
         """
         Computes a least squares compensation model (see
         **Koresko et al. 2003 DOI: 10.1117/12.458032**)
@@ -266,12 +302,12 @@ class corrector(object):
         **Parameters:**
         
         * lambs :     The wavelength channels to consider [m]
-        * wet_atmo   : The wet atmosphere model (see n_air.wet_atmo object)
+        * model   : The wet atmosphere model (see n_air.wet_atmo object)
         
         **Returns:** :math:`\Big( \mathbf{A}^T\mathbf{A}\mathbf{A}^T \Big)^{-1}`
         """
-        nair = n_air.n_air(lambs)
-        ns = np.array([nair, self.nznse(lambs)]).T
+        nair = model.get_Nair(lambs)
+        ns = np.array([nair, self.nplate(lambs)]).T
         A = 2*np.pi/lambs[:,None] * ns
         
         self.S = np.linalg.inv(A.T.dot(A)).dot(A.T)

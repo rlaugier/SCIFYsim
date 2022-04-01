@@ -11,17 +11,61 @@ def set_logging_level(level=logging.WARNING):
     
     
 class wet_atmo(object):
-    def __init__(self, config):
-        self.pres = config.getfloat("atmo", "pres")
-        self.co2 = config.getfloat("atmo", "co2")
-        self.rhum = config.getfloat("atmo", "rhum")
-        self.temp = config.getfloat("vlti", "T_vlti")
+    def __init__(self, config=None,
+                 temp=None, pres=None,
+                 rhum=None, co2=None, ph2o=None, eso=False,
+                 column=False, nws=None):
+        self.eso = eso
+        
+        if temp is None:
+            self.temp = config.getfloat("vlti", "T_vlti")
+        if pres is None:
+            self.pres = config.getfloat("atmo", "pres")
+        if co2 is None:
+            self.co2 = config.getfloat("atmo", "co2")
+        else :
+            self.co2 = co2
+        if rhum is None:
+            self.rhum = config.getfloat("atmo", "rhum")
+        else:
+            self.rhum = rhum
+            
         self.Nair = None
-    def get_Nair(self, lambs):
-        self.Nair = n_air(lambs, temp=self.temp,
+        
+            
+    def get_Nair(self, lambs, add=1):
+        self.Nair = add + n_air(lambs, temp=self.temp,
                          pres=self.pres,
-                         rhum=self.rhum)
+                         rhum=self.rhum,
+                         co2=self.co2,
+                         eso=self.eso)
         return self.Nair
+    
+#class simulated_air(object):
+#    def __init__(temp=273.15+15., pres=1000.,
+#         rhum=0., co2=450., ph2o=None, eso=False,
+#         column=False, nws=None, name="Simple model for atmosphere"):
+#        """
+#        An object to represent refractive and dispersive medium.
+#        """
+#        self.temp = temp
+#        self.pres = pres
+#        self.rhum = rhum
+#        self.co2 = co2
+#        self.ph2o = ph2o
+#        self.eso = eso
+#        
+#        self.__doc__ = name
+#        
+#    def get_n(lambda_):
+#        """
+#        
+#        """
+#        then = n_air(lambda_, temp=self.temp, pres=self.pres,
+#                    rhum=self.rhum, co2=self.co2, ph2o=self.ph2o,
+#                    eso=self.eso, column=self.column) 
+        
+    
     
 
 def n_air(lambda_ , temp=273.15+15., pres=1000.,
