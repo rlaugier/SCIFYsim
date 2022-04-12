@@ -47,6 +47,8 @@ class simulator(object):
         
         self.multi_dish = self.config.getboolean("configuration", "multi_dish")
         
+        self.transverse_dispersion = False
+        
 
         #self.obs = sf.observatory.observatory(self.array, location=location)
         
@@ -83,6 +85,8 @@ class simulator(object):
             raise ValueError("Provide a valid mode for the target creation")
             
         self.obs = sf.observatory.observatory(config=theconfig)
+        # This is the true atmospheric model
+        self.obs.wet_atmo = sf.wet_atmo(self.config)
         
         logit.warning("Undecided whether to store array in simulator or observatory")
         assert np.allclose(self.obs.statlocs, self.array)
@@ -690,7 +694,7 @@ class simulator(object):
         """
         pass
     
-    def point(self, time, target, refresh_array=False):
+    def point(self, time, target, refresh_array=False, disp_override=None):
         """
         Points the array towards the target. Updates the combiner
         
@@ -700,11 +704,48 @@ class simulator(object):
         * target  : The skycoord object to point
         * refresh_array : Whether to call a lambdification of the array
         """
+        if disp_override is None:
+            disp = self.transverse_dispersion
+        elif disp_override is True:
+            disp = True
+        elif disp_override is False:
+            disp = False
+        
         self.obs.point(time, target)
         self.reset_static()
         thearray = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
         if refresh_array:
             self.combiner.refresh_array(thearray)
+        
+        
+            
+        zero_screen = np.zeros_like(self.injector.focal_plane[0][0].screen_bias).flatten()
+        for i in range(len(self.injector.focal_plane)):
+            if disp:
+                a = self.injector.focal_plane[i][0]
+                # Refreshing the asmospheric dispersion
+                Xs = np.linspace(-a.pdiam/2, a.pdiam/2, a.csz)
+                Ys = np.linspace(-a.pdiam/2, a.pdiam/2, a.csz)
+                XX, YY = np.meshgrid(Xs, Ys)
+
+                altaz = self.obs.altaz
+                zenith_angle = (np.pi/2)*units.rad - altaz.alt.to(units.rad)
+
+                #print("zenith_angle", zenith_angle.to(units.deg))
+                ppixel_pistons = YY * np.tan(zenith_angle.value)
+
+                # Note: we do not account for the main image offset here
+                injwl = self.injector.lambda_range
+                pup_phases = self.corrector.theoretical_phase(injwl[:,None,None], ppixel_pistons,
+                                                              model=self.obs.wet_atmo, add=0, ref="center")
+                pup_op = pup_phases*injwl[None,None,:]/(2*np.pi)
+            for j in range(len(self.injector.focal_plane[i])):
+                if disp:
+                    self.injector.focal_plane[i][j].screen_bias = pup_op[:,:,j].flatten()*1e6
+                else:
+                    self.injector.focal_plane[i][j].screen_bias = zero_screen
+        
+        
     
     def build_all_maps(self, mapres=100, mapcrop=1.,
                        dtype=np.float32):

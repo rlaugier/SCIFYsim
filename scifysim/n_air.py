@@ -33,7 +33,7 @@ class wet_atmo(object):
         self.Nair = None
         
             
-    def get_Nair(self, lambs, add=1):
+    def get_Nair(self, lambs, add=0):
         self.Nair = add + n_air(lambs, temp=self.temp,
                          pres=self.pres,
                          rhum=self.rhum,

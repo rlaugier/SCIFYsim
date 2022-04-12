@@ -442,6 +442,7 @@ class focuser(object):
         else:
             self.pupil = pupil
         self.flatpup = self.pupil.flatten()
+        self.screen_bias = np.zeros_like(self.flatpup)
         self.pupilsum = np.sum(self.pupil).astype(np.float32)
 
         self.pdiam  = pdiam                 # pupil diameter in meters
@@ -620,7 +621,7 @@ class focuser(object):
         """
         #set_trace()
         phs = phscreen.flatten()
-        phs -= np.mean(phs[self.flatpup])
+        phs = np.mean(phs[self.flatpup]) + self.screen_bias
         # We do only the needed operations thanks to masking
         wf = np.sqrt(self.signal / self.pupilsum) * np.exp(1j*phs[self.flatpup]*self.mu2phase)  # signal scaling
         #wf *= self.pupil                               # apply the pupil mask
@@ -716,8 +717,6 @@ class injector(object):
         self.atmo_config = atmo_config
         
         ##########
-        # Temporary
-        logit.warning("Hard-coded variables:")
         self.NA = NA #0.23#0.21
         self.a = a #4.25e-6#3.0e-6
         self.ncore = ncore #2.7

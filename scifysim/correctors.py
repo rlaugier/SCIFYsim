@@ -9,6 +9,7 @@ from astropy import units
 import scipy.interpolate as interp
 from pathlib import Path
 
+import pdb
 
 
 parent = Path(__file__).parent.absolute()
@@ -272,7 +273,7 @@ class corrector(object):
         alpha = a[None,:]*np.exp(-1j*2*np.pi/lambs[:,None]*(b[None,:] + dcomp[None,:] +c[None,:]*(ns[:,None]-1)))
         return alpha
     
-    def theoretical_phase(self,lambs, proj_opds, model=None, add=1):
+    def theoretical_phase(self,lambs, proj_opds, model=None, add=0, db=False, ref=None):
         """
         Computes the theoretical chromatic phase effect of the
         array geometry projected on axis based on the wet atmosphere
@@ -287,11 +288,25 @@ class corrector(object):
           If None, defaults to self.model, created upon init.
         * add        : returns n-1+add (add=0 gives the relative
           optical path compared to vacuum)
+        * ref        : Either ``None``, the value of a reference wavelength
+          or the 
         
         **Returns:** phase
         """
         nair = model.get_Nair(lambs, add=add)
-        phase = 2*np.pi/lambs*nair*proj_opds
+        if ref is None:
+            nref = 0
+        else:
+            if isinstance(ref, str):
+                if ref == "center":
+                    ref = np.array([lambs[lambs.shape[0]//2]])
+                elif ref == "mean":
+                    ref = np.array([np.mean(lambs)])
+            nref = model.get_Nair(ref, add=add)
+        # otherwise ref is the falue of the reference wavelength
+        phase = 2*np.pi * proj_opds * (nair - nref) / lambs
+        if db:
+            pdb.set_trace()
         return phase.T
         
     def solve_air(self, lambs, model):
@@ -306,7 +321,7 @@ class corrector(object):
         
         **Returns:** :math:`\Big( \mathbf{A}^T\mathbf{A}\mathbf{A}^T \Big)^{-1}`
         """
-        nair = model.get_Nair(lambs)
+        nair = model.get_Nair(lambs,add=1)
         ns = np.array([nair, self.nplate(lambs)]).T
         A = 2*np.pi/lambs[:,None] * ns
         
