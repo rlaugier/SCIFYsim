@@ -84,10 +84,6 @@ class simulator(object):
             
         self.obs = sf.observatory.observatory(config=theconfig)
         
-        logit.warning("Undecided whether to store array in simulator or observatory")
-        assert np.allclose(self.obs.statlocs, self.array)
-        
-
     
     
     
