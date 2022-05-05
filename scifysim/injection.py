@@ -621,7 +621,7 @@ class focuser(object):
         """
         #set_trace()
         phs = phscreen.flatten()
-        phs = np.mean(phs[self.flatpup]) + self.screen_bias
+        phs += -np.mean(phs[self.flatpup]) + self.screen_bias
         # We do only the needed operations thanks to masking
         wf = np.sqrt(self.signal / self.pupilsum) * np.exp(1j*phs[self.flatpup]*self.mu2phase)  # signal scaling
         #wf *= self.pupil                               # apply the pupil mask
