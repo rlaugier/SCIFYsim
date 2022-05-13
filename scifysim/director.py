@@ -823,7 +823,7 @@ class simulator(object):
         
     def make_map_dask(self, blockindex, vigneting_map, dtype="dask", map_index=0):
         """
-        Create sensitivity map in ph/s/sr per spectral channel.
+        Create sensitivity map in m^2.sr per spectral channel.
         To get final flux of a point source :
         
         ``Map/ds_sr * p.ss * DIT``
@@ -862,7 +862,7 @@ class simulator(object):
     
     def make_map_dask2(self, blockindex, vigneting_map, dtype="dask", map_index=0):
         """
-        Create sensitivity map in ph/s/sr per spectral channel.
+        Create sensitivity map in m^2.sr per spectral channel.
         To get final flux of a point source :
         
         ``Map/ds_sr * p.ss * DIT``
@@ -902,7 +902,7 @@ class simulator(object):
         
     def make_map(self, blockindex, vigneting_map, dtype=np.float32):
         """
-        Create sensitivity map in ph/s/sr per spectral channel.
+        Create sensitivity map in m^2.sr per spectral channel.
         To get final flux of a point source :
         ``Map/ds_sr * p.ss * DIT``
         
@@ -945,6 +945,14 @@ class simulator(object):
     def reset_static(self):
         if hasattr(self, "computed_static"):
             del self.computed_static
+    
+    @property
+    def spectral_res(self):
+        """
+        The spectral resolution of the instrument. Computed as a mean over all spectral channels.
+        """
+        res = np.mean(sf.utilities.range2R(self.lambda_science_range, mode="bins"))
+        return res
     
 def test_director():
     logit.warning("hard path in the test")
