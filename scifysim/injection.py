@@ -1051,10 +1051,17 @@ class injector(object):
         focal_planes = np.array(focal_planes)
         self.focal_planes = focal_planes
         self.injected = np.sum(self.focal_planes*self.lpmap[None,:,:,:], axis=(2,3))
+        # Here we dump the first interpolation which returns nans for some reason.
+        # This seeems to be a bug in the library.
+        dump = interp1d(self.lambda_range,
+                                  self.injected[0,:],kind=interpolation,
+                                  fill_value="extrapolate")
         self.best_einterp = [interp1d(self.lambda_range,
                                   self.injected[i,:],kind=interpolation,
                                   fill_value="extrapolate")\
                                                         for i in range(self.ntelescopes)]
+        #from pdb import set_trace
+        #set_trace()
         
         
     def compute_injection_function(self, interpolation="linear", tilt_res=50, tilt_range=2.):
