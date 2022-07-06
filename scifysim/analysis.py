@@ -4,6 +4,7 @@ import scifysim as sf
 import logging
 from einops import rearrange
 import dask.array as da
+import copy
 
 from scipy.linalg import sqrtm
 
@@ -634,6 +635,8 @@ def correlation_map(signal, maps, postproc=None, K=None, n_diffobs=1, verbose=Fa
     * maps        : The maps for comparison shape:
       (n_slots, n_wl, n_outputs, x_resolution, y_resolution)
     * postproc    : The whitening matrix to use 
+    * n_diffobs : The number of differential observables for this combiner
+      (1 for double bracewell, 3 for VIKiNG)
     
     **Returns**
     
@@ -654,16 +657,124 @@ def correlation_map(signal, maps, postproc=None, K=None, n_diffobs=1, verbose=Fa
         difmap = np.einsum("ij, kljmn -> klimn", K, maps)
     elif maps.shape[2] == n_diffobs:
         difmap = maps
-    wmap = np.einsum("ijk, iklm -> ijlm", postproc, rearrange(difmap, "a b c d e -> a (b c) d e"))
-    wsig = np.einsum("ijk, ik -> ij", postproc, rearrange(diffobs, "a b c -> a (b c)"))
-    print(wmap.shape)
-    print(wsig.shape)
-    xsi = chi2.ppf(1.-0.01, wsig.flatten().shape[0])
-    print(f"xsi = {xsi}")
-    print(f"yty = {wsig.flatten().dot(wsig.flatten())}")
+    if K is not None:
+        wmap = np.einsum("ijk, iklm -> ijlm", postproc, rearrange(difmap, "a b c d e -> a (b c) d e"))
+        wsig = np.einsum("ijk, ik -> ij", postproc, rearrange(diffobs, "a b c -> a (b c)"))
+    else:
+        wmap = rearrange(difmap, "a b c d e -> a (b c) d e")
+        wsig = rearrange(diffobs, "a b c -> a (b c)")
+    if verbose:
+        print(wmap.shape)
+        print(wsig.shape)
+        xsi = chi2.ppf(1.-0.01, wsig.flatten().shape[0])
+        print(f"xsi = {xsi}")
+        print(f"yty = {wsig.flatten().dot(wsig.flatten())}")
     
     cmap1 = np.einsum("ijkl, ij -> kl", wmap, wsig)
     xtx_map = np.einsum("ijkl, ijkl -> kl", wmap, wmap)
     #cmap2 = np.einsum("ikl, i -> kl", rearrange(wmap, "a b c d -> (a b) c d"), wsig.flatten())
     
     return cmap1, xtx_map
+
+
+def make_source(params, lambda_range, distance):
+    """
+    Creates a source from scratch for purpose of model fitting.
+    **Arguments:**
+    
+    * params: An lmfit Parameters object containing:
+        - "Sep" separation in [mas]
+        - "PA" position angle in [deg]
+        - "Radius" The radius in [R_sun]
+        - "Temperature" The temperature [K]
+    * lambda_range : array of the wavelength channels used [m]
+    * distance: Distance to the system [pc]
+    """
+    planet_separation = params["Sep"].value
+    planet_position_angle = params["PA"].value
+    planet_offsetx = -planet_separation*np.sin(planet_position_angle * np.pi/180)
+    planet_offsety =  planet_separation*np.cos(planet_position_angle * np.pi/180)
+    planet_offset = (planet_offsetx, planet_offsety)
+    mysource = sf.sources.resolved_source(lambda_range, distance,
+                                          resolved=False,
+                                         radius=params["Radius"].value,
+                                         T=params["Temperature"].value,
+                                         offset=planet_offset)
+    return mysource
+
+def get_planet_residual(my_params, target_signal, asim, dit, K, postproc, diffuse, notres=False):
+    """
+    **arguments:**
+    
+    * my_params : An lmfit Parameters object containing:
+        - "Sep" separation in [mas]
+        - "PA" position angle in [deg]
+        - "Radius" The radius in [R_sun]
+        - "Temperature" The temperature [K]
+    * target_signal : The observed signal to fit
+    * asim : The simulator object
+    * dit : The detector integration time
+    * K : The matrix that transforms the outputs into observables
+      (single row for double bracewell)
+    * postproc : An array of whitening matrices for each chunk (n_chunk, n_wl x n_k)
+    * notres : If ``True`` this will return the non-whitened model signal
+      if ``False`` this will return the difference between the whitened model signal
+      and the whitened target.
+    """
+    
+    theobs = copy.deepcopy(asim.obs)
+    interest = make_source(my_params, asim.lambda_science_range, asim.src.distance)
+    #theobs = copy.deepcopy(asim.obs)
+    combined = make_th_exps(asim, dit, interest, diffuse, obs=theobs)
+    #if not notres:
+    #print(K.shape)
+    #if len(K.shape)>2:
+    #set_trace()
+    diff = np.einsum("k o, n w o -> n w k", K, combined)
+    
+    #print("postproc", postproc.shape)
+    #print("diff", diff.shape)
+    wsig = np.einsum("ijk, ik -> ij", postproc, rearrange(diff, "a b c -> a (b c)"))
+    # Not very efficient
+    #set_trace()
+    
+    if notres:
+        return diff
+    else:
+        wtarg = np.einsum("ijk, ik -> ij", postproc, rearrange(target_signal, "a b c -> a (b c)"))
+        resvec = wsig - wtarg
+        return resvec
+
+def make_th_exps(asim, dit, interest, diffuse, obs=None):
+    """
+    Creates a model observation of an idealized source of interest.
+    
+    Simulator/obs are required to account for array projection, pointing
+    and combination scheme.
+    
+    **Arguments:**
+    
+    * asim : Simulator object
+    * dit : Detector integration time
+    * interest : Synthetic source of interest
+    * diffuse : The diffuse light chain, used
+      to model absorption of instrument/sky
+    * obs : A given observatory object (default: None)
+    
+    **Returns:** (n_chunk, n_wl, n_out) array recorded in the integration time.
+    """
+    if obs is None:
+        obs = copy.deepcopy(asim.obs)
+    lights = []
+    for i, time in enumerate(asim.sequence):
+        obs.point(asim.sequence[i], asim.target)
+        injected = asim.injector.best_injection(asim.lambda_science_range)
+        injected = injected.T * asim.corrector.get_phasor(asim.lambda_science_range)
+        array = obs.get_projected_array(obs.altaz, PA=obs.PA)
+        
+        filtered_starlight = diffuse[0].get_downstream_transmission(asim.lambda_science_range)
+        collected = filtered_starlight * asim.injector.collecting * dit
+        #set_trace()
+        lights.append(asim.combine_light(interest, injected, array, collected))
+    lights = np.array(lights)
+    return lights

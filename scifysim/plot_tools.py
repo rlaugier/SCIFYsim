@@ -589,7 +589,9 @@ from scifysim.correctors import get_Is
 
 
 def plot_corrector_tuning_angel_woolf(corrector,lambs,
-                                      combiner,show=True,
+                                      combiner, wv_model=None,
+                                      out_label=None,
+                                      show=True,
                                       maskout=[2,6]):
     """
     Plots some information on the tuning of the combiner using geometric piston
@@ -600,7 +602,9 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     * corrector : A corrector object
     * lambs     : The wavelengths to plot [m]
     * combiner  : A combiner object
+    * wv_model  : A wate vapor model (`wet_atmo`) to display along
     * show      : Whether to call ``plt.show``
+    * out_label : A list of output labels to pass to 
     
     **Plots:**
     
@@ -637,14 +641,39 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     
     original_plt_params = plt.rcParams
     plt.style.use("default")
+    output_indices = np.arange(combiner.M.shape[0])[maskout[0]:maskout[1]]
+    outlabels = [f"Output {i}" for i in output_indices]
     cmp_plot = cmpc(combiner.M[maskout[0]:maskout[1],:], combiner.lamb, lambs,
-                plotout=corphasor, minfrac=0.9, show=show)
+                plotout=corphasor, minfrac=0.9, show=show, out_label=outlabels)
     plt.rcParams = original_plt_params
     
+    static_tuning_air = corrector.b
+    static_tuning_glass = corrector.c
+    static_correction_air = -(corrector.nmean-1)*static_tuning_glass
+    total_air = static_tuning_air + static_correction_air
+    total_glass = static_tuning_glass
+    bar_width = 0.15
+    
     bar_plot = plt.figure()
-    plt.bar(np.arange(corrector.b.shape[0]),corrector.b, width=0.2, label="Geometric piston")
-    plt.bar(np.arange(corrector.b.shape[0])+0.2,corrector.c, width=0.2, label="ZnSe length")
-    plt.bar(np.arange(corrector.b.shape[0])+0.4,-(corrector.nmean-1)*corrector.c, width=0.2, label="Geometric compensation")
+    plt.bar(np.arange(corrector.b.shape[0]),static_tuning_air, width=bar_width, label="Geometric piston")
+    plt.bar(np.arange(corrector.b.shape[0])+bar_width,static_correction_air,
+            width=bar_width, label="Geometric compensation")
+    plt.bar(np.arange(corrector.b.shape[0])+4*bar_width,static_tuning_glass, width=bar_width, label="ZnSe length")
+    if wv_model is not None:
+        pointing_tuning_glass = wv_model[1,:]
+        pointing_tuning_air = wv_model[0,:]
+        pointing_correction_air = -(corrector.nmean-1)*pointing_tuning_glass
+        total_air += pointing_tuning_air + pointing_correction_air
+        total_glass += pointing_tuning_glass
+        
+        
+        plt.bar(np.arange(pointing_tuning_air.shape[0])+2*bar_width, pointing_tuning_air,
+                bottom=static_correction_air, width=bar_width, label="Geometric tuning. atmo.")
+        plt.bar(np.arange(pointing_correction_air.shape[0])+2.5*bar_width, pointing_correction_air,
+                bottom=static_correction_air+pointing_tuning_air, width=bar_width, label="Geometric comp. atmo.")
+        plt.bar(np.arange(pointing_tuning_glass.shape[0])+5*bar_width, pointing_tuning_glass,
+                bottom=static_tuning_glass, width=bar_width, label="Glass lenght atmo.")
+    plt.axhline(0, color="k", linestyle="--", linewidth=0.5)
     plt.legend()
     plt.xlabel("Input index")
     plt.ylabel("Path length [m]")
@@ -682,3 +711,16 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
 
     
     return nul_plot, cmp_plot, bar_plot, morph_plot
+
+
+
+def make_cursor(loc, size, extent=None, color="k",
+               flipy=True, **kwargs):
+    if flipy: s = -1
+    else: s = 1
+    plt.plot(np.ones(2) * loc[1],
+             s*( np.array([loc[0] - 2*size, loc[0] - size])),
+             color=color, **kwargs)
+    plt.plot(np.array([loc[1] - 2*size, loc[1] - size]),
+             s*(np.ones(2) * loc[0]),
+             color=color, **kwargs)

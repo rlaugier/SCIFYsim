@@ -14,7 +14,22 @@ class wet_atmo(object):
     def __init__(self, config=None,
                  temp=None, pres=None,
                  rhum=None, co2=None, ph2o=None, eso=False,
-                 column=False, nws=None):
+                 column=False, nws=None, name="True atmosphere"):
+        """
+        Creates a model for humid refractive index
+        
+        **Parameters:**
+        
+        * config : Give a config file that provides the parameters for
+          the fields left at `None`.
+        * temp   : air temperature [K]
+        * pres   : air pressure [mbar]
+        * rhum   : relative humidity of the air [%]
+        * co2    : CO2 content in the air [ppm]
+        * ph2o   : partial pressure of water vapour [in Pa = 0.01 mbar]
+        
+        """
+        self.name = name
         self.eso = eso
         
         if temp is None:
@@ -34,12 +49,31 @@ class wet_atmo(object):
         
             
     def get_Nair(self, lambs, add=0):
+        """
+        Returns the refractive index (or reduced refractive index)
+        for humid air at the given wavelengths.
+        
+        **Parameters:**
+        
+        * lambs : An array of wavelengths [m]
+        * add   : Gets added to the reduced refracive index:
+          default: 0. Use 1 to obtain the actual refractive index.
+        """
         self.Nair = add + n_air(lambs, temp=self.temp,
                          pres=self.pres,
                          rhum=self.rhum,
                          co2=self.co2,
                          eso=self.eso)
         return self.Nair
+    def report_setup(self):
+        print("================================")
+        print(f"{self.name}")
+        print(f"Temperature : {self.temp:.3e} K")
+        print(f"Pressure : {self.pres:.3e} mbar")
+        print(f"CO2 content : {self.co2:.1f} ppm")
+        print(f"Relative humidity : {self.rhum:.1f} %")
+        print("================================")
+        
     
 #class simulated_air(object):
 #    def __init__(temp=273.15+15., pres=1000.,
