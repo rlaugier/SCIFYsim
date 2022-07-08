@@ -655,24 +655,29 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     bar_width = 0.15
     
     bar_plot = plt.figure()
-    plt.bar(np.arange(corrector.b.shape[0]),static_tuning_air, width=bar_width, label="Geometric piston")
+    plt.bar(np.arange(corrector.b.shape[0]),static_tuning_air, width=bar_width, label="Geometric tuning")
     plt.bar(np.arange(corrector.b.shape[0])+bar_width,static_correction_air,
-            width=bar_width, label="Geometric compensation")
-    plt.bar(np.arange(corrector.b.shape[0])+4*bar_width,static_tuning_glass, width=bar_width, label="ZnSe length")
+            width=bar_width, label="Geometric comp. tuning")
+    plt.bar(np.arange(corrector.b.shape[0])+4*bar_width, static_tuning_glass, width=bar_width, label="Glass tuning")
     if wv_model is not None:
         pointing_tuning_glass = wv_model[1,:]
         pointing_tuning_air = wv_model[0,:]
         pointing_correction_air = -(corrector.nmean-1)*pointing_tuning_glass
-        total_air += pointing_tuning_air + pointing_correction_air
-        total_glass += pointing_tuning_glass
+        total_air = total_air + pointing_tuning_air + pointing_correction_air
+        total_glass = total_glass + pointing_tuning_glass
         
+        for i in range(total_air.shape[0]):
+            plt.text(np.arange(pointing_tuning_air.shape[0])[i]+2*bar_width,
+                     total_air[i],  f"{total_air[i]*1000:.2f}mm")
+            plt.text(np.arange(pointing_tuning_glass.shape[0])[i]+5*bar_width,
+                     total_glass[i], f"{total_glass[i]*1000:.2f}mm")
         
         plt.bar(np.arange(pointing_tuning_air.shape[0])+2*bar_width, pointing_tuning_air,
-                bottom=static_correction_air, width=bar_width, label="Geometric tuning. atmo.")
+                bottom=static_correction_air, width=bar_width, label="Geometric pointing K to L")
         plt.bar(np.arange(pointing_correction_air.shape[0])+2.5*bar_width, pointing_correction_air,
-                bottom=static_correction_air+pointing_tuning_air, width=bar_width, label="Geometric comp. atmo.")
+                bottom=static_correction_air+pointing_tuning_air, width=bar_width, label="Geometric comp. across L")
         plt.bar(np.arange(pointing_tuning_glass.shape[0])+5*bar_width, pointing_tuning_glass,
-                bottom=static_tuning_glass, width=bar_width, label="Glass lenght atmo.")
+                bottom=static_tuning_glass, width=bar_width, label="Glass length atmo.")
     plt.axhline(0, color="k", linestyle="--", linewidth=0.5)
     plt.legend()
     plt.xlabel("Input index")

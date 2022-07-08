@@ -622,7 +622,9 @@ def get_sensitivity_Tnp_old(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_ma
         plt.colorbar()
         plt.show()
     return mag_map
- 
+
+
+## Tools for interpretation 
 
 def correlation_map(signal, maps, postproc=None, K=None, n_diffobs=1, verbose=False):
     """
@@ -680,6 +682,7 @@ def correlation_map(signal, maps, postproc=None, K=None, n_diffobs=1, verbose=Fa
 def make_source(params, lambda_range, distance):
     """
     Creates a source from scratch for purpose of model fitting.
+    
     **Arguments:**
     
     * params: An lmfit Parameters object containing:
