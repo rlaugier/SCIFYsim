@@ -88,9 +88,6 @@ class simulator(object):
         # This is the true atmospheric model
         self.obs.wet_atmo = sf.wet_atmo(self.config)
         
-        logit.warning("Undecided whether to store array in simulator or observatory")
-        assert np.allclose(self.obs.statlocs, self.array)
-        
 
     
     
@@ -736,8 +733,13 @@ class simulator(object):
 
                 # Note: we do not account for the main image offset here
                 injwl = self.injector.lambda_range
-                pup_phases = self.corrector.theoretical_phase(injwl[:,None,None], ppixel_pistons,
-                                                              model=self.obs.wet_atmo, add=0, ref="center")
+                #import pdb
+                #pdb.set_trace()
+                pup_phases = self.corrector.theoretical_phase(injwl, ppixel_pistons.flatten(),
+                            model=self.obs.wet_atmo,
+                            add=0,
+                            db=False,
+                            ref="center").reshape((*ppixel_pistons.shape, injwl.shape[0]))
                 pup_op = pup_phases*injwl[None,None,:]/(2*np.pi)
             for j in range(len(self.injector.focal_plane[i])):
                 if disp:

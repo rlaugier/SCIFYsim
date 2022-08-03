@@ -13,7 +13,8 @@ import pdb
 
 
 parent = Path(__file__).parent.absolute()
-znse_file = parent/"data/znse_index.csv"
+#znse_file = parent/"data/znse_index.csv"
+znse_file = parent/"data/znse_Connolly.csv"
 
 # Brute force test parameter to 
 thetas = np.linspace(-np.pi, np.pi, 10000)
@@ -154,7 +155,7 @@ def get_shape_res(params, combiner, corrector, lambs):
 
 
 class corrector(object):
-    def __init__(self, config, lambs, file=None):
+    def __init__(self, config, lambs, file=None, order=3):
         """
         A module that provides beam adjustments
         for the input. It contains amplitude *a*, geometric
@@ -182,7 +183,7 @@ class corrector(object):
         else: 
             nplate_file = file
         self.nplate = interp.interp1d(nplate_file[:,0]*1e-6, nplate_file[:,1],
-                                     kind="linear", bounds_error=False )
+                                     kind=order, bounds_error=False )
         diams = self.config.getarray("configuration", "diam")
         n_tel = diams.shape[0]
         # An amplitude factor
@@ -214,6 +215,7 @@ class corrector(object):
         Deprecated
         """
         ns = self.nplate(lambs)
+        #nplate -1 because it is air displacing glass
         alpha = self.a*np.exp(-1j*2*np.pi/lamb*(self.b + self.dcomp +self.c*(ns-1)))
         return alpha
     def get_raw_phase_correction(self, lambs, b=0,c=0, dcomp=0, model=None):
@@ -235,7 +237,9 @@ class corrector(object):
             model = self.prediction_model
         nair = model.get_Nair(lambs, add=1)
         nplate = self.nplate(lambs)
-        return 2*np.pi/lambs*(nair*b + nplate*c)
+        #nplate -1 because it is air displacing glass
+        return 2*np.pi/lambs*(nair*b + (nplate-1)*c)
+    
     def get_dcomp(self, c):
         """
         Returns the theoertical value of dcomp for a given value of compensator
@@ -270,6 +274,7 @@ class corrector(object):
             c = self.c
         if dcomp is None:
             dcomp = self.get_dcomp(c)
+        #nplate -1 because it is air displacing glass
         alpha = a[None,:]*np.exp(-1j*2*np.pi/lambs[:,None]*(b[None,:] + dcomp[None,:] +c[None,:]*(ns[:,None]-1)))
         return alpha
     
@@ -288,10 +293,13 @@ class corrector(object):
           If None, defaults to self.model, created upon init.
         * add        : returns n-1+add (add=0 gives the relative
           optical path compared to vacuum)
-        * ref        : Either ``None``, the value of a reference wavelength
-          or the 
+        * ref        : The reference wavelength for which phase is 0.
+            - `None`
+            - the value of a reference wavelength [m]
+            - "center" : use the central bin of lambs
+            - "mean" : use the mean of lambs
         
-        **Returns:** phase
+        **Returns:** phase [rad]
         """
         nair = model.get_Nair(lambs, add=add)
         if ref is None:
@@ -302,11 +310,60 @@ class corrector(object):
                     ref = np.array([lambs[lambs.shape[0]//2]])
                 elif ref == "mean":
                     ref = np.array([np.mean(lambs)])
-            nref = model.get_Nair(ref, add=add)
-        # otherwise ref is the falue of the reference wavelength
-        phase = 2*np.pi * proj_opds * (nair - nref) / lambs
+            elif isinstance(ref, float):
+                ref = np.array([ref,])
+            # Here get_Nair expects an array to will return an array
+            nref = model.get_Nair(ref, add=add)[0]
         if db:
             pdb.set_trace()
+        # otherwise ref is the falue of the reference wavelength
+        if len(proj_opds.shape) == 1:
+            proj_opds_s = proj_opds[None,:]
+        else:
+            proj_opds_s = proj_opds.T
+            
+        phase = 2*np.pi * proj_opds_s * ((nair - nref) / lambs)[:,None]
+        return phase
+    
+    def theoretical_piston(self,lambs, proj_opds, model=None, add=0, db=False, ref=None):
+        """
+        Computes the theoretical chromatic phase effect of the
+        array geometry projected on axis based on the wet atmosphere
+        model.
+        
+        **Parameters:**
+        
+        * lambs :     The wavelength channels to consider [m]
+        * proj_opds  : The projected piston obtained by projection
+          (Get from simulator.obs.get_projected_geometric_pistons)
+        * model      : A model for humid air (see n_air.wet_atmo object).
+          If None, defaults to self.model, created upon init.
+        * add        : returns n-1+add (add=0 gives the relative
+          optical path compared to vacuum)
+        * ref        : The reference wavelength for which opl is 0.
+            - `None`
+            - the value of a reference wavelength [m]
+            - "center" : use the central bin of lambs
+            - "mean" : use the mean of lambs
+        
+        **Returns:** piston [m]
+        """
+        nair = model.get_Nair(lambs, add=add)
+        if ref is None:
+            nref = 0
+        else:
+            if isinstance(ref, str):
+                if ref == "center":
+                    ref = np.array([lambs[lambs.shape[0]//2]])
+                elif ref == "mean":
+                    ref = np.array([np.mean(lambs)])
+            elif isinstance(ref, float):
+                ref = np.array([ref])
+            nref = model.get_Nair(ref, add=add)
+        # otherwise ref is the falue of the reference wavelength
+        if db:
+            pdb.set_trace()
+        phase = proj_opds * (nair - nref)
         return phase.T
         
     def solve_air(self, lambs, model):
@@ -322,7 +379,8 @@ class corrector(object):
         **Returns:** :math:`\Big( \mathbf{A}^T\mathbf{A}\mathbf{A}^T \Big)^{-1}`
         """
         nair = model.get_Nair(lambs,add=1)
-        ns = np.array([nair, self.nplate(lambs)]).T
+        #nplate -1 because it is air displacing glass
+        ns = np.array([nair, (self.nplate(lambs)-1)]).T 
         A = 2*np.pi/lambs[:,None] * ns
         
         self.S = np.linalg.inv(A.T.dot(A)).dot(A.T)

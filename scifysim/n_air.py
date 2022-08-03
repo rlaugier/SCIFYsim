@@ -34,8 +34,12 @@ class wet_atmo(object):
         
         if temp is None:
             self.temp = config.getfloat("vlti", "T_vlti")
+        else:
+            self.temp = temp
         if pres is None:
             self.pres = config.getfloat("atmo", "pres")
+        else:
+            self.pres = pres
         if co2 is None:
             self.co2 = config.getfloat("atmo", "co2")
         else :
@@ -99,7 +103,34 @@ class wet_atmo(object):
 #                    rhum=self.rhum, co2=self.co2, ph2o=self.ph2o,
 #                    eso=self.eso, column=self.column) 
         
+def get_n_CO2(wavelength, add=0):
+    """
+    **Parameters :**
     
+    * wavelength: [m] 
+    * add : Value to add to n-1
+      (default: 0 returns n-1)
+    
+    Returns the refractive index of CO2 from
+    dispersion formula found at
+    https://refractiveindex.info/?shelf=main&book=CO2&page=Bideau-Mehu
+    
+    n_absolute: true
+    wavelength_vacuum: true
+    temperature: 0 °C
+    pressure: 101325 Pa
+    
+    Ref:
+    A. Bideau-Mehu, Y. Guern, R. Abjean and A. Johannin-Gilles. Interferometric
+    determination of the refractive index of carbon dioxide in the ultraviolet
+    region, Opt. Commun. 9, 432-434 (1973)
+    """
+    lambs = wavelength*1e6
+    Bs_CO2 = np.array([6.991e-2, 1.4472e-3, 6.42941e-5, 5.21306e-5, 1.46847e-6])
+    Cs_CO2 = np.array([166.175, 79.609, 56.3064, 46.0196, 0.055178])#0.0584738
+    terms = np.array([aB/(aC-lambs**-2) for aB, aC in zip(Bs_CO2, Cs_CO2)])
+    n_CO2 = add + np.sum(terms, axis=0)
+    return n_CO2
     
 
 def n_air(lambda_ , temp=273.15+15., pres=1000.,
@@ -174,7 +205,11 @@ def n_air(lambda_ , temp=273.15+15., pres=1000.,
         # Refractive index of pure air...
         k0, k1, k2, k3 = 238.0185, 5792105., 57.362 , 167917.       # um^-2
         s2 = (1. /(lambda_ * 1e+6))**2                                  # um^-2
-        naxs = 1e-8*(k1/(k0 - s2) + k3/(k2 - s2))*(1. + 0.534e-6*(co2 - 450.)) # in reality this is n-1
+        #naxs = 1e-8*(k1/(k0 - s2) + k3/(k2 - s2))*(1. + 0.534e-6*(co2 - 450.)) # in reality this is n-1
+        # Using the new n_CO2 definition instead
+        naxs = 1e-8*(k1/(k0 - s2) + k3/(k2 - s2)) # in reality this is n-1
+        naxs += get_n_CO2(lambda_)*co2/1e6
+        
 
         # and pure water vapor, using the Hill & Lawrence approximation in IR, Ciddor in VIS
         #n=N_ELEMENTS(lambda) & nws=FLTARR(n)
@@ -185,6 +220,7 @@ def n_air(lambda_ , temp=273.15+15., pres=1000.,
 
         # Compute the densities of air, standard dry air, water vapor and standard water vapor
         daxs = mol_dens(288.15, 1013.25, 0., 450.)# !RL Added the CO2 value. Bug?
+        #daxs *= 1.e6/450.
         dummy, dws = mol_dens(293.15, 13.33, 100., 450., wvdens=True)
 
         # Compute the phase index
@@ -463,7 +499,7 @@ def n_h2o(lambda_, approx=False, column=False,
         freqs = freq1
         nh2o = nh2o1
     else :
-        if separate:
+        if separate :
             lambda_ = np.concatenate((lam1, lam2), axis=0)
             freqs = np.concatenate((freq1, freq2), axis=0)
             nh2o = np.concatenate((nh2o1, nh2o2), axis=0) 
