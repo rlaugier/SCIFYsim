@@ -41,7 +41,7 @@ class observatory(object):
         
         Parameters:
         
-        * statlocs : The station locations 
+        * statlocs : The station locations (optional)
           (east, north) for each aperture shape is (Na, 2)
         * location : An astropy.coordinatEarthLocation (default = Paranal)
           example: myloc = astroplan.Observer.at_site("Paranal", timezone="UTC")
@@ -66,7 +66,10 @@ class observatory(object):
         self.array_config = self.config.get("configuration", "config")
         raw_array = eval("kernuller.%s"%(self.array_config))
         self.order = self.config.getarray("configuration", "order").astype(np.int16)
-        self.statlocs = raw_array[self.order]
+        if statlocs is None:
+            self.statlocs = raw_array[self.order]
+        else:
+            self.statlocs = statlocs
         
         self.theta = sp.symbols("self.theta")
         #R handles the azimuthal rotation

@@ -52,7 +52,7 @@ class simulator(object):
         
         self.sequence = None
         
-    def prepare_observatory(self, file=None, fpath=None):
+    def prepare_observatory(self, file=None, fpath=None, statlocs=None):
         """
         Preprare the observatory object for the simulator.
         
@@ -60,6 +60,8 @@ class simulator(object):
         
         * file : A parsed config file (see parsefile)
         * fpath: (string) A path to the config file to parse
+        * statlocs : The station locations (optional)
+          (east, north) for each aperture shape is (Na, 2)
         """
         if file is not None:
             theconfig = file
@@ -82,7 +84,7 @@ class simulator(object):
             logit.error("Did not understand the mode for target")
             raise ValueError("Provide a valid mode for the target creation")
             
-        self.obs = sf.observatory.observatory(config=theconfig)
+        self.obs = sf.observatory.observatory(config=theconfig, statlocs=statlocs)
         
     
     

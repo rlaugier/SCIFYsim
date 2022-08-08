@@ -133,7 +133,8 @@ def prepare_all(afile, thetarget=None, update_params=False,
                instrumental_errors=True, seed=None,
                crop=1., target_coords=None,
                compensate_chromatic=True,
-               modificators=None, update_start_end=True):
+               modificators=None, update_start_end=True,
+               statlocs=None):
     """
     A shortcut to prepare a simulator object
     **Parameters:**
@@ -168,7 +169,7 @@ def prepare_all(afile, thetarget=None, update_params=False,
         update_star_params(config=asim.config)
     if update_start_end:
         update_observing_night(config=asim.config, target_coords=target_coords)
-    asim.prepare_observatory(file=asim.config)
+    asim.prepare_observatory(file=asim.config, statlocs=statlocs)
     if modificators is not None:
         for amod in modificators:
             asim.config.set(amod["section"], amod["key"], amod["value"])
