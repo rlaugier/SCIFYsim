@@ -66,7 +66,10 @@ class observatory(object):
         self.array_config = self.config.get("configuration", "config")
         raw_array = eval("kernuller.%s"%(self.array_config))
         self.order = self.config.getarray("configuration", "order").astype(np.int16)
-        self.statlocs = raw_array[self.order]
+        if statlocs is None:
+            self.statlocs = raw_array[self.order]
+        else:
+            self.statlocs = statlocs
         
         self.theta = sp.symbols("self.theta")
         #R handles the azimuthal rotation
