@@ -2,6 +2,9 @@ include README.rst
 include scifysim/data/gravity_piston_ps.csv
 include scifysim/data/MK_trans_sfs.txt
 include scifysim/data/n_mathar.dat
+include scifysim/data/n_mathar_co2.dat
+include scifysim/data/n_mathar_air_370co2.dat
+include scifysim/data/n_mathar_h2o.dat
 include scifysim/data/VLTI_AT_trans_sfs.txt
 include scifysim/data/VLTI_UT_trans_sfs.txt
 include scifysim/config/logger.ini

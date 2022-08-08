@@ -2,6 +2,10 @@ import numpy as np
 from . import mol_dens
 from .mol_dens import mol_dens
 
+import pathlib
+import scipy.interpolate as interp
+from astropy import constants, units
+
 import logging
 
 logit = logging.getLogger(__name__)
@@ -51,8 +55,37 @@ class wet_atmo(object):
             
         self.Nair = None
         
-            
+
+    
     def get_Nair(self, lambs, add=0):
+        """
+        Returns the refractive index (or reduced refractive index)
+        for humid air at the given wavelengths.
+
+        **Parameters:**
+
+        * lambs : An array of wavelengths [m]
+        * add   : Gets added to the reduced refracive index:
+          default: 0. Use 1 to obtain the actual refractive index.
+
+        **Returns:**  add + n-1 
+        """
+
+        # Computing fraction of components
+        P_tot = self.pres*units.mbar.to(units.Pa)
+        F_co2 = 1e-6 * self.co2
+        F_h2o = self.rhum/100 * get_pvsat_buck(self.temp)/P_tot
+        F_da = 1-(F_co2 + F_h2o)
+        #print("H2O", F_h2o)
+        #print("CO2", F_co2)
+        #print("DA", F_da)
+        c = constants.c.value
+        n_ref = ((r_index_DA(lambs))*F_da + (r_index_co2(lambs))*F_co2 + (r_index_h2o(lambs))*F_h2o)
+        n_compound_air = constants.c.value*P_tot/(constants.R.value * self.temp) * n_ref
+        self.Nair = n_compound_air + add
+        return self.Nair
+                
+    def get_Nair_old(self, lambs, add=0):
         """
         Returns the refractive index (or reduced refractive index)
         for humid air at the given wavelengths.
@@ -63,12 +96,16 @@ class wet_atmo(object):
         * add   : Gets added to the reduced refracive index:
           default: 0. Use 1 to obtain the actual refractive index.
         """
+        logit.error("Using get_Nair_old() which is deprecated")
+        logit.error("This uses mol_dens...")
+        logit.error("This is deprecated")
         self.Nair = add + n_air(lambs, temp=self.temp,
                          pres=self.pres,
                          rhum=self.rhum,
                          co2=self.co2,
                          eso=self.eso)
         return self.Nair
+    
     def report_setup(self):
         print("================================")
         print(f"{self.name}")
@@ -77,6 +114,141 @@ class wet_atmo(object):
         print(f"CO2 content : {self.co2:.1f} ppm")
         print(f"Relative humidity : {self.rhum:.1f} %")
         print("================================")
+######################################################################
+# Update chunk
+######################################################################
+def n_hat2nm1(nhat, P_i, T, add=0):
+    """
+    Works for pure gazes:
+    
+    **Arguments:**
+    * P_i  : Partial pressure [Pa]
+    * T    : Temperature [K]
+    
+    **Return:** add + n-1
+    """
+    return add + nhat * constants.c.value * P_i /(constants.R.value * T)
+    
+
+def compile_table(file, ):
+    """
+    Compiles a Mathar table into an interpolation function
+    
+    **Arguments:**
+    * file  : The url for a .dat file containing:
+        - in column 1 the frequency in THz
+        - in column 2 the reduced refracive index [fs/(mol/m^2)].
+    
+    **Returns:** A function that computes the reduced the reduced
+    refractive index. Note that it switches from fs to s: [s/(mol/m^2)].
+    """
+    atab = np.loadtxt(file)
+    freqM = atab[:, 0]
+    ref_indexM = atab[:, 1]
+    
+    spline = interp.splrep(freqM, ref_indexM, k=3)
+    def get_n_red(lam2,):
+        """
+        Interpolation of one of the Mathar tables. 
+        Note that we switch to seconds here.
+        
+        **Arguments:**
+        
+        * lam2  : The wavelength [m]
+        
+        **Returns:** the reduced refractive index [s.mol^-1.m^2].
+        """
+        freq2 = m2thz(lam2) # THz
+        red_index2 = interp.splev(freq2, spline, ext=3)
+        return red_index2*1e-15
+    return get_n_red
+
+# Loading tables compiled by Richard Mathar & Jeff Meisner.
+r = pathlib.Path(__file__).parent.absolute()
+r_index_co2 = compile_table(r/"data/n_mathar_co2.dat")        # Pure CO2
+r_index_air = compile_table(r/"data/n_mathar_air_370co2.dat") # Dry air with 370ppm of CO2 
+r_index_h2o = compile_table(r/"data/n_mathar_h2o.dat")        # Purte H2O
+
+def r_index_DA(lamb):
+    """
+    Subtracting the contribution fo CO2 from the reference air that 
+    is given by Mathar with 370ppm of CO2.
+    
+    **Arguments:**
+    * Wavelength [m]
+    """
+    F_co2 = 370.*1e-6
+    return (r_index_air(lamb) - r_index_co2(lamb) * F_co2) / (1-F_co2)
+
+
+def get_pvsat_buck(T):
+    """
+    Saturating vapor pressure of H2O
+    
+    **Parmameters:**
+    
+    * T  : Temperature [K]
+    
+    **Returns:** P_vsat [Pa]
+    """
+    T_C = T - 273.15
+    P_kPA = 0.61121*np.exp( (18.678 - T_C/234.5) * (T_C/(257.14 + T_C)))
+    return P_kPA * 1000
+def get_Ph2o(Rhum, T):
+    """
+    **Parameters:**
+    
+    * Rhum  : Relative humidity [%]
+    * T     : Temperature [K]
+    
+    **Returns:** The partial pressure of water vapor [Pa]
+    """
+    Ph2o = Rhum/(100)*get_pvsat_buck(T)
+    return Ph2o
+
+def get_Pco2(co2_ppm, T, ptot):
+    """
+    **Parameters:**
+    
+    * co2_ppm : Relative content of CO2 [ppm] (ppmv)
+    * T       : Temperature [K]
+    * ptot       : The total pressure of the mixture [Pa]
+    
+    **Returns:** The partial pressure of CO2 [Pa]
+    """
+    Fco2 = 1e-6 * co2_ppm
+    Pco2 = Fco2*ptot
+    return Pco2
+
+def get_n_air(lamb, pres, g_co2, rhum, T, nref=False, add=0):
+    """
+    * pres  : [mbar]
+    * g_co2 : [ppmv]
+    * rhum  : [%]
+    * T     : [K]
+    """
+    P_tot = pres*units.mbar.to(units.Pa)
+    F_co2 = 1e-6 * g_co2
+    F_h2o = rhum/100 * get_pvsat_buck(T)/P_tot
+    F_da = 1-(F_co2 + F_h2o)
+    print("H2O", F_h2o)
+    print("CO2", F_co2)
+    print("DA", F_da)
+    c = constants.c.value
+    n_ref = ((r_index_DA(lamb))*F_da + (r_index_co2(lamb))*F_co2 + (r_index_h2o(lamb))*F_h2o)
+    if nref:
+        return n_ref
+    else:
+        n_compound_air = add + constants.c.value*P_tot/(constants.R.value * T) * n_ref
+        return n_compound_air
+
+
+
+
+
+#######################################################################
+# End of new block
+#######################################################################
         
     
 #class simulated_air(object):
@@ -125,6 +297,8 @@ def get_n_CO2(wavelength, add=0):
     determination of the refractive index of carbon dioxide in the ultraviolet
     region, Opt. Commun. 9, 432-434 (1973)
     """
+    logit.error("Using get_n_CO2() which is deprecated")
+    logit.error("This is deprecated. Use n_hat2nm1(r_index_co2(lambs), P, T) instead")
     lambs = wavelength*1e6
     Bs_CO2 = np.array([6.991e-2, 1.4472e-3, 6.42941e-5, 5.21306e-5, 1.46847e-6])
     Cs_CO2 = np.array([166.175, 79.609, 56.3064, 46.0196, 0.055178])#0.0584738
@@ -354,8 +528,7 @@ def test_air():
 ####################################################################################
 
     
-import pathlib
-import scipy.interpolate as interp
+
 
 
 def n_h2o(lambda_, approx=False, column=False,

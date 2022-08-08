@@ -62,6 +62,8 @@ class simulator(object):
         
         * file : A parsed config file (see parsefile)
         * fpath: (string) A path to the config file to parse
+        * statlocs : The station locations (optional)
+          (east, north) for each aperture shape is (Na, 2)
         """
         if file is not None:
             theconfig = file

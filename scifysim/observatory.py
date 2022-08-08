@@ -41,7 +41,7 @@ class observatory(object):
         
         Parameters:
         
-        * statlocs : The station locations 
+        * statlocs : The station locations (optional)
           (east, north) for each aperture shape is (Na, 2)
         * location : An astropy.coordinatEarthLocation (default = Paranal)
           example: myloc = astroplan.Observer.at_site("Paranal", timezone="UTC")
