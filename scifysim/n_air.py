@@ -84,6 +84,23 @@ class wet_atmo(object):
         n_compound_air = constants.c.value*P_tot/(constants.R.value * self.temp) * n_ref
         self.Nair = n_compound_air + add
         return self.Nair
+    def get_Nair_wn(self, sig, add=1):
+        """
+        Add=1 by default
+        
+        Returns the refractive index (or reduced refractive index)
+        for humid air at the given wavelengths.
+
+        **Parameters:**
+
+        * sig : An array of wavenumber [m^-1]
+        * add   : Gets added to the reduced refracive index:
+          default: 1. Use 1 to obtain the actual refractive index.
+
+        **Returns:**  add + n-1 
+        """
+        lambs = 1./sig
+        return self.get_Nair(lambs, add=add)
                 
     def get_Nair_old(self, lambs, add=0):
         """

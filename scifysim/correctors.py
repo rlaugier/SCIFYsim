@@ -16,6 +16,8 @@ parent = Path(__file__).parent.absolute()
 #znse_file = parent/"data/znse_index.csv"
 znse_file = parent/"data/znse_Connolly.csv"
 
+
+
 # Brute force test parameter to 
 thetas = np.linspace(-np.pi, np.pi, 10000)
 comphasor = np.ones(4)[None,:]*np.exp(1j*thetas[:,None])
@@ -181,8 +183,8 @@ class offband_ft(object):
         self.wa_model = wa_model
         self.corrector = corrector
         
-        self.S_model_science = self.corrector.solve_air(self.wl_science, self.wa_model)
-        self.S_model_ft = self.corrector.solve_air(self.wl_ft, self.wa_model)# Solving based on the FT measurements
+        self.S_model_science = self.corrector.solve_air_corrector(self.wl_science)
+        self.S_model_ft = self.corrector.solve_air_corrector(self.wl_ft)# Solving based on the FT measurements
         
         self.corrector = corrector
         self.simple_piston_ft = None
@@ -232,20 +234,27 @@ class offband_ft(object):
         
         # Computing the feedforward correction based on the FT phase:
         self.b_ft = self.S_model_ft.dot(self.phase_seen_by_ft)
+        #self.correction_feedforward = asim.corrector.get_raw_phase_correction(self.wl_science[:,None],
+        #                                                      b=self.b_ft[0,:],
+        #                                                      c=self.b_ft[1,:])
         self.correction_feedforward = asim.corrector.get_raw_phase_correction(self.wl_science[:,None],
-                                                              b=self.b_ft[0,:],
-                                                              c=self.b_ft[1,:])
+                                                                             vector=self.b_ft)
+        
         # Computing the ideal correction (If we could measure the actual phase and close a loop)
         self.b_science_ideal = self.S_model_science.dot(self.true_phase_on_science - self.correction_ft_to_science)
+        #self.correction_closed_loop = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+        #                                                      b=self.b_science_ideal[0,:],
+        #                                                      c=self.b_science_ideal[1,:])
         self.correction_closed_loop = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
-                                                              b=self.b_science_ideal[0,:],
-                                                              c=self.b_science_ideal[1,:])
+                                                                             vector=self.b_science_ideal)
         
         # Computing a biased estimation based on a full model
         self.b_science_model = self.S_model_science.dot(self.model_phase_on_science - self.correction_ft_to_science)
+        #self.correction_blind = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+        #                                                      b=self.b_science_model[0,:],
+        #                                                      c=self.b_science_model[1,:])
         self.correction_blind = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
-                                                              b=self.b_science_model[0,:],
-                                                              c=self.b_science_model[1,:])
+                                                                       vector=self.b_science_model)
         if band is not None:
             return true_phase_on_band, correction_ft_to_band
 
@@ -260,7 +269,7 @@ class offband_ft(object):
         if model is None:
             model = self.wa_model
         path_lengths = np.linspace(-max_baseline, max_baseline, 200)[:,None]
-        S_model = self.corrector.solve_air(self.wl_science, model)
+        S_model = self.corrector.solve_air_corrector(self.wl_science)
         
         model_phase_on_science = self.corrector.theoretical_phase(self.wl_science, path_lengths,
                                                                   model=model, add=0)
@@ -311,23 +320,29 @@ class offband_ft(object):
         #model_phase_on_band = self.corrector.theoretical_phase(band, pistons, model=self.wa_model, add=0)
         if mode == "ideal":
             # Assumes a closed loop in the science band
+            #correction_closed_loop = self.corrector.get_raw_phase_correction(band[:,None],
+            #                                                  b=self.b_science_ideal[0,:],
+            #                                                  c=self.b_science_ideal[1,:])
             correction_closed_loop = self.corrector.get_raw_phase_correction(band[:,None],
-                                                              b=self.b_science_ideal[0,:],
-                                                              c=self.b_science_ideal[1,:])
+                                                                            vector=self.b_science_ideal)
             return true_phase_on_band - correction_ft_to_band - correction_closed_loop
             
         elif mode == "blind":
             # Assumes only atmosphere is good and setpoint of FT is solid
+            #correction_blind = self.corrector.get_raw_phase_correction(band[:,None],
+            #                                                  b=self.b_science_model[0,:],
+            #                                                  c=self.b_science_model[1,:])
             correction_blind = self.corrector.get_raw_phase_correction(band[:,None],
-                                                              b=self.b_science_ideal[0,:],
-                                                              c=self.b_science_ideal[1,:])
+                                                                      vector=self.b_science_ideal)
             return true_phase_on_band - correction_ft_to_band - correction_blind
         
         elif mode == "feedforward":
             # Assumes a measurement of dispersion in the FT band
+            #correction_feedforward = asim.corrector.get_raw_phase_correction(band[:,None],
+            #                                                  b=self.b_ft[0,:],
+            #                                                  c=self.b_ft[1,:])
             correction_feedforward = asim.corrector.get_raw_phase_correction(band[:,None],
-                                                              b=self.b_ft[0,:],
-                                                              c=self.b_ft[1,:])
+                                                                            vector=self.b_ft)
             return true_phase_on_band - correction_ft_to_band - correction_feedforward
         
         
@@ -345,6 +360,8 @@ class offband_ft(object):
         elif mode == "feedforward":
             # Assumes a measurement of dispersion in the FT band
             return self.true_phase_on_science - self.correction_ft_to_science - self.correction_feedforward
+
+        
 
 def generic_vacuum(lambs, add=1.):
     """
@@ -409,18 +426,57 @@ class corrector(object):
             self.nmat2 = model_material2.get_Nair
         self.nmean_mat2 = np.mean(self.nmat2(lambs))
         diams = self.config.getarray("configuration", "diam")
-        n_tel = diams.shape[0]
+        self.n_tel = diams.shape[0]
         # An amplitude factor
-        self.a = np.ones(n_tel) # Amplitude term
-        self.b = np.zeros(n_tel) # Air compensation
-        self.c  = np.zeros(n_tel) # Glass length
+        
+        chip_corr = np.zeros((self.n_tel,4)) # (n_tel, n_glasses)
+        atmo_corr = np.zeros((self.n_tel,4)) # (n_tel, n_glasses)
+        a_corr = np.ones(self.n_tel) # (n_tel, n_glasses)
+        
+        self.refresh_adjustments(a=a_corr, chip_corr=chip_corr, atmo_corr=atmo_corr,
+                                write=True)
+        
         self.nmean = np.mean(self.nplate(lambs))
-        self.dcomp = -(self.nmean-1)*self.c # A length of air as compensation for glass
-        self.e = np.zeros(n_tel) # Additional material (CO2 bellows)
+
         
         self.prediction_model = n_air.wet_atmo(config)
+        #pdb.set_trace()
         
-    
+    def refresh_adjustments(self, a=None, chip_corr=None, atmo_corr=None,
+                            write=False):
+        """
+        Updates the values of self.a, self.b... based on the 
+        values in self.chip_corr and atmo_corr. Except for a,
+        arrays are of shape `(n_tel, n_glasses)` with n_glasses including
+        air and air compensation.
+        
+        **Arguments:**
+        * a        : Correction for amplitude
+        * chip corr: Correction for the chip [m]
+        * atmo_corr: Correction for the atmosphere [m]
+        * write : If true, will write down the vectors received
+        """
+        if a is None:
+            a = self.a
+        elif write:
+            self.a = a
+            
+        if chip_corr is None:
+            chip_corr = self.chip_corr
+        elif write:
+            self.chip_corr = chip_corr
+            
+        if atmo_corr is None:
+            atmo_corr = self.atmo_corr
+        elif write:
+            self.atmo_corr = atmo_corr
+            
+        self.b = chip_corr[:,0] + atmo_corr[:,0] # Air compensation
+        self.c  = chip_corr[:,1] + atmo_corr[:,1] # Glass length
+        #-(self.nmean-1)*self.c 
+        self.dcomp = chip_corr[:,2] + atmo_corr[:,2] # A length of air as compensation for glass
+        self.e = chip_corr[:,3] + atmo_corr[:,3] # Additional material (CO2 bellows)
+        
     def get_phasor(self, lambs):
         """
         Returns the complex phasor corresponding
@@ -454,7 +510,7 @@ class corrector(object):
         return alpha
     def get_raw_phase_correction(self, lambs,
                                  b=0, c=0, e=0,
-                                 dcomp=0):
+                                 dcomp=0, vector=None):
         """
         Returns the raw (non-wrapped) phase produced by an optical path
         of b[m] in air and c[m] in plate material.
@@ -476,9 +532,19 @@ class corrector(object):
         #if model is None:
         #    model = self.prediction_model
         nair = self.ncomp(lambs, add=1)
-        nplate = self.nplate(lambs)
-        #nplate -1 because it is air displacing glass
-        return 2*np.pi/lambs*(nair*(b + dcomp) + np1*c + np2*e)
+        
+        if vector is None:
+            phase_correction = 2*np.pi/lambs*(nair*(b + dcomp) + np1*c + np2*e)
+        else:
+            if vector.shape[0] == 3:
+                phase_correction = 2*np.pi/lambs*(nair*(vector[0] + dcomp) +\
+                                                  np1*vector[1] + np2*vector[2])
+            elif vector.shape[0] == 2:
+                phase_correction = 2*np.pi/lambs*(nair*(vector[0] + dcomp) +\
+                                                  np1*vector[1])
+            elif vector.shape[0] == 1:
+                phase_correction = 2*np.pi/lambs*(nair*(vector[0] + dcomp))
+        return phase_correction
     
     def get_dcomp(self, c):
         """
@@ -515,14 +581,16 @@ class corrector(object):
         if dcomp is None:
             dcomp = self.get_dcomp(c)
         if e is None:
-            e = self.e
+            e = self.e      
+            
+        #pdb.set_trace()
         
         # the air displacing solid plate:
         np1 = self.nplate(lambs) - self.ncomp(lambs, add=1.)
         # The air displacing second material:
         np2 = self.nmat2(lambs, add=1.) - self.ncomp(lambs, add=1.)
         #nplate -1 because it is air displacing glass
-                              
+
         alpha = a[None,:]*np.exp(-1j*2*np.pi/lambs[:,None] * (b[None,:] + \
                                                             dcomp[None,:] +\
                                                         c[None,:] * np1[:,None] +\
@@ -722,6 +790,7 @@ class corrector(object):
             For obtaining a more practical direct results, some
             more complicated balancing guidelines should be followed.
         """
+        #pdb.set_trace()
         params = Parameters()
         for i in range(self.b.shape[0]):
             params.add("b%d"%(i),value=0., min=-1.0e-3, max=1.0e-3, vary=True)
@@ -737,9 +806,12 @@ class corrector(object):
         self.sol = sol
         if apply:
             bvec, cvec = extract_corrector_params(self, sol.params)
-            self.b = bvec
-            self.c = cvec
-            self.dcomp = -(self.nmean-1)*self.c
+            self.chip_corr = {"b":bvec,
+                             "c":cvec,
+                             "dcomp":-(self.nmean-1)*cvec}
+            #self.b = self.chip_corr["b"]
+            #self.c = self.chip_corr["c"]
+            #self.dcomp = self.chip_corr["dcomp"]
         return sol
     
     def tune_static_shape(self, lambs, combiner, apply=True,
