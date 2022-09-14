@@ -267,6 +267,7 @@ class simulator(object):
 
 
     def make_metrologic_exposure(self, interest, star, diffuse,
+                                 int_sources=None,
                                  texp=1., t_co=2.0e-3, time=None,
                                  monitor_phase=True, dtype=np.float32,
                                  perfect=False):
@@ -297,6 +298,8 @@ class simulator(object):
         t_co = self.injector.screen[0].step_time
         self.n_subexps = int(texp/t_co)
         self.integrator.n_subexps = self.n_subexps
+        self.integrator.t_co = t_co
+        self.integrator.update_enclosure(self.lambda_science_range)
         #taraltaz = self.obs.observatory_location.altaz(time, target=self.target)
         #taraltaz, tarPA = self.obs.get_position(self.target, time)
         
@@ -305,6 +308,14 @@ class simulator(object):
         
         self.integrator.static_xx_r = mas2rad(self.injector.vigneting.xx)
         self.integrator.static_yy_r = mas2rad(self.injector.vigneting.yy)
+        if int_sources is not None:
+            ## Preparint the post-filtering source
+            if not hasattr(int_sources[0], "dflux"):
+                for asource in int_sources:
+                    # Compute the flux from the source in ph/sr per intergration subframe t_co
+                    asource.dflux = t_co * asource.get_total_emission(self.lambda_science_range, bright=True)
+                    asource.ss = asource.dflux[:,None]
+                
         ## Preparing the sources
         if not hasattr(diffuse[0], "xx_r"):
             for asource in diffuse:
@@ -582,6 +593,10 @@ class simulator(object):
         self.computed_static_yy = self.injector.vigneting.yy
         self.integrator.reset()
         self.integrator.n_subexps = self.n_subexps
+        self.integrator.t_co = t_co
+        if not hasattr(self.integrator, "cold_bg"):
+            enclosure_range = np.linspace(2.55e-6, 5.8e-6, 200)
+            self.integrator.update_enclosure(enclosure_range)
         # Check existence of pre-computed static signal: This part should remain static per pointing
         if not hasattr(self, "computed_static"): # Pointings should delete this attribute
             if not hasattr(diffuse[0], "xx_r"):

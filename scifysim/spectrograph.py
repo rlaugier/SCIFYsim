@@ -2,8 +2,10 @@
 import sympy as sp
 import numpy as np
 import numexpr as ne
+import scifysim as sf
 from kernuller import fprint
 from .utilities import ee
+from pdb import set_trace
 
 import logging
 
@@ -37,6 +39,7 @@ class integrator():
           (n_wavelength, n_outputs) each. This is only gets updated once per pointing
           (at the start of the first make_exposure, upon detection of the absence of a
           ``xx_r`` attribute on the first diffuse source).
+        * ``cold_bg`` : The flux from cold enclosure [e-/s/pixel]
         
         
         For each subexposure (if ``full_record`` is True in calling ``director.make_exposure`` or ``director.make_metrologic_exposure``.
@@ -57,19 +60,44 @@ class integrator():
             self.dark=0.05
             self.ENF=1.
             self.mgain=1.
+            self.xs = 18.0e-6
+            self.ys = 18.0e-6
             self.well=np.inf
         else:
+            self.config = config
             self.eta = config.getfloat("detector", "eta")
             self.ron = config.getfloat("detector", "ron")
             self.dark = config.getfloat("detector", "dark")
             self.ENF = config.getfloat("detector", "ENF")
             self.mgain = config.getfloat("detector", "mgain")
+            self.n_pixsplit = config.getfloat("spectrograph", "n_pix_split")
+            self.xs = config.getfloat("detector", "pix_size_x")
+            self.ys = config.getfloat("detector", "pix_size_y")
+            self.T_enclosure = config.getfloat("optics", "temp_cold_optics")
+            #self.update_enclosure()
             well = config.getfloat("detector", "well")
             if np.isclose(well, 0.) or infinite_well:
                 self.well = np.float32(1.e20) #np.inf
             else:
                 self.well = well
         self.reset()
+        
+    def update_enclosure(self, wavelength_range):
+        """
+        **Arguments:**
+        * wavelength_range : [m] the channels for which to compute the flux.
+        
+        Computation of the cold background `self.cold_bg` [e-/s/pix]
+        and self.det_sources [e-/s/channel]
+        
+        """
+        self.pix_area = self.xs*self.ys
+        self.enclosure = sf.sources.enclosure(solid_angle=2*np.pi,T=self.T_enclosure, name="Enclosure")
+        self.cold_bg = self.pix_area * self.enclosure.get_total_emission(wavelength_range, bright=True, n_sub=10)
+        #set_trace()
+        self.det_sources = [np.sum(self.cold_bg)*np.ones_like(self.cold_bg) * self.n_pixsplit, np.array(self.dark * self.n_pixsplit) ]
+        
+        self.det_labels = ["Cold enclosure", "Dark current"]
         
     def accumulate(self,value):
         """
@@ -93,9 +121,6 @@ class integrator():
             return self.mean, self.std
         else:
             pass
-    def compute_noised(self):
-        logit.warning("Noises not implemented yet")
-        raise NotImplementedError("Noises not implemented yet")
     def get_total(self, spectrograph=None, t_exp=None,
                  n_pixsplit=None):
         """
@@ -115,17 +140,20 @@ class integrator():
         if n_pixsplit is not None: # Splitting the signal over a number pixels
             thepixels = self.acc.copy()
             thepixels = ((thepixels/n_pixsplit)[None,:,:]*np.ones(n_pixsplit)[:,None,None])
+            logit.warning("Usin post-defined n_pixsplit")
         else:
             thepixels = self.acc.copy()
+            thepixels = ((thepixels/self.n_pixsplit)[None,:,:]*np.ones(self.n_pixsplit)[:,None,None])
         if np.isclose(self.exposure, 0., atol=1.e-8):
             self.exposure = t_exp
-        obtained_dark = self.dark * self.exposure * self.mgain
+        obtained_dark = self.dark * self.exposure * self.mgain # This is done per pix
+        obtained_cold_bg = self.cold_bg * self.exposure # This is done per pix
         if spectrograph is not None:
             acc = spectrograph.get_spectrum_image(thepixels)
         else:
             acc = thepixels
         electrons = acc * self.eta * self.mgain
-        electrons = electrons + obtained_dark
+        electrons = electrons + obtained_dark + self.cold_bg
         expectancy = electrons.copy()
         electrons = np.random.poisson(lam=electrons*self.ENF)/self.ENF
         electrons = np.clip(electrons, 0, self.well)
@@ -138,13 +166,22 @@ class integrator():
         return read
     def get_static(self):
         """
-        **Returns** the total value of integrated light from static sources.
+        **Returns**
+        * total_static: the total value of integrated light from static sources. [ph/s/pix]
+        * dark_current: the dark current [e-/s/pix]
+        * enclosure_thermal_background : [e-/s/pix]
         
         **Not affected by noises**
+        
         """
         static = np.array(self.static)
         total_static = self.n_subexps * static.sum(axis=0)
-        return total_static
+        
+        t_exp = self.t_co * self.n_subexps
+        enclosure_thermal_background = self.cold_bg * t_exp
+        dark_current = self.dark * t_exp
+        
+        return total_static, dark_current, enclosure_thermal_background
     
     def get_starlight(self):
         return self.starlight.sum(axis=0)    

@@ -53,8 +53,13 @@ class noiseprofile(object):
         self.m_0, self.mp0 = asim.context.get_mags_of_sim(asim)
         self.F_0 = mag2F(self.m_0)
         self.s_0 = integ.mean_starlight / self.dit_0
-        self.s_d = integ.get_static() / self.dit_0
-        
+        static, dark_current, enclosure = integ.get_static()
+        self.s_dark_current / self.dit_0
+        self.s_enc_bg = enclosure / self.dit_0 / self.eta # Must convert that back in equ. photons
+        self.s_d = static / self.dit_0 / self.eta # Must convert that back in equ. photon
+        print(f" s_d = {self.s_d} [ph/s] the static output")
+        print(f" s_dark_current = {self.s_dark_current} [ph-/s] equivalent the dark current")
+        print(f" s_enc_bg = {self.s_enc_bg} [ph-/s] equivalent the enclosure background")
         self.p_0 = integ.mean_planetlight / self.dit_0
         
         
@@ -91,7 +96,7 @@ class noiseprofile(object):
         
         # small s is a flux
         s_s = Fs/self.F_0 * self.s_0
-        s_d = self.s_d
+        s_d = self.s_d + self.mynpix*(self.s_dark_current + self.s_enc_bg )
         
         
         sigma_phot = np.sqrt(self.eta * dit * (s_d + s_s))
@@ -187,6 +192,9 @@ class noiseprofile(object):
         print("eta = ", self.eta, "# The quantum efficiency of the detector")
         print("sigma_ron_d = ", self.sigma_ron_d, "# The total readout noise per spectral channel for the differential observable(s)")
         print("k_phi = ", self.k_phi_m, "# The instrumental error coefficient")
+        print(f" s_d = {self.s_d} [ph/s] the static output")
+        print(f" s_dark_current = {self.s_dark_current} [e-/s] the dark current")
+        print(f" s_enc_bg = {self.s_enc_bg} [e-/s] the enclosure background")
         
         
 

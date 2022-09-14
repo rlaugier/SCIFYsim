@@ -8,8 +8,14 @@ from astropy import constants
 from astropy import units
 import scipy.interpolate as interp
 from pathlib import Path
+import scipy.interpolate as interp
 
 parent = Path(__file__).parent.absolute()
+
+#qe_file = parent/"data/hawaii2rg_qe.csv"
+#qe_data = np.loadtxt(znse_file,delimiter=";")
+#qe_interp = interp.interp1d(qe_data[:,0]*1e-6, qe_data[:,1],
+#                             kind=order, bounds_error=False )
 
 class transmission_emission(object):
     def __init__(self,trans_file="data/MK_trans_sfs.txt", T=285,
@@ -58,6 +64,8 @@ class transmission_emission(object):
         * wl            : The wavelength channels to compute [m]
         * bright        : If True: compute the brightness
           if False: compute the transmission
+          
+        [ph/s/sr]
         """
         if isinstance(wl, np.ndarray):
             if bright:
@@ -206,6 +214,81 @@ def set_sink(A):
     Defines A as the last element in the chain.
     """
     A.downstream = None
+
+
+class enclosure(transmission_emission):
+    def __init__(self,trans_file="data/hawaii2rg_qe.csv", T=285,
+                name="noname",
+                solid_angle=2*np.pi):
+        """
+        Reproduces a basic behaviour of an enclosure at a given temperature. 
+        Here, self.trans represents the (1-quantum efficiency) as to be
+        analogous to optics in transmission.
+        
+        **Parameters:**
+        
+        * qe            : The quantum efficiency of the detector, including
+          throughput by intervening glasses/surfaces.
+        * T             : Temperature of the medium used for emission
+        * airmass       : When True, scales the effect with the airmass provided by the observatory object
+        * observatory   : The observatory object used to provided the airmass.
+        * solid_angle   : The solid angle for this given part of the enclosure
+          Default: 2pi, the fraction seen by a plane detector.
+        
+        .. warning::
+            Unlike for astrophysical sources, when a transmission_emission
+            object contains an ss attribute, it already
+            takes into account the transmission through the insturment.
+        """
+        self.__name__ = name
+        if isinstance(trans_file, float):
+            # Flat value from 1 nm to 50µm
+            self.qe_file = np.array([[1.0e-9, trans_file],
+                                       [50.0e-6, trans_file]])
+        elif isinstance(trans_file, str):
+            self.qe_file = np.loadtxt(parent/trans_file, delimiter=",")
+        else:
+            raise ValueError("Requires a float or a file path")
+            
+        self.trans = interp.interp1d(1e-6*self.qe_file[:,0], (1-self.qe_file[:,1]),
+                                     kind="linear", bounds_error=False )
+        self.solid_angle = solid_angle
+        self.T = T
+        self.airmass = False
+            
+    def get_total_emission(self, wl, bandwidth=None, bright=False,n_sub=10,):
+        """
+        Similar begaviour as get_trans_emit() but averages the effect over each spectral channel.
+        
+        **Parameters:**
+        
+        * wl            : The center of each wavelength channel. If bandwidth is not provided
+          (prefered situation) the width of each channel will be set as the spacing
+          between them (through np.gradient())
+        * bandwidth     : (deprecated) array of floats providing the width of each spectral channe.
+        * n_sub         : The number of sub-channel to compute for the calculation. A minimum of 10 is recommended.
+        * solid_angle   : As this is designed to 
+                        
+        """
+        #
+        # Little shortcut when bandwidth is not provided: infer it based
+        # on the band covered by wl
+        if bandwidth is None:
+            if isinstance(wl, np.ndarray):
+                cen_wl = wl.copy()
+                bandwidth = np.gradient(wl)
+            else:
+                bandwidth = np.max(wl) - np.min(wl)
+                cen_wl = np.mean(wl)
+        else:
+            cen_wl = wl
+        
+        lambda_min = wl - bandwidth/2
+        lambda_max = wl + bandwidth/2
+        os_wl = np.linspace(lambda_min, lambda_max, n_sub)
+        sky = self.get_trans_emit(os_wl, bright=bright)
+        mean_sky = np.mean(sky, axis=0)
+        return mean_sky * self.solid_angle
 
 
 class _blackbody(object):

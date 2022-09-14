@@ -316,7 +316,8 @@ def plot_injection(theinjector, show=True, noticks=True):
         
     return focal_plane, amplitudes, phases
 
-def plot_output_sources(integ, lambda_range, margins=4, show=True):
+def plot_output_sources(asim, integ, lambda_range, margins=4, show=True,
+                       t_exp=0.):
     """
     Plot the content of all outputs for each of the different sources:
     
@@ -343,6 +344,9 @@ def plot_output_sources(integ, lambda_range, margins=4, show=True):
     pup = 1 # The pupil for which to plot the piston
     print(integ.sums[0].shape)
     signalplot = plt.figure(dpi=100)
+    
+    det_sources = [integ.det_sources[0][:,None]*np.ones_like(integ.sums[0]),
+                           integ.det_sources[1][None,None]*np.ones_like(integ.sums[0])]
     bars = []
     for ksource, (thesource, label) in enumerate(zip(integ.sums, integ.source_labels)):
         for ilamb in range(lambda_range.shape[0]):
@@ -352,10 +356,22 @@ def plot_output_sources(integ, lambda_range, margins=4, show=True):
             else:
                 bars.append(plt.bar(outputs+shift_step*ilamb, thesource[ilamb,:], bottom=bottom[ilamb,:],
                     width=shift_step,  color="C%d"%ksource)) #yerr=noise[ilamb,:]
-        bottom += thesource
+        bottom += np.nan_to_num(thesource)
+    for lsource, (thesource, label) in enumerate(zip(det_sources, integ.det_labels)):
+        #print("bottom")
+        #print(bottom)
+        for ilamb in range(lambda_range.shape[0]):
+            #print(thesource[ilamb,:])
+            if ilamb == 0:
+                bars.append(plt.bar(outputs+shift_step*ilamb, thesource[ilamb,:], bottom=bottom[ilamb,:],
+                    label=label, width=shift_step, color="C%d"%(lsource+ksource+1))) #yerr=noise[ilamb,:]
+            else:
+                bars.append(plt.bar(outputs+shift_step*ilamb, thesource[ilamb,:], bottom=bottom[ilamb,:],
+                    width=shift_step,  color="C%d"%(lsource+ksource+1))) #yerr=noise[ilamb,:]
+        bottom += np.nan_to_num(thesource)
     #plt.legend((bars[i][0] for i in range(len(bars))), source_labels)
     #Handled the legend with an condition in the loop
-    plt.legend(loc="upper left")
+    plt.legend(loc="upper left", fontsize="x-small")
     plt.xticks(outputs)
     plt.xlabel(r"Output and spectral channel %.1f to %.1f $\mu m$ ($R\approx %.0f$)"%(lambda_range[0]*1e6,
                                                                                      lambda_range[-1]*1e6,
