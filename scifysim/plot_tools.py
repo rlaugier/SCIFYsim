@@ -8,6 +8,7 @@ import numpy as np
 import logging
 from tqdm import tqdm
 from scifysim import utilities as util
+from pdb import set_trace
 
 logit = logging.getLogger(__name__)
 
@@ -344,8 +345,7 @@ def plot_output_sources(asim, integ, lambda_range, margins=4, show=True,
     pup = 1 # The pupil for which to plot the piston
     print(integ.sums[0].shape)
     signalplot = plt.figure(dpi=100)
-    
-    det_sources = [integ.det_sources[0][:,None]*np.ones_like(integ.sums[0]),
+    det_sources = [integ.det_sources[0][:,None],
                            integ.det_sources[1][None,None]*np.ones_like(integ.sums[0])]
     bars = []
     for ksource, (thesource, label) in enumerate(zip(integ.sums, integ.source_labels)):

@@ -93,9 +93,15 @@ class integrator():
         """
         self.pix_area = self.xs*self.ys
         self.enclosure = sf.sources.enclosure(solid_angle=2*np.pi,T=self.T_enclosure, name="Enclosure")
-        self.cold_bg = self.pix_area * self.enclosure.get_total_emission(wavelength_range, bright=True, n_sub=10)
+        # Note: the radiometric background is computed summed over a broad wavelength range
+        # then broadcast over all the spectral channels.
+        enclosure_range = np.linspace(2.55e-6, 5.8e-6, 200)
+        self.cold_bg = self.pix_area * np.sum(self.enclosure.get_total_emission(enclosure_range,
+                                                                                bright=True,
+                                                                                n_sub=10)) *\
+                                        np.ones_like(wavelength_range)
         #set_trace()
-        self.det_sources = [np.sum(self.cold_bg)*np.ones_like(self.cold_bg) * self.n_pixsplit, np.array(self.dark * self.n_pixsplit) ]
+        self.det_sources = [self.cold_bg * self.n_pixsplit, np.array(self.dark * self.n_pixsplit) ]
         
         self.det_labels = ["Cold enclosure", "Dark current"]
         
