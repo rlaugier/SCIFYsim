@@ -299,7 +299,8 @@ class simulator(object):
         self.n_subexps = int(texp/t_co)
         self.integrator.n_subexps = self.n_subexps
         self.integrator.t_co = t_co
-        self.integrator.update_enclosure(self.lambda_science_range)
+        if not hasattr(self.integrator, "cold_bg"):
+            self.integrator.update_enclosure(self.lambda_science_range)
         #taraltaz = self.obs.observatory_location.altaz(time, target=self.target)
         #taraltaz, tarPA = self.obs.get_position(self.target, time)
         
@@ -595,8 +596,7 @@ class simulator(object):
         self.integrator.n_subexps = self.n_subexps
         self.integrator.t_co = t_co
         if not hasattr(self.integrator, "cold_bg"):
-            enclosure_range = np.linspace(2.55e-6, 5.8e-6, 200)
-            self.integrator.update_enclosure(enclosure_range)
+            self.integrator.update_enclosure(self.lambda_science_range)
         # Check existence of pre-computed static signal: This part should remain static per pointing
         if not hasattr(self, "computed_static"): # Pointings should delete this attribute
             if not hasattr(diffuse[0], "xx_r"):
