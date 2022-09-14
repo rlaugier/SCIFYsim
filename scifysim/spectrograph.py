@@ -159,7 +159,8 @@ class integrator():
         else:
             acc = thepixels
         electrons = acc * self.eta * self.mgain
-        electrons = electrons + obtained_dark + self.cold_bg
+        #set_trace()
+        electrons = electrons + self.cold_bg[None,:,None] + obtained_dark
         expectancy = electrons.copy()
         electrons = np.random.poisson(lam=electrons*self.ENF)/self.ENF
         electrons = np.clip(electrons, 0, self.well)
