@@ -540,7 +540,10 @@ def plot_differential_map(asim, kernel=None,
                 themap = seqmap.sum(axis=0)
             else :
                 themap = seqmap[wavelength,:,:]
-            plt.imshow(themap, extent=asim.map_extent, **kwargs)
+            plt.imshow(themap, extent=asim.map_extent, 
+                       vmin=-amax, vmax=amax, **kwargs)
+            if cbar:
+                plt.colorbar()
             if central_marker is not False:
                 plt.scatter(**central_marker)
             plt.title("Output %d"%(o))
