@@ -233,6 +233,15 @@ class combiner(object):
         elif combiner_type == "KN_3T":
             hasph=False
             M, bright, dark, photometric = sf.combiners.kernel_nuller_3T(include_masks=True)
+        elif combiner_type == "KN_4T":
+            hasph=False
+            M, bright, dark, photometric = sf.combiners.kernel_nuller_4T(include_masks=True)
+        elif combiner_type == "KN_5T":
+            hasph=False
+            M, bright, dark, photometric = sf.combiners.kernel_nuller_5T(include_masks=True)
+        elif combiner_type == "KN_6T":
+            hasph=False
+            M, bright, dark, photometric = sf.combiners.kernel_nuller_6T(include_masks=True)
         else:
             logit.error("Nuller type not recognized")
             raise KeyError("Nuller type not found")

@@ -440,6 +440,8 @@ def plot_response_map(asim, outputs=None,
                 plt.subplot(1,outputs.shape[0], oi+1)
             elif layout == "v":
                 plt.subplot(outputs.shape[0],1, oi+1)
+            elif isinstance(layout, tuple):
+                plt.subplot(layout[0], layout[1], oi+1)
             #outmap = seqmap[:,:,:]
             if sumall:
                 themap = seqmap.sum(axis=0)
@@ -471,10 +473,12 @@ def plot_differential_map(asim, kernel=None,
                       sequence_index=None,
                       show=True,
                       save=False,
+                      layout=None,
                       figsize=(12,3),
                       dpi=100,
                       central_marker=True,
                       cbar=False,
+                      return_difmaps=False,
                       **kwargs):
     """
     Plot the differential response map of the instrument for the target and sequence
@@ -522,7 +526,7 @@ def plot_differential_map(asim, kernel=None,
             
     difmaps = np.einsum("k o, s w o x y -> s w k x y", kernel,  asim.maps)
     
-    amax = np.max(np.abs(difmaps))
+    amax = np.max(np.abs(difmaps.sum(axis=1)))
     
     
     figs = []
@@ -530,7 +534,10 @@ def plot_differential_map(asim, kernel=None,
         fig = plt.figure(figsize=figsize, dpi=dpi)
         for oi, o in enumerate(outputs):
             seqmap = difmaps[i,:,o,:,:]
-            plt.subplot(1,outputs.shape[0], oi+1)
+            if layout is None:
+                plt.subplot(1,outputs.shape[0], oi+1)
+            elif isinstance(layout, tuple):
+                plt.subplot(layout[0], layout[1], oi+1)
             #outmap = seqmap[:,:,:]
             if sumall:
                 themap = seqmap.sum(axis=0)
@@ -558,7 +565,10 @@ def plot_differential_map(asim, kernel=None,
         if show:
             plt.show()
         figs.append(fig)
-    return figs
+    if return_difmaps:
+        return figs, difmaps
+    else:
+        return figs
             
 def plot_opds(integ, step_time):
     """
