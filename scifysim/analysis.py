@@ -54,7 +54,7 @@ class noiseprofile(object):
         self.F_0 = mag2F(self.m_0)
         self.s_0 = integ.mean_starlight / self.dit_0
         static, dark_current, enclosure = integ.get_static()
-        self.s_dark_current / self.dit_0
+        self.s_dark_current = dark_current / self.dit_0
         self.s_enc_bg = enclosure / self.dit_0 / self.eta # Must convert that back in equ. photons
         self.s_d = static / self.dit_0 / self.eta # Must convert that back in equ. photon
         print(f" s_d = {self.s_d} [ph/s] the static output")
