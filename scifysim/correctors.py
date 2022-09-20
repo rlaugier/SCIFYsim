@@ -418,7 +418,7 @@ class corrector(object):
             self.ncomp = generic_vacuum
         else:
             print("successfully spotted ncomp")
-            self.ncomp = model_comp = model_comp.get_Nair
+            self.ncomp = model_comp.get_Nair
             
         if model_material2 is None:
             self.nmat2 = no_material
@@ -809,9 +809,10 @@ class corrector(object):
             self.chip_corr = {"b":bvec,
                              "c":cvec,
                              "dcomp":-(self.nmean-1)*cvec}
-            #self.b = self.chip_corr["b"]
-            #self.c = self.chip_corr["c"]
-            #self.dcomp = self.chip_corr["dcomp"]
+            # These updates would be removed
+            self.b = self.chip_corr["b"]
+            self.c = self.chip_corr["c"]
+            self.dcomp = self.chip_corr["dcomp"]
         return sol
     
     def tune_static_shape(self, lambs, combiner, apply=True,

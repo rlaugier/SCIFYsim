@@ -163,7 +163,7 @@ def compile_table(file, ):
     freqM = atab[:, 0]
     ref_indexM = atab[:, 1]
     
-    spline = interp.splrep(freqM, ref_indexM, k=3)
+    spline = interp.splrep(freqM, ref_indexM, k=1)
     def get_n_red(lam2,):
         """
         Interpolation of one of the Mathar tables. 
