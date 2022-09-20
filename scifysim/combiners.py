@@ -334,8 +334,6 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False,
 def kernel_nuller_3T(include_masks=False, tap_ratio=None):
     """
     optional :
-    ph_shifters : a list of phase shifters in between the 2 stages
-                (eg: for kernel-nuller ph_shifters=[0, sp.pi/2])
     include_masks: If true, the output will include bright, dark and photometric masks
                 selecting the relevant outputs
     in: 4
@@ -366,6 +364,138 @@ def kernel_nuller_3T(include_masks=False, tap_ratio=None):
         bright = np.array([True, False, False])
         dark = np.array([False, True, True])
         photometric = np.array([False, False, False])
+        return coupler, bright, dark, photometric
+    else:
+        return coupler
+def kernel_nuller_4T(include_masks=False, tap_ratio=None):
+    """
+    optional :
+    include_masks: If true, the output will include bright, dark and photometric masks
+                selecting the relevant outputs
+    in: 4
+    out: 8 (ph0, ph1, bright0, dark0, dark1, bright1, ph2, ph3)
+    symbols:
+        sigma  : the photometric ratio (in intensity)
+        phi_0   : the phase shifter1
+        phi_1   : the phase shifter2
+    Build a bracewell combiner with photometric outputs.
+    
+    
+    Returns: the sympy.Matrix of the combiner
+    Free symbols can be retrieved in list(M.free_symbols)
+    """
+    
+    from kernuller.nullers import matrices_4T
+    kernel_nuller_4T = matrices_4T[0]
+    #sigma = sp.symbols("sigma", real=True)
+    
+    #photometric_preamble = four_photometric(sigma)
+    #C = sp.diag(sp.eye(2), kernel_nuller_4T, sp.eye(2))
+    #coupler = C@photometric_preamble
+    coupler = kernel_nuller_4T
+    
+    if tap_ratio is not None:
+        coupler = coupler.subs([(sigma, tap_ratio)])
+    if include_masks:
+        bright = np.array([True,
+                           False, False, False, False, False, False])
+        dark = np.array([False,
+                         True,  True,  True,  True,  True,  True])
+        photometric = np.array([False,
+                                False, False, False, False, False, False])
+        return coupler, bright, dark, photometric
+    else:
+        return coupler
+    
+def kernel_nuller_5T(include_masks=False, tap_ratio=None):
+    """
+    optional :
+    include_masks: If true, the output will include bright, dark and photometric masks
+                selecting the relevant outputs
+    in: 4
+    out: 8 (ph0, ph1, bright0, dark0, dark1, bright1, ph2, ph3)
+    symbols:
+        sigma  : the photometric ratio (in intensity)
+        phi_0   : the phase shifter1
+        phi_1   : the phase shifter2
+    Build a bracewell combiner with photometric outputs.
+    
+    
+    Returns: the sympy.Matrix of the combiner
+    Free symbols can be retrieved in list(M.free_symbols)
+    """
+    
+    from kernuller.nullers import matrices_5T
+    kernel_nuller_5T = matrices_5T[0]
+    #sigma = sp.symbols("sigma", real=True)
+    
+    #photometric_preamble = four_photometric(sigma)
+    #C = sp.diag(sp.eye(2), kernel_nuller_4T, sp.eye(2))
+    #coupler = C@photometric_preamble
+    coupler = kernel_nuller_5T
+    
+    if tap_ratio is not None:
+        coupler = coupler.subs([(sigma, tap_ratio)])
+    if include_masks:
+        bright = np.array([True,
+                           False, False, False, False, False, False,
+                           False, False, False, False, False, False])
+        dark = np.array([False,
+                         True,  True,  True,  True,  True,  True, 
+                         True,  True,  True,True,  True,  True])
+        photometric = np.array([False,
+                                False, False, False, False, False, False,
+                           False, False, False, False, False, False])
+        return coupler, bright, dark, photometric
+    else:
+        return coupler
+    
+
+def kernel_nuller_6T(include_masks=False, tap_ratio=None):
+    """
+    optional :
+    include_masks: If true, the output will include bright, dark and photometric masks
+                selecting the relevant outputs
+    in: 4
+    out: 8 (ph0, ph1, bright0, dark0, dark1, bright1, ph2, ph3)
+    symbols:
+        sigma  : the photometric ratio (in intensity)
+        phi_0   : the phase shifter1
+        phi_1   : the phase shifter2
+    Build a bracewell combiner with photometric outputs.
+    
+    
+    Returns: the sympy.Matrix of the combiner
+    Free symbols can be retrieved in list(M.free_symbols)
+    """
+    
+    from kernuller.nullers import matrices_6T
+    kernel_nuller_6T = matrices_6T[0]
+    #sigma = sp.symbols("sigma", real=True)
+    
+    #photometric_preamble = four_photometric(sigma)
+    #C = sp.diag(sp.eye(2), kernel_nuller_4T, sp.eye(2))
+    #coupler = C@photometric_preamble
+    coupler = kernel_nuller_6T
+    
+    if tap_ratio is not None:
+        coupler = coupler.subs([(sigma, tap_ratio)])
+    if include_masks:
+        bright = np.array([True, 
+                                False, False, False, False, False,
+                                False, False, False, False, False,
+                                False, False, False, False, False,
+                                False, False, False, False, False])
+        dark = np.array([False,
+                         True, True, True, True, True, 
+                         True, True, True, True, True, 
+                         True, True, True, True, True, 
+                         True, True, True, True, True])
+        photometric = np.array([False,
+                                False, False, False, False, False,
+                                False, False, False, False, False,
+                                False, False, False, False, False,
+                                False, False, False, False, False])
         return coupler, bright, dark, photometric
     else:
         return coupler
