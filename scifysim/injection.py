@@ -1556,12 +1556,22 @@ class injection_vigneting(object):
         self.vig = injector.injection_rate(injector.lambda_range, self.rr_lambdaond)
         self.vig_func = injector.injection_rate
         self.norm = 1/np.max(self.vig)
-    def vigneted_spectrum(self, spectrum, lambda_range, exptime):
+    def vigneted_spectrum(self, spectrum, lambda_range, exptime, transmission=None):
         """
+        
+        transmission: The first object of the transmission-emission chain
+        to be used to compute the instrument transmission. This allows to account
+        for throughtput, including airmass.
+        
         spectrum   : Flux density in ph/s/sr/m^2
         """
+        if transmission is not None:
+            throughput = transmission.get_downstream_transmission(lambda_range)
+        else:
+            throughput = 1.
         factor = self.collecting * self.ds_sr * exptime
-        vigneted_spectrum = self.vig_func(lambda_range, self.rr_lambdaond) * (spectrum * factor)[None,:]
+        vigneted_spectrum = self.vig_func(lambda_range, self.rr_lambdaond) *\
+                                            (spectrum * factor * throughput)[None,:]
         return vigneted_spectrum
         
     

@@ -234,6 +234,108 @@ def plot_projected_uv(asim, seq_indices=None,
     
     return fig, alluvs
 
+def plot_multiple_maps(maplist, mag,  cmap="viridis", show=True, detector="E",layout=(1,1),
+                       single_bar=True, adjust_params=None,
+                       fontsize="x-small",titles=None,
+                       remove_titles=[],
+                       remove_xlabels=[],
+                       **kwargs):
+    """
+    Uses matplotlib to show multiple sensitvity maps at a given star magnitude for
+    comparison. 
+    
+    **hint:** 
+        adjust_params = {"bottom":0.,
+                        "right":0.9,
+                        "top":1.,
+                        "cax":[0.95, 0.1, 0.01, 0.7],# left, bottom, width, height
+                        "orientation":"vertical",
+                        "location":"top",
+                        "tick_fontsize":7}
+
+    **Parameters:**
+    * maplist   : a list or array of map objects
+    * mag      : The star magnitude
+    * cmap       : The colormap to use
+    * detector   : The type of detector test: "E" for energy detector
+      "N" for Neyman-Pearson
+    * fontsize   : The font size for the titles and captions
+    * titles     : A list of titles to add to the plots
+    * remove_titles: The indices for which to remove titles
+    * remove_xlabels: the indices for which to remove xlabels
+    * **kwargs : Keyword arguments to pass to plt.figure()
+
+    **Returns** the figure object
+    """
+    if adjust_params is None:
+        adjust_params = {"bottom":0.,
+                        "right":0.9,
+                        "top":1.,
+                        "cax":[0.95, 0.1, 0.01, 0.7],# left, bottom, width, height
+                        "orientation":"vertical",
+                        "location":"top",
+                        "tick_fontsize":7}
+    # Looking for the common min and max of all the maps.
+    amax = -np.inf
+    amin = np.inf
+    for i, amap in enumerate(maplist):
+        magindex = np.argmin(np.abs(amap.mags-mag))
+        if "E" in detector:
+            themap = amap.mgs[magindex]
+            title = f"Planet mag for $T_E$ dec={amap.dec:.1f} $m_{{star}}$={amap.mags[magindex]:.1f}"
+        elif "N" in detector:
+            themap = amap.mgs_TNP[magindex]
+            title = f"Planet mag for $T_{{NP}}$ dec={amap.dec:.1f} $m_{{star}}$={amap.mags[magindex]:.1f}"
+        # Just a hack to avoid the 
+        themap_min = np.where(np.isinf(themap), 1000, themap)
+        themap_max = np.where(np.isinf(themap), -1000, themap)
+        amax = np.nanmax((amax, np.nanmax(themap_max)))
+        amin = np.nanmin((amin, np.nanmin(themap_min)))
+    fig = plt.figure(**kwargs)
+    # Plotting the maps
+    for i, amap in enumerate(maplist):
+        magindex = np.argmin(np.abs(amap.mags-mag))
+        extent = [amap.minx, amap.maxx, amap.minx, amap.maxx]
+        if "E" in detector:
+            themap = amap.mgs[magindex]
+            title = f"Planet mag for $T_E$ dec={amap.dec:.1f}° $m_{{star}}$={amap.mags[magindex]:.1f}"
+        elif "N" in detector:
+            themap = amap.mgs_TNP[magindex]
+            title = f"Planet mag for $T_{{NP}}$ dec={amap.dec:.1f}° $m_{{star}}$={amap.mags[magindex]:.1f}"
+        if titles is not None:
+            title = titles[i]
+        #print(layout[0], layout[1], i+1)
+        plt.subplot(layout[0], layout[1], i+1)
+        # For single colorbar, we must use common min and max values
+        if single_bar:
+            plt.imshow(themap, extent=extent, cmap=cmap,
+                      vmin=amin, vmax=amax)
+        else:
+            plt.imshow(themap, extent=extent, cmap=cmap)
+        if not single_bar:
+            plt.colorbar()
+        plt.xlabel("Relative position [mas]", fontsize=fontsize)
+        plt.title(title, fontsize=fontsize)
+    
+    # Tidying up
+    
+    for i, anax in enumerate(fig.axes):
+        if i in remove_titles:
+            anax.set_title("")
+        if i in remove_xlabels:
+            anax.set_xlabel("")
+    plt.tight_layout()
+    if single_bar:
+        plt.subplots_adjust(bottom=adjust_params["bottom"],
+                          right=adjust_params["right"],
+                          top=adjust_params["top"])
+        cax = plt.axes(adjust_params["cax"])
+        cbar = plt.colorbar(cax=cax, orientation=adjust_params["orientation"])
+        cbar.ax.tick_params(labelsize=adjust_params["tick_fontsize"])
+    if show:
+        plt.show()
+    return fig
+
 def plot_phasescreen(theinjector, show=True, noticks=True, screen_index=True):
     import matplotlib.pyplot as plt
     import scifysim as sf
@@ -495,6 +597,8 @@ def plot_differential_map(asim, kernel=None,
     * add_central_marker: Add a marker at the 0,0 location
     * central_marker_size: The size parameter to give the central marker
     * central_marker_type: The type of marker to use
+    
+    **returns:** fig (, difmaps)
     """
     base_params = {'x':0, 'y':0, 's':10., 'c':"w", 'marker':"*"}
     if central_marker is True:
