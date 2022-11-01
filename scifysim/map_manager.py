@@ -190,10 +190,10 @@ class map_meta(object):
         
         if "E" in detector:
             themap = self.mgs[magindex]
-            title = f"Planet mag for $T_E$ dec={self.dec:.1f} $m_{{star}}$={self.mags[magindex]:.1f}"
+            title = f"Planet mag for $T_E$ dec={self.dec:.1f}° $m_{{star}}$={self.mags[magindex]:.1f}"
         elif "N" in detector:
             themap = self.mgs_TNP[magindex]
-            title = f"Planet mag for $T_{{NP}}$ dec={self.dec:.1f} $m_{{star}}$={self.mags[magindex]:.1f}"
+            title = f"Planet mag for $T_{{NP}}$ dec={self.dec:.1f}° $m_{{star}}$={self.mags[magindex]:.1f}"
         fig = plt.figure(**kwargs)
         plt.imshow(themap, extent=extent, cmap=cmap)
         plt.colorbar()
@@ -202,3 +202,6 @@ class map_meta(object):
         if show:
             plt.show()
         return fig
+    
+
+    

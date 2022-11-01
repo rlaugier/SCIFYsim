@@ -788,7 +788,7 @@ class simulator(object):
         
     
     def build_all_maps(self, mapres=100, mapcrop=1.,
-                       dtype=np.float32):
+                       dtype=np.float32, transmission="default"):
         """
         Builds the transmission maps for the combiner for all the pointings
         on self.target at the times of ``self.sequence``
@@ -810,6 +810,8 @@ class simulator(object):
         
         ``ds_sr`` can be found in ``director.vigneting_map``
         """
+        if transmission == "default":
+            transmission = self.src.sky
         vigneting_map = sf.injection.injection_vigneting(self.injector, mapres, mapcrop)
         # Warning: this vigneting map for the maps are in the simulator.vigneting_map
         # not to be confused with simulator.injector.vigneting
@@ -838,7 +840,7 @@ class simulator(object):
         
         
     def build_all_maps_dask(self, mapres=100, mapcrop=1.,
-                       dtype="dask"):
+                       dtype="dask", transmission="default"):
         """
         Builds the transmission maps for the combiner for all the pointings
         on self.target at the times of self.sequence.
@@ -850,6 +852,8 @@ class simulator(object):
         **Parameters:**
         * mapres        : The resolution of the map in pixels
         * mapcrop       : Adjusts the extent of the map
+        * transmission  : The first item in the transmission-emission objects
+          if "default": will use self.src.sky
         
         **Returns** (also stored in self.map) a transmission map of shape:
         * [n_sequence,
@@ -861,6 +865,8 @@ class simulator(object):
         To get final flux of a point source : ``Map/ds_sr * p.ss * DIT``
         ``ds_sr`` is the scene surface element in steradian and can be found in ``director.vigneting_map``
         """
+        if transmission == "default":
+            transmission = self.src.sky
         vigneting_map = sf.injection.injection_vigneting(self.injector, mapres, mapcrop)
         # Warning: this vigneting map for the maps are in the simulator.vigneting_map
         # not to be confused with simulator.injector.vigneting
@@ -872,7 +878,12 @@ class simulator(object):
         maps = []
         for i, time in enumerate(self.sequence):
             self.point(self.sequence[i], self.target)
-            amap = self.make_map_dask(i, self.vigneting_map, dtype=dtype, map_index=i)
+            if transmission is None:
+                local_transmission = 1.
+            else:
+                local_transmission = transmission.get_downstream_transmission(self.lambda_science_range)
+            amap = self.make_map_dask(i, self.vigneting_map, dtype=dtype, map_index=i,
+                                     transmission=transmission)
             maps.append(amap)
         maps = da.array(maps)
         print(maps.shape)
@@ -906,7 +917,8 @@ class simulator(object):
         
         
         
-    def make_map_dask(self, blockindex, vigneting_map, dtype="dask", map_index=0):
+    def make_map_dask(self, blockindex, vigneting_map, dtype="dask", map_index=0,
+                             transmission=None):
         """
         Create sensitivity map in m^2.sr per spectral channel.
         To get final flux of a point source :
@@ -924,7 +936,8 @@ class simulator(object):
         #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
                 vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
-                                                  self.lambda_science_range, 1.)
+                                                  self.lambda_science_range, 1.,
+                                               transmission=transmission)
         # Caution: line is not idempotent!
         #vigneted_spectrum = np.swapaxes(vigneted_spectrum, 0,1)
         self.mapsource.ss = da.from_array(vigneted_spectrum.T)
@@ -934,7 +947,7 @@ class simulator(object):
             * self.corrector.get_phasor(self.lambda_science_range)
         static_output = self.combine_light_dask(self.mapsource, perfect_injection,
                                            array, dummy_collected,
-                                           dosum=False,map_index=map_index)
+                                           dosum=False, map_index=map_index)
         static_output = static_output.swapaxes(0, -1)
         static_output = static_output.swapaxes(0, 1)
         #static_output = static_output# * np.sqrt(vigneted_spectrum[:,None,:])
@@ -985,7 +998,8 @@ class simulator(object):
         return static_output
         
         
-    def make_map(self, blockindex, vigneting_map, dtype=np.float32):
+    def make_map(self, blockindex, vigneting_map, dtype=np.float32,
+                transmission=None):
         """
         Create sensitivity map in m^2.sr per spectral channel.
         To get final flux of a point source :
@@ -1003,7 +1017,8 @@ class simulator(object):
         #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
                 vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
-                                                  self.lambda_science_range, 1.)
+                                                  self.lambda_science_range, 1.,
+                                               transmission=transmission)
         # Caution: line is not idempotent!
         #vigneted_spectrum = np.swapaxes(vigneted_spectrum, 0,1)
         self.mapsource.ss = vigneted_spectrum.T

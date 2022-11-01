@@ -703,11 +703,13 @@ def mag2sig(mag, dit, lead_transmission,context, eta=1., spectrum="flat", ds_sr=
     if spectrum == "flat":
         aspectrum = np.mean(aspectrum)*np.ones_like(aspectrum)
     acoeff = coeff(dit, lead_transmission, context,
-                    eta=eta, spectrum=spectrum, ds_sr=ds_sr)
+                    eta=eta, spectrum=spectrum, ds_sr=ds_sr,
+                      include_transmission=True)
     full_coeff = aspectrum*acoeff
     return full_coeff
 
-def coeff(dit, lead_transmission,context, eta=1., spectrum="flat", ds_sr=1.):
+def coeff(dit, lead_transmission,context, eta=1., spectrum="flat", ds_sr=1.,
+         include_transmission=False):
     """
     Obtains the coefficients including detector integration time,
     transmission, spectral channels, pixel solid angle, and quantum efficiency (default: 1.).
@@ -723,11 +725,20 @@ def coeff(dit, lead_transmission,context, eta=1., spectrum="flat", ds_sr=1.):
       temperature of Vega.
     * ds_sr   : When working with a map the solid angle of a pixel [sr]
       Can be found in `simulator.vigneting_map.ds_sr` after maps have been computed
+    * Include transmission: whether to multiply by the transimission spectrum of the instrument
+      The maps are now computed including the transmission of the instrument, so that is not
+      necessary.
     """
-    acoeff = (1/(ds_sr) *\
+    if include_transmission:
+        acoeff = (1/(ds_sr) *\
                   dit * eta *\
                   lead_transmission.get_downstream_transmission(context.avega.lambda_science_range))
+    else: 
+        acoeff = (1/(ds_sr) *\
+                  dit * eta)
+        
     return acoeff
+
 
 
 def extract_diffobs_map_old(maps, simulator, dit=1., mag=None, postprod=None, eta=1., K=None):
@@ -767,7 +778,7 @@ def extract_diffobs_map_old(maps, simulator, dit=1., mag=None, postprod=None, et
         
     acoeff = coeff(dit, simulator.src.sky,
                                simulator.context,ds_sr=simulator.vigneting_map.ds_sr,
-                               eta=eta, spectrum="flat")
+                               eta=eta, spectrum="flat", include_transmission=False)
     
     
 #    coeff = (1/(asim.vigneting_map.ds_sr) *\
@@ -821,15 +832,11 @@ def extract_diffobs_map(maps, simulator, mod=np, dit=1., mag=None, postprod=None
         raise NotImplementedError("Shape not expected")
     if K is None:
         K = simulator.combiner.K
-        
+    
     acoeff = coeff(dit, simulator.src.sky,
                                simulator.context,ds_sr=simulator.vigneting_map.ds_sr,
-                               eta=eta, spectrum="flat")
+                               eta=eta, spectrum="flat", include_transmission=False)
     
-    
-#    coeff = (1/(asim.vigneting_map.ds_sr) *\
-#                  dit * eta *\
-#                  diffuse[0].get_downstream_transmission(asim.lambda_science_range))
     ymap = []
     ymap = mod.einsum("k o , s w o x y -> s w k x y", K, maps)
     #for at in range(nt):
@@ -839,7 +846,7 @@ def extract_diffobs_map(maps, simulator, mod=np, dit=1., mag=None, postprod=None
     #        ymap.append(ay)
     #ymap = np.array(ymap)
     #ymap = ymap.reshape(nt, nwl, 1, ny, nx)
-    ymap = ymap*acoeff[None,:,None,None, None]
+    ymap = ymap*acoeff#[None,:,None,None, None]
     
     if postprod is not None:
         print(ymap.shape)

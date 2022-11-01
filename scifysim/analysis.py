@@ -5,7 +5,7 @@ import logging
 from einops import rearrange
 import dask.array as da
 import copy
-
+from pdb import set_trace
 from scipy.linalg import sqrtm
 
 import matplotlib.pyplot as plt
@@ -96,7 +96,7 @@ class noiseprofile(object):
         
         # small s is a flux
         s_s = Fs/self.F_0 * self.s_0
-        s_d = self.s_d + self.mynpix*(self.s_dark_current + self.s_enc_bg )
+        s_d = self.s_d + self.mynpix*(self.s_dark_current + self.s_enc_bg)[:,None]
         
         
         sigma_phot = np.sqrt(self.eta * dit * (s_d + s_s))
