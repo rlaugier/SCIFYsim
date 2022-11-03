@@ -340,7 +340,7 @@ class _blackbody(object):
         self.get_B_lamb_ph.__doc__ = """f(wavelength[m], T[K]) Computes the Planck law in [ph / s / m^2 / m / sr]"""
         
         # For ph / s / m^2 / Hz / sr
-        self.B_nu_ph = 2/self.lamb**2 / self.lamb**4 * \
+        self.B_nu_ph = 2*self.lamb**2 / self.lamb**4 * \
                     1/(sp.exp(self.h*self.c/(self.lamb*self.k_b*self.T)) -1)
         self.get_B_nu_ph = utilities.ee(self.B_nu_ph.subs(self.thesubs))
         self.get_B_nu_ph.lambdify((self.lamb, self.T), modules=modules)
