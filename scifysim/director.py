@@ -213,7 +213,8 @@ class simulator(object):
                                                  self.lambda_science_range,
                                                  n_chan=n_chan)
         
-    def prepare_corrector(self, config=None, optimize=True):
+    def prepare_corrector(self, config=None, optimize=True,
+                         model_air=None):
         """
         Prepare the corrector object for the simulator, based
         on a config file.
@@ -227,10 +228,17 @@ class simulator(object):
                     
         * optimize : Boolean. If True, will optimize both depth and shape
         * apply    : Boolean. If True, apply the optimization 
+        * model_air: Provide a model for delay line air different from the true air
+          if None (default) the model will be exactly the properties of air.
         """
         if config is None:
             config = self.config
         myair = sf.wet_atmo(config)
+        if model_air is None:
+            mymodel = myair
+        else:
+            mymodel = model_air
+            
         if config.get("corrector","mode") == "znse":
             print("----------------------------------------")
             print("Switching to znse")
@@ -262,6 +270,12 @@ class simulator(object):
                              sync_params=[("b3", "b2", self.corrector.b[3] - self.corrector.b[2]),
                                          ("c3", "c2", self.corrector.c[3] - self.corrector.c[2])],
                              apply=True)
+        
+        ft_wavelengths = config.getarray("fringe tracker", "wl_ft")
+        wl_ft = np.linspace(ft_wavelengths[0], ft_wavelengths[1], 6)
+        self.offband_model = sf.correctors.offband_ft(wl_ft, self.lambda_science_range,
+                                                      wa_true=myair, wa_model=mymodel,
+                                                     corrector=self.corrector)
         
         
 
@@ -738,7 +752,11 @@ class simulator(object):
         * time    : The time to make the observation
         * target  : The skycoord object to point
         * refresh_array : Whether to call a lambdification of the array
+        * disp_override : None (default) follows the value given by self.transverse_dispersion;
+          True force the transverse dispersion;
+          False deactivate transverse dispersion.
         """
+        # Figuring out what to do for dispersion
         if disp_override is None:
             disp = self.transverse_dispersion
         elif disp_override is True:
@@ -753,7 +771,10 @@ class simulator(object):
             self.combiner.refresh_array(thearray)
         
         
-            
+        # Handling transverse dispersion
+        altaz = self.obs.altaz
+        zenith_angle = (np.pi/2)*units.rad - altaz.alt.to(units.rad)
+        
         zero_screen = np.zeros_like(self.injector.focal_plane[0][0].screen_bias).flatten()
         for i in range(len(self.injector.focal_plane)):
             if disp:
@@ -762,9 +783,6 @@ class simulator(object):
                 Xs = np.linspace(-a.pdiam/2, a.pdiam/2, a.csz)
                 Ys = np.linspace(-a.pdiam/2, a.pdiam/2, a.csz)
                 XX, YY = np.meshgrid(Xs, Ys)
-
-                altaz = self.obs.altaz
-                zenith_angle = (np.pi/2)*units.rad - altaz.alt.to(units.rad)
 
                 #print("zenith_angle", zenith_angle.to(units.deg))
                 ppixel_pistons = YY * np.tan(zenith_angle.value)

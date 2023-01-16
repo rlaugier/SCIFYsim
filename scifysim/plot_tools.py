@@ -12,8 +12,21 @@ from pdb import set_trace
 
 logit = logging.getLogger(__name__)
 
-# Some colormaps chosen to mirror the default (Cx) series of colors
+# Some colormaps chosen to mirror to avoid deuteranomalyl Reds is swapped with RdBu
+# This avoids confusion between 2 and 3 
 colortraces = [plt.matplotlib.cm.Blues,
+              plt.matplotlib.cm.YlOrBr, # This in order to use oranges for the brouwns
+              plt.matplotlib.cm.Greens,
+              plt.matplotlib.cm.RdPu,
+              plt.matplotlib.cm.Purples,
+              plt.matplotlib.cm.Oranges,
+              plt.matplotlib.cm.Reds,
+              plt.matplotlib.cm.Greys,
+              plt.matplotlib.cm.YlOrRd,
+              plt.matplotlib.cm.GnBu]
+
+# Some colormaps chosen to mirror the default (Cx) series of colors
+colortraces_0 = [plt.matplotlib.cm.Blues,
               plt.matplotlib.cm.YlOrBr, # This in order to use oranges for the brouwns
               plt.matplotlib.cm.Greens,
               plt.matplotlib.cm.Reds,

@@ -156,7 +156,7 @@ def get_shape_res(params, combiner, corrector, lambs):
     return res
 
 class offband_ft(object):
-    def __init__(self, wl_ft, wl_science, wa_true, wa_model, corrector):
+    def __init__(self, wl_ft, wl_science, wa_true, wa_model=None, corrector=None):
         """
         Builds a fringe tracker object that handles the problems of dispersion
         between the band in use and the band of interest. It also addresses the problems
@@ -186,7 +186,7 @@ class offband_ft(object):
         self.S_model_science = self.corrector.solve_air_corrector(self.wl_science)
         self.S_model_ft = self.corrector.solve_air_corrector(self.wl_ft)# Solving based on the FT measurements
         
-        self.corrector = corrector
+        #self.corrector = corrector
         self.simple_piston_ft = None
         self.phase_correction_ft = None
         self.phase_correction_ft_science = None
