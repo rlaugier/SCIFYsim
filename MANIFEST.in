@@ -17,3 +17,4 @@ include scifysim/data/asymmetric_diff_phase_gls.csv
 include scifysim/data/directional_coupling_bar.csv
 include scifysim/data/directional_coupling_cross.csv
 include scifysim/data/znse_index.csv
+include scifysim/data/hawaii2rg_qe.csv

@@ -1,11 +1,10 @@
 import numpy as np
-import sympy as sp
-from sympy.functions.elementary.piecewise import Piecewise
-from kernuller import mas2rad, rad2mas
-from . import utilities
+#from sympy.functions.elementary.piecewise import Piecewise
+#from kernuller import mas2rad, rad2mas
+#from . import utilities
 from . import n_air
-from astropy import constants
-from astropy import units
+#from astropy import constants
+#from astropy import units
 import scipy.interpolate as interp
 from pathlib import Path
 
@@ -208,12 +207,12 @@ class corrector(object):
         ns = self.nplate(lambs)
         alpha = self.a[None,:]*np.exp(-1j*2*np.pi/lambs[:,None]*(self.b[None,:]+self.dcomp[None,:] +self.c[None,:]*(ns[:,None]-1)))
         return alpha
-    def get_phasor_s(self, lamb):
+    def get_phasor_s(self, lambs):
         """
         Deprecated
         """
         ns = self.nplate(lambs)
-        alpha = self.a*np.exp(-1j*2*np.pi/lamb*(self.b + self.dcomp +self.c*(ns-1)))
+        alpha = self.a*np.exp(-1j*2*np.pi/lambs*(self.b + self.dcomp +self.c*(ns-1)))
         return alpha
     def get_raw_phase_correction(self, lambs, b=0,c=0, dcomp=0, model=None):
         """
@@ -424,16 +423,6 @@ class corrector(object):
     
     
     
-    def plot_tuning(self,lambs,  npoints = 20):
-        from kernuller.diagrams import plot_chromatic_matrix as cmpc
-        import matplotlib.pyplot as plt
-        
-        pltlambrange = np.linspace(np.min(lambs),
-                                   np.max(lambs),
-                                   20)
-        init_phasor = cor.get_phasor(pltlambrange)
-        
-        fig = cmpc(asim.combiner.M,asim.combiner.lamb, pltlambrange,
-        plotout=cor.get_phasor_from_params(pltlambrange, b=cor.b, c=cor.c), minfrac=0.9)
+    
         
         
