@@ -1,11 +1,10 @@
 import numpy as np
-import sympy as sp
-from sympy.functions.elementary.piecewise import Piecewise
-from kernuller import mas2rad, rad2mas
-from . import utilities
+#from sympy.functions.elementary.piecewise import Piecewise
+#from kernuller import mas2rad, rad2mas
+#from . import utilities
 from . import n_air
-from astropy import constants
-from astropy import units
+#from astropy import constants
+#from astropy import units
 import scipy.interpolate as interp
 from pathlib import Path
 
@@ -497,7 +496,7 @@ class corrector(object):
                                                         self.c[None,:] * np1[:,None] +\
                                                         self.e[None,:] * np2[:,None]))
         return alpha
-    def get_phasor_s(self, lamb):
+    def get_phasor_s(self, lambs):
         """
         Deprecated
         """
@@ -883,16 +882,6 @@ class corrector(object):
     
     
     
-    def plot_tuning(self,lambs,  npoints = 20):
-        from kernuller.diagrams import plot_chromatic_matrix as cmpc
-        import matplotlib.pyplot as plt
-        
-        pltlambrange = np.linspace(np.min(lambs),
-                                   np.max(lambs),
-                                   20)
-        init_phasor = cor.get_phasor(pltlambrange)
-        
-        fig = cmpc(asim.combiner.M,asim.combiner.lamb, pltlambrange,
-        plotout=cor.get_phasor_from_params(pltlambrange, b=cor.b, c=cor.c), minfrac=0.9)
+    
         
         
