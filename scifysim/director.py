@@ -263,8 +263,11 @@ class simulator(object):
             raise NotImplementedError("Did not understand the corrector type")
             
         if optimize is not False:
+            # First tune the null depth, then the shape parameter
             asol = self.corrector.tune_static(self.lambda_science_range,
                                               combiner=self.combiner, apply=optimize)
+            # Usage of sync_params to preserve a fixed difference (the one already existing) between
+            # two of the parameters, preserving the adjustment made previously.
             sol = self.corrector.tune_static_shape(self.lambda_science_range,
                              self.combiner,
                              sync_params=[("b3", "b2", self.corrector.b[3] - self.corrector.b[2]),
@@ -272,7 +275,7 @@ class simulator(object):
                              apply=True)
         
         ft_wavelengths = config.getarray("fringe tracker", "wl_ft")
-        wl_ft = np.linspace(ft_wavelengths[0], ft_wavelengths[1], 6)
+        wl_ft = np.linspace(ft_wavelengths[0], ft_wavelengths[-1], 6)
         self.offband_model = sf.correctors.offband_ft(wl_ft, self.lambda_science_range,
                                                       wa_true=myair, wa_model=mymodel,
                                                      corrector=self.corrector)
@@ -802,6 +805,9 @@ class simulator(object):
                     self.injector.focal_plane[i][j].screen_bias = pup_op[:,:,j].flatten()*1e6
                 else:
                     self.injector.focal_plane[i][j].screen_bias = zero_screen
+                    
+            # Handling longitudinal dispersion
+            
         
         
     

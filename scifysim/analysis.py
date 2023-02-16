@@ -199,7 +199,8 @@ class noiseprofile(object):
         
 
 class spectral_context(object):
-    def __init__(self, vegafile="config/vega.ini", compensate_chromatic=True):
+    def __init__(self, vegafile="config/vega.ini", compensate_chromatic=True,
+                    verbose=False):
         """Spectral context for magnitude considerations
         
         **Arguments:**
@@ -213,15 +214,18 @@ class spectral_context(object):
               in the same spectral configuration.
         
         * compensate_chromatic: Argument to be passed to the new simulator
+        * verbose     : whether to give more details
         
         """
         if isinstance(vegafile, str):
             self.avega = sf.utilities.prepare_all(vegafile, update_params=False,
-                            instrumental_errors=False, compensate_chromatic=compensate_chromatic)
+                            instrumental_errors=False, compensate_chromatic=compensate_chromatic,
+                            verbose=verbose)
         elif isinstance(vegafile, sf.parsefile.ConfigParser):
             vega_config = self.create_vega_config(vegafile)
             self.avega = sf.utilities.prepare_all(vega_config, update_params=False,
-                            instrumental_errors=False, compensate_chromatic=compensate_chromatic)
+                            instrumental_errors=False, compensate_chromatic=compensate_chromatic,
+                            verbose=verbose)
             
         else :
             raise TypeError()
