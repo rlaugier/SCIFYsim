@@ -103,13 +103,13 @@ class observatory(object):
 
         
     def build_observing_sequence(self, times=None,
-                            npoints=20, remove_daytime=False):
+                            npoints=None, remove_daytime=False):
         """
         
         **Parameters:**
         
         * times : a list of UTC time strings ("2020-04-13T00:00:00")
-          that define an interval (if npoints is not None,
+          that define an interval (if npoints is not None),
           or the complete list of times (if npoints is None)
         * npoints : The number of samples to take on the interval
           None means that the times is the whole list
@@ -127,7 +127,7 @@ class observatory(object):
             obstimes = obs2502[0] + dt * np.linspace(0.,1., npoints)
         #npoints is None means the times represent a list of times 
         else: 
-            obstimes = np.array([Time(times[i]) for i in range(len(obstimes))])
+            obstimes = np.array([Time(times[i]) for i in range(len(times))])
             
         totaltime = (obstimes[-1]-obstimes[0]).to(u.s).value
         if remove_daytime:

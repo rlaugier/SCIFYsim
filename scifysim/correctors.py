@@ -236,7 +236,7 @@ class offband_ft(object):
         #self.correction_feedforward = asim.corrector.get_raw_phase_correction(self.wl_science[:,None],
         #                                                      b=self.b_ft[0,:],
         #                                                      c=self.b_ft[1,:])
-        self.correction_feedforward = asim.corrector.get_raw_phase_correction(self.wl_science[:,None],
+        self.correction_feedforward = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
                                                                              vector=self.b_ft)
         
         # Computing the ideal correction (If we could measure the actual phase and close a loop)
@@ -285,6 +285,8 @@ class offband_ft(object):
         
         #self.model_phase_on_science - self.correction_ft_to_science
         glass_range = np.max(b_model[1,:])
+
+        import matplotlib.pyplot as plt
         
         plt.figure(dpi=200)
         plt.subplot(211)
@@ -312,6 +314,16 @@ class offband_ft(object):
     def get_phase_on_band(self, band, pistons, mode="ideal"):
         """Similar to ``get_phase_science_values`` but for an arbitrary band 
         for illustration purposes.
+        
+        **Arguments**:
+        * band  : 
+        * pistons : 
+        * mode    : Type of correction to apply
+            - `ideal` : Compensate with perfect knowledge of the atmospheric
+              effects.
+            - `blind` : Compensate using the internal atmosphere model
+              which may deviate from ground truth.
+            - `feedforward` : Assumes the dispersion is being measured at teh FT band
         """
         true_phase_on_band, correction_ft_to_band =  self.update_NCP_corrections(pistons, band=band)
         
@@ -340,7 +352,7 @@ class offband_ft(object):
             #correction_feedforward = asim.corrector.get_raw_phase_correction(band[:,None],
             #                                                  b=self.b_ft[0,:],
             #                                                  c=self.b_ft[1,:])
-            correction_feedforward = asim.corrector.get_raw_phase_correction(band[:,None],
+            correction_feedforward = self.corrector.get_raw_phase_correction(band[:,None],
                                                                             vector=self.b_ft)
             return true_phase_on_band - correction_ft_to_band - correction_feedforward
         
@@ -504,7 +516,7 @@ class corrector(object):
         np1 = self.nplate(lambs) - self.ncomp(lambs, add=1.)
         # The air displacing second material:
         np2 = self.nmat2(lambs, add=1.) - self.ncomp(lambs, add=1.)
-        alpha = self.a*np.exp(-1j*2*np.pi/lamb*(self.b + self.dcomp +\
+        alpha = self.a*np.exp(-1j*2*np.pi/lambs*(self.b + self.dcomp +\
                                                 self.c*np1 + self.e*np2))
         return alpha
     def get_raw_phase_correction(self, lambs,
@@ -518,9 +530,12 @@ class corrector(object):
         
         * lambs :     The wavelength channels to consider [m]
         * a     :     Vector of the amplitude term
-        * b     :     Vetor of the geometric piston term [m]
-        * c     :     Vetor of the dispersive piston term [m]
+        * b     :     Vettor of the geometric piston term [m]
+        * c     :     Vettor of the dispersive piston term [m]
+        * e     :     Vettor of the addtional corretction material term [m]
         * dcomp :     A length of air to compensate for the plate
+        * vector :    The vector-form of all dispersive correction 
+          shape: (n_materials, n_tel) [m]
         
         
         """
@@ -544,15 +559,37 @@ class corrector(object):
             elif vector.shape[0] == 1:
                 phase_correction = 2*np.pi/lambs*(nair*(vector[0] + dcomp))
         return phase_correction
+
+    def get_vector(self):
+        """
+            get_vector get the vector form of the current corrector setup.
+        """
+        vector = np.array([self.b, self.c, self.e])
+        return vector
     
     def get_dcomp(self, c):
         """
         Returns the theoertical value of dcomp for a given value of compensator
         plate, to correct for the pure piston term introduced.
+        **Arguments**:
+        * c   : The value of glass plaet [m]
         """
         dcomp = -(self.nmean-1)*c
         return dcomp
         
+    def get_dcomp_from_vector(self, vector):
+        """
+        Returns the theoertical value of dcomp for a vector value of compensator
+        plate, to correct for the pure piston term introduced.
+        **Arguments**:
+        * vector : The vector valued corrector position [m]
+          (Only c at index 1 is used)
+        """
+        c = vector[1]
+        dcomp = -(self.nmean-1)*c
+        return dcomp
+        
+
     def get_phasor_from_params(self, lambs, a=None,
                                b=None, c=None,
                                dcomp=None, e=None):
@@ -569,6 +606,9 @@ class corrector(object):
         * a     :     Vector of the amplitude term
         * b     :     Vetor of the geometric piston term [m]
         * c     :     Vetor of the dispersive piston term [m]
+        * e     :     Vettor of the addtional corretction material term [m]
+        * dcomp :     A length of air to compensate for the plate [m]
+          if dcomp is None: it will be computed based on `self.c`
         """
         ns = self.nplate(lambs)
         if a is None:
@@ -582,7 +622,7 @@ class corrector(object):
         if e is None:
             e = self.e      
             
-        #pdb.set_trace()
+        # pdb.set_trace()
         
         # the air displacing solid plate:
         np1 = self.nplate(lambs) - self.ncomp(lambs, add=1.)
@@ -856,7 +896,6 @@ class corrector(object):
             params.add("b%d"%(i),value=self.b[i], min=-1.0e-3, max=1.0e-3, vary=True)
             params.add("c%d"%(i),value=self.c[i], min=-1.0e-3, max=1.0e-3, vary=True)
         
-        # Should do this in a loop for sync_params
         for tosync in sync_params:
             params[tosync[0]].set(expr=tosync[1]+f"+ {tosync[2]}")
         # If we have 
@@ -882,6 +921,19 @@ class corrector(object):
     
     
     
-    
+    def plot_tuning(self,lambs,  npoints = 20):
+        """
+        Plot of the state of tuning.
         
+        **Parameters:**
+        * lambs :     The wavelength range to consider to consider [m]
+        * npoints :   The number number of points in the range to consider
+        """
+        from kernuller.diagrams import plot_chromatic_matrix as cmpc
+        import matplotlib.pyplot as plt
+        
+        pltlambrange = np.linspace(np.min(lambs),
+                                   np.max(lambs),
+                                   npoints)
+        init_phasor = cor.get_phasor(pltlambrange)
         
