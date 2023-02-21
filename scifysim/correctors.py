@@ -81,6 +81,7 @@ def get_Is(params, combiner, corrector, lambs):
     * params   : either
     
                 - A Parameters object from the optimization
+                  does not support e: e is taken from corrector
                 - A tuple of vectors bvec, cvec
                 
     * combiner : A combiner object.
@@ -90,12 +91,17 @@ def get_Is(params, combiner, corrector, lambs):
     
     if isinstance(params, Parameters):
         bvec, cvec = extract_corrector_params(corrector, params)
+        evec = corrector.e
     else:
-        bvec, cvec = params
+        bvec = params[:,0]
+        cvec = params[:,1]
+        evec = params[:,2]
+        # bvec, cvec = params
     phasor = corrector.get_phasor_from_params(lambs, 
                                              a=None,
                                              b=bvec,
-                                             c=cvec)
+                                             c=cvec,
+                                             e=evec)
     #res = combiner.Mcn.dot(phasor)
     res = np.einsum("ikj,ij->ik", combiner.Mcn, phasor)
     Is = np.abs(res)**2
@@ -232,7 +238,7 @@ class offband_ft(object):
         self.phase_seen_by_ft = self.corrector.theoretical_phase(self.wl_ft, pistons, model=self.wa_true, add=0) - self.phase_correction_ft
         
         # Computing the feedforward correction based on the FT phase:
-        self.b_ft = self.S_model_ft.dot(self.phase_seen_by_ft)
+        self.b_ft = self.S_model_ft.dot(self.phase_seen_by_ft).T
         #self.correction_feedforward = asim.corrector.get_raw_phase_correction(self.wl_science[:,None],
         #                                                      b=self.b_ft[0,:],
         #                                                      c=self.b_ft[1,:])
@@ -240,7 +246,7 @@ class offband_ft(object):
                                                                              vector=self.b_ft)
         
         # Computing the ideal correction (If we could measure the actual phase and close a loop)
-        self.b_science_ideal = self.S_model_science.dot(self.true_phase_on_science - self.correction_ft_to_science)
+        self.b_science_ideal = self.S_model_science.dot(self.true_phase_on_science - self.correction_ft_to_science).T
         #self.correction_closed_loop = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
         #                                                      b=self.b_science_ideal[0,:],
         #                                                      c=self.b_science_ideal[1,:])
@@ -248,7 +254,7 @@ class offband_ft(object):
                                                                              vector=self.b_science_ideal)
         
         # Computing a biased estimation based on a full model
-        self.b_science_model = self.S_model_science.dot(self.model_phase_on_science - self.correction_ft_to_science)
+        self.b_science_model = self.S_model_science.dot(self.model_phase_on_science - self.correction_ft_to_science).T
         #self.correction_blind = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
         #                                                      b=self.b_science_model[0,:],
         #                                                      c=self.b_science_model[1,:])
@@ -416,7 +422,6 @@ class corrector(object):
         * b     :     Vetor of the geometric piston term [m]
         * c     :     Vetor of the dispersive piston term [m]
         """
-        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
         self.config = config
         if file is None:
             nplate_file = np.loadtxt(znse_file,delimiter=";")
@@ -428,7 +433,7 @@ class corrector(object):
             print("Not spotted ncomp")
             self.ncomp = generic_vacuum
         else:
-            print("successfully spotted ncomp")
+            # print("successfully spotted ncomp")
             self.ncomp = model_comp.get_Nair
             
         if model_material2 is None:
@@ -550,14 +555,14 @@ class corrector(object):
         if vector is None:
             phase_correction = 2*np.pi/lambs*(nair*(b + dcomp) + np1*c + np2*e)
         else:
-            if vector.shape[0] == 3:
-                phase_correction = 2*np.pi/lambs*(nair*(vector[0] + dcomp) +\
-                                                  np1*vector[1] + np2*vector[2])
-            elif vector.shape[0] == 2:
-                phase_correction = 2*np.pi/lambs*(nair*(vector[0] + dcomp) +\
-                                                  np1*vector[1])
-            elif vector.shape[0] == 1:
-                phase_correction = 2*np.pi/lambs*(nair*(vector[0] + dcomp))
+            if vector.shape[1] == 3:
+                phase_correction = 2*np.pi/lambs*(nair*(vector[:,0] + dcomp) +\
+                                                  np1*vector[:,1] + np2*vector[:,2])
+            elif vector.shape[1] == 2:
+                phase_correction = 2*np.pi/lambs*(nair*(vector[:,0] + dcomp) +\
+                                                  np1*vector[:,1])
+            elif vector.shape[1] == 1:
+                phase_correction = 2*np.pi/lambs*(nair*(vector[:,0] + dcomp))
         return phase_correction
 
     def get_vector(self):

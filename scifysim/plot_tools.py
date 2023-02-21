@@ -774,8 +774,12 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     # Normalisation factor is the peak intensity
     normalization = np.sum(np.abs(combiner.Mcn[:,3,:]), axis=-1)**2
     
-    orig_vecs = (np.ones_like(corrector.b), np.ones_like(corrector.c))
-    current_vecs = (corrector.b, corrector.c)
+    orig_vecs = np.array([np.ones_like(corrector.b),
+                np.ones_like(corrector.c),
+                np.ones_like(corrector.e)]).T
+    current_vecs = np.array([corrector.b,
+                             corrector.c,
+                             corrector.e]).T
     origIs = get_Is(orig_vecs, combiner, corrector, lambs)
     bestIs = get_Is(current_vecs, combiner, corrector, lambs)
 
