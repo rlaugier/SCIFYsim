@@ -11,7 +11,7 @@ class map_tester(unittest.TestCase):
         fname = "local_config/default_R200"
         target = "GJ 86 A"
         self.asim = sf.utilities.prepare_all(afile=fname, thetarget=target, update_params=True,
-        seed=1, compnesate_chromatic=True)
+        seed=1, compensate_chromatic=True)
     def tearDown(self):
         del self.asim
     def test_maps(self,):
