@@ -36,6 +36,14 @@ class noiseprofile(object):
         * integ.mean_starlight (run ``integ.mean_starlight = np.mean(starlights, axis=0)``)
         * integ.mean_planetlight (run ``integ.mean_planetlight = np.mean(planetlights, axis=0)``)
         * integ.get_static() (run ``integ.static = asim.computed_static``)
+
+        **Notes:**
+        
+        * `self.sigma_ron` in [e-] 
+        * `self.s_enc_bg` is defined in [ph/s/pix]
+        * `self.s_dark_current` is defined in [e-/s/pix]
+        * `self.s_d` is defined in [ph/s/ch] (that is **per channel**)
+        * `self.s_total_bg_current_ch` is in [e-/s/ch]
         
         """
         # Read noise
@@ -61,7 +69,10 @@ class noiseprofile(object):
         print(f" s_dark_current = {self.s_dark_current} [ph-/s] equivalent the dark current")
         print(f" s_enc_bg = {self.s_enc_bg} [ph-/s] equivalent the enclosure background")
         self.p_0 = integ.mean_planetlight / self.dit_0
-        
+        # The total background current per channel
+        self.s_total_bg_current_ch = self.mynpix * self.s_dark_current +\
+                                    self.eta * self.mynpix * self.s_enc_bg +\
+                                    self.eta * self.s_d.sum(axis=1)
         
         #self.sigma_phot = np.sqrt(integ.eta * self.s_0 * self.dit_0)
         #self.sigma_phot_d = np.sqrt(2) * self.sigma_phot
@@ -146,14 +157,14 @@ class noiseprofile(object):
         
     def plot_noise_sources(self, wls, dit=1., starmags=np.linspace(2., 6., 5),
                           show=True, legend_loc="best", legend_font="x-small",
-                          ymin=0., ymax=1.):
+                          ymin=0., ymax=1., n_dits=1):
         
         sigphis = []
         sigphots = []
         for amag in starmags:
             asigphot, asigphi = self.get_noises(amag, dit)
-            sigphots.append(asigphot)
-            sigphis.append(asigphi)
+            sigphots.append(1/np.sqrt(n_dits) * asigphot)
+            sigphis.append(1/np.sqrt(n_dits) * asigphi)
         sigphots = np.array(sigphots)
         sigphis = np.array(sigphis)
         
@@ -161,7 +172,7 @@ class noiseprofile(object):
         mybmap = plt.matplotlib.cm.Blues
         mygmap = plt.matplotlib.cm.YlOrBr
         fig = plt.figure(dpi=200)
-        plt.plot(wls, self.sigma_ron_d*np.ones_like(wls),color="gray",
+        plt.plot(wls, 1/np.sqrt(n_dits) * self.sigma_ron_d * np.ones_like(wls),color="gray",
                  label=r"$\sigma_{RON}$")
         #plt.plot(wls, sigma_phot, label="Photon")
         for i, dump in enumerate(sigphis):
@@ -181,7 +192,7 @@ class noiseprofile(object):
         plt.ylabel("Noise $[e^-]$")
         plt.xlabel("Wavelength [m]")
         plt.legend(fontsize=legend_font, loc=legend_loc)
-        plt.title("Noise in single %.2f s DIT"%(dit))
+        plt.title(f"Noise for {n_dits} x {dit:.2f} s DITs")
         if show:
             plt.show()
         return fig
@@ -293,6 +304,75 @@ class spectral_context(object):
         m_planet = np.mean(self.vegamag_from_ss(ss_planet))
         
         return m_star, m_planet
+
+    def get_difmap_flux(self, sim, map=None, mode="e-", K=None,
+                        planet=None, single_out=True):
+        """
+        Get the map in terms of flux of a given planet
+        Not kernel-ready
+        """
+        if K is None:
+            K = sim.combiner.K
+        if map is None:
+            map = sim.maps
+        if planet is None:
+            planet = sim.src.planet
+        # adiffmap = map[:,:,3,:,:] - map[:,:,4,:,:]
+        # flux_map = adiffmap / \
+        #     sim.vigneting_map.ds_sr * planet.ss.sum(axis=1)[None,:,None,None]
+        # else:
+        adiffmap = np.einsum("k o , s w o x y -> s w k x y", K, map)
+        flux_map = adiffmap / \
+            sim.vigneting_map.ds_sr * planet.ss.sum(axis=1)[None,:,None,None,None]
+        if single_out:
+            flux_map =  flux_map[:,:,0,:,:] 
+        if mode == "e-":
+            return sim.integrator.eta * flux_map
+        elif mode == "ph":
+            return flux_map
+
+        
+    def get_maxmap(self, map, time_index=None, max=True):
+        """Returns the maximum of the map
+
+        **Arguments:**
+        * map:  A map object (asim.maps)
+        * time_index: An index for the (asim.sequence)
+          observing series
+        * max : (True) Returns only the max signal of the map
+        """
+        if time_index is None:
+            time_index = map.shape[0]//2
+        adiffmap = map[time_index,:,3,:,:] - map[time_index,:,4,:,:]
+        if max:
+            return np.max(adiffmap, axis=(1,2))
+        else:
+            return adiffmap
+
+    def get_planet_max_signal(self, sim, planet=None, max=True,
+                                time_index=None):
+        """Returns the differential flux signal ph/s collected
+        for a given planet
+
+        **Arguments:**
+        * sim : A director object
+        * planet : a source.
+        * time_index: An index for the (asim.sequence)
+          observing series
+        * max : (True) Returns only the max signal of the map
+        
+        """
+        if planet is None:
+            planet=sim.src.planet
+        if max:
+            amax = self.get_maxmap(sim.maps, time_index=time_index)
+            planet_signal = amax/sim.vigneting_map.ds_sr * planet.ss.sum(axis=1)
+            return planet_signal
+        else:
+            raise NotImplementedError
+        
+
+        
     
 def mag2F(mag):
     F = 1*10**(-mag/2.5)
@@ -460,9 +540,10 @@ def get_sensitivity_Te(maps, mod=np, pfa=0.002, pdet=0.9, postproc_mat=None, ref
         if len(postproc_mat.shape):
             postproc_mat.shape[0]
     #Xsi is the threshold
-    print("nbkp = ", nbkp)
     xsi = chi2.ppf(1.-pfa, nbkp)
-    print(xsi)
+    if verbose:
+        print("nbkp = ", nbkp)
+        print(xsi)
     lambda0 = 0.2**2 * nbkp
     #The solution lambda is the x^T.x value satisfying Pdet and Pfa
     sol = leastsq(residual_pdet_Te, lambda0,args=(xsi,nbkp, pdet))# AKA lambda
