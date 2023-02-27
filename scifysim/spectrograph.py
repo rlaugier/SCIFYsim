@@ -171,12 +171,13 @@ class integrator():
                          "Read noise": self.ron,
                          "Dark signal": obtained_dark}
         return read
+
     def get_static(self):
         """
         **Returns**
-        * total_static: the total value of integrated light from static sources. [ph/s/pix]
-        * dark_current: the dark current [e-/s/pix]
-        * enclosure_thermal_background : [e-/s/pix]
+        * total_static: the total value of integrated light from static sources. [ph/dit/ch]
+        * dark_current: the dark current [e-/dit/pix]
+        * enclosure_thermal_background : [e-/dit/pix]
         
         **Not affected by noises**
         
