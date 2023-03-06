@@ -8,7 +8,14 @@ from copy import copy
 
 config = parsefile.parse_file("config/test_default.ini")
 
+import dummy
 from dummy import asim
+
+bconf = parsefile.parse_file(dummy.fname)
+bconf.set("corrector", "mode", "znse")
+bsim = dummy.makesim(bconf)
+
+
 
 class test_legacy_integration_corrector(unittest.TestCase):
 
@@ -143,6 +150,7 @@ class test_correcor_in_simulator(unittest.TestCase):
 class test_offband_FT(unittest.TestCase):
     def setUp(self):
         self.asim = copy(asim)
+        self.bsim = copy(bsim)
         altaz = self.asim.obs.observatory_location.altaz(target=self.asim.target,
                                                    time=self.asim.sequence[0])
         self.pistons = self.asim.obs.get_projected_geometric_pistons(altaz,)
@@ -150,5 +158,11 @@ class test_offband_FT(unittest.TestCase):
     def tearDown(self):
         del self.asim
 
+    def test_basic_simulation(self):
+        integ = self.asim.make_exposure(asim.src.planet, asim.src.star, asim.diffuse, texp=1.)
+        integ2 = self.bsim.make_exposure(bsim.src.planet, bsim.src.star, bsim.diffuse, texp=1.)
+        
+        
     def test_test_offband(self):
         self.assertIsInstance(self.pistons, np.ndarray)
+

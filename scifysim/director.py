@@ -47,7 +47,8 @@ class simulator(object):
         
         self.multi_dish = self.config.getboolean("configuration", "multi_dish")
         
-        self.transverse_dispersion = False
+        self.transverse_dispersion = True
+        self.longitudinal_dispersion = True
         
 
         #self.obs = sf.observatory.observatory(self.array, location=location)
@@ -369,7 +370,7 @@ class simulator(object):
         self.integrator.inj_amp = []
         
         for i in tqdm(range(self.n_subexps)):
-            injected = next(self.injector.get_efunc)(self.lambda_science_range)
+            injected = self.phasor_disp.T * next(self.injector.get_efunc)(self.lambda_science_range)
             tracked = next(self.fringe_tracker.phasor)
             if perfect:
                 injected = self.injector.best_injection(self.lambda_science_range)
@@ -654,7 +655,7 @@ class simulator(object):
             it_subexp = range(self.n_subexps)
         for i in it_subexp:
             self.integrator.exposure += t_co
-            injected = next(self.injector.get_efunc)(self.lambda_science_range)
+            injected = self.phasor_disp.T * next(self.injector.get_efunc)(self.lambda_science_range)
             tracked = next(self.fringe_tracker.phasor)
             if monitor_phase:
                 self.integrator.ft_phase.append(np.angle(tracked[:,0]))
@@ -746,7 +747,8 @@ class simulator(object):
         """
         pass
     
-    def point(self, time, target, refresh_array=False, disp_override=None):
+    def point(self, time, target, refresh_array=False, disp_override=None,
+                    long_disp_override=None, ld_mode_override=None):
         """
         Points the array towards the target. Updates the combiner
         
@@ -766,6 +768,16 @@ class simulator(object):
             disp = True
         elif disp_override is False:
             disp = False
+        if long_disp_override is None:
+            long_disp = self.longitudinal_dispersion
+        elif long_disp_override is True:
+            long_disp = True
+        elif long_disp_override is False:
+            long_disp = False
+        if ld_mode_override is None:
+            ld_mode = "ideal"
+        else:
+            ld_mode = ld_mode_override
         
         self.obs.point(time, target)
         self.reset_static()
@@ -798,16 +810,26 @@ class simulator(object):
                             model=self.obs.wet_atmo,
                             add=0,
                             db=False,
-                            ref="center").reshape((*ppixel_pistons.shape, injwl.shape[0]))
-                pup_op = pup_phases*injwl[None,None,:]/(2*np.pi)
+                            ref="center").reshape((injwl.shape[0], *ppixel_pistons.shape))
+                pup_op = pup_phases*injwl[:,None,None]/(2*np.pi)
             for j in range(len(self.injector.focal_plane[i])):
                 if disp:
-                    self.injector.focal_plane[i][j].screen_bias = pup_op[:,:,j].flatten()*1e6
+                    self.injector.focal_plane[i][j].screen_bias = pup_op[j,:,:].flatten()*1e6
+                    # import pdb
+                    # pdb.set_trace()
                 else:
                     self.injector.focal_plane[i][j].screen_bias = zero_screen
                     
             # Handling longitudinal dispersion
-            
+        self.pistons = self.obs.get_projected_geometric_pistons(self.obs.altaz)
+        if long_disp:
+            # For faster computation:
+            # self.ph_disp = self.offband_model.get_ft_correction_on_science(self.pistons)
+            self.ph_disp = self.offband_model.get_phase_science_values(self.pistons, mode=ld_mode)
+            self.phasor_disp = np.exp(1j*self.ph_disp)
+        else:
+            self.ph_disp = np.zeros_like(self.offband_model.get_phase_science_values(self.pistons, mode=ld_mode))            
+            self.phasor_disp = np.exp(1j*self.ph_disp)
         
         
     
@@ -972,7 +994,8 @@ class simulator(object):
         #self.mapsource.ss = vigneted_spectrum
         dummy_collected = da.ones(self.lambda_science_range.shape[0])
         perfect_injection = da.ones((self.lambda_science_range.shape[0], self.ntelescopes))\
-            * self.corrector.get_phasor(self.lambda_science_range)
+            * self.corrector.get_phasor(self.lambda_science_range)\
+            * self.phasor_disp
         static_output = self.combine_light_dask(self.mapsource, perfect_injection,
                                            array, dummy_collected,
                                            dosum=False, map_index=map_index)
@@ -1053,7 +1076,8 @@ class simulator(object):
         #self.mapsource.ss = vigneted_spectrum
         dummy_collected = np.ones(self.lambda_science_range.shape[0])
         perfect_injection = np.ones((self.lambda_science_range.shape[0], self.ntelescopes))\
-            * self.corrector.get_phasor(self.lambda_science_range)
+            * self.corrector.get_phasor(self.lambda_science_range)\
+            * self.phasor_disp
         static_output = self.combine_light(self.mapsource, perfect_injection,
                                            array, dummy_collected,
                                            dtype=dtype,

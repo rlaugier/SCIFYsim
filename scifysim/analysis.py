@@ -9,6 +9,7 @@ from pdb import set_trace
 from scipy.linalg import sqrtm
 
 import matplotlib.pyplot as plt
+import pickle
 
 from scipy.stats import chi2, ncx2, norm
 from scipy.optimize import leastsq
@@ -207,7 +208,6 @@ class noiseprofile(object):
         print(f" s_dark_current = {self.s_dark_current} [e-/s] the dark current")
         print(f" s_enc_bg = {self.s_enc_bg} [e-/s] the enclosure background")
         
-        
 
 class spectral_context(object):
     def __init__(self, vegafile="config/vega.ini", compensate_chromatic=True,
@@ -372,6 +372,16 @@ class spectral_context(object):
             raise NotImplementedError
         
 
+class simplified_context(spectral_context):
+    def __init__(self, mycontext): 
+        self.thevegassflux = mycontext.thevegassflux
+
+    def to_pickle(self, apath):
+        """
+        Saving the context to a pickle file.
+        """
+        with open(apath, "wb") as thefile:
+            pickle.dump(self, thefile)
         
     
 def mag2F(mag):
