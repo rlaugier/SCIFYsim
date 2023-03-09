@@ -376,6 +376,60 @@ def distant_blackbody(lambda_range, T, dist, radius):
                     * np.pi * ((radius * constants.R_sun) / (dist * constants.pc))**2
     return flux_density
 
+def vega_flux_density(lambda_range, T=9600.,
+                        dist=7.68, radius=2.36):
+    """
+    Returns the flux density for Vega
+    lambda_range : Wavelenght [m]
+    T      : temperature default 9600. [K]
+    dist   : Distance 7.68 [pc]
+    radius : Star radius 2.36 [R_sun]
+    
+    Returns flux density [ph/s/m^2] arriving to earth (no atmosphere).
+    
+    """
+    fd_unit = units.photon/units.s/units.m**2
+    return fd_unit * distant_blackbody(lambda_range, T=T,
+                            dist=dist, radius=radius)
+
+def mag2flux_density(lambda_range, mag):
+    """
+    **Arguments**:
+    * lambda_range : Wavelength channels [m]
+    * mag          : Magnitud [vega]
+
+    Returns: Flux density [ph/s/m^2] arriving to earth
+    """
+    vega_fd = vega_flux_density(lambda_range)
+    afd = vega_fd * 10**(-mag/2.5)
+    return (afd)
+
+def flux_density2mag(lambda_range, fd):
+    """
+    **Arguments**: 
+    * lambda_range : Wavelength channels [m]
+    * fd           : flux density [ph/s/m^2]
+      arriving to earth (no atmo)
+
+    Returns : magnitude (vega) for each wavelength
+    """
+    vega_fd = vega_flux_density(lambda_range)
+    amag = -2.5 * np.log10(fd / vega_fd)
+    return amag
+
+def ABmag2Jy(ABmag):
+    fnu = units.jansky * 10**((ABmag - 8.9)/-2.5)
+    return fnu
+
+def Jy2ABmag(fnu):
+    if isinstance(fnu, units.quantity.Quantity):
+        assert fnu.unit is units.jansky
+        myfnu = fnu.value
+    else:
+        myfnu = fnu
+    amag = -2.5 * np.log10(myfnu) + 8.90
+    return amag 
+
 class group(object):
     """
     Just a simple object to structure some data.
@@ -484,8 +538,8 @@ class resolved_source(object):
         self.offset = offset
         # self.ang_radius is in radians
         self.ang_radius = self.radius / (self.distance*units.pc.to(units.R_sun))
-        total_solid_angle = np.pi * self.ang_radius**2 # disk section [sr]
-        self.total_flux_density = self.distant_blackbody()/ total_solid_angle # [ph / s / m^2 / sr]
+        self.total_solid_angle = np.pi * self.ang_radius**2 # disk section [sr]
+        self.total_flux_density = self.distant_blackbody()/ self.total_solid_angle # [ph / s / m^2 / sr]
         
         if resolved:
             self.build_grid(angular_res, radial_res)
@@ -637,5 +691,6 @@ class src_extended(object):
         
         #self.f = Piecewise((1, self.r<=radius),
         #                   (0, self.r>radius))
+
 
         

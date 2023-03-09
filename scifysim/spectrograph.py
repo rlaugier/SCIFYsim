@@ -88,7 +88,8 @@ class integrator():
         * wavelength_range : [m] the channels for which to compute the flux.
         
         Computation of the cold background `self.cold_bg` [e-/s/pix]
-        and self.det_sources [e-/s/channel]
+        and `self.det_sources` [e-/s/channel]
+        Also gives `self.det_labels` for names
         
         """
         self.pix_area = self.xs*self.ys
@@ -96,6 +97,7 @@ class integrator():
         # Note: the radiometric background is computed summed over a broad wavelength range
         # then broadcast over all the spectral channels.
         enclosure_range = np.linspace(2.55e-6, 5.8e-6, 200)
+        # QE eta is included through the QE curve similarly to transmission
         self.cold_bg = self.pix_area * np.sum(self.enclosure.get_total_emission(enclosure_range,
                                                                                 bright=True,
                                                                                 n_sub=10)) *\

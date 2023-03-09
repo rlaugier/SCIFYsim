@@ -229,6 +229,8 @@ class spectral_context(object):
         
         """
         if isinstance(vegafile, str):
+            raise AttributeError("no longer supported\
+                Please provide a ConfigParser object (asim.config)")
             self.avega = sf.utilities.prepare_all(vegafile, update_params=False,
                             instrumental_errors=False, compensate_chromatic=compensate_chromatic,
                             verbose=verbose)
