@@ -1,9 +1,12 @@
 """
 A simple routine to get a generic simulator started with vanilla config file
 """
+from pathlib import Path
 import scifysim as sf
 
-fname = "config/test_default.ini"
+parent = Path(__file__).parent.absolute()
+
+fname = str(parent/"config/test_default.ini")
 atarget = "GJ 86 A"
 def makesim(fname, target=atarget):
     asim = sf.utilities.prepare_all(afile=fname,
