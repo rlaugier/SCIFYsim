@@ -161,8 +161,9 @@ def plot_projected_pupil(asim, seq_index,
     * compass : Whether to plot a little North and East symbol for direction
     * compoass_length: In meters the length of the compass needles.
     """
+    if asim.space:
+        grid = False
     anarray = asim.obs.statlocs
-    
     #Get the pointing of the array:
     altaz, PA = asim.obs.get_position(asim.target, asim.sequence[seq_index])
     #Building a grid
@@ -175,7 +176,7 @@ def plot_projected_pupil(asim, seq_index,
         formatted_grid = np.array([parallels,meridians])
         projected_grid = formatted_grid.copy()
         for i in range(formatted_grid.shape[0]):
-            for j in range(formatted_grid.shape[1]):
+            for j in range(formatted_gridid.shape[1]):
                 projected_grid[i,j] = asim.obs.get_projected_array(altaz,
                                                                PA=PA,
                                                                loc_array=formatted_grid[i,j])
@@ -185,7 +186,10 @@ def plot_projected_pupil(asim, seq_index,
     if compass:
         mycompass = np.array([[0., 10.],
                              [10.,0.]])
-        pcompass = asim.obs.get_projected_array(altaz, PA=PA, loc_array=mycompass)
+        if asim.space:
+            pcompass = mycompass
+        else:
+            pcompass = asim.obs.get_projected_array(altaz, PA=PA, loc_array=mycompass)
     else:
         compass = None
         

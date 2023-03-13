@@ -7,10 +7,14 @@ import logging
 from kernuller import mas2rad, rad2mas
 from astropy import units
 from pdb import set_trace
+from pathlib import Path
 
 import dask.array as da
 
+parent = Path(__file__).parent.absolute()
+
 logit = logging.getLogger(__name__)
+
 
 class simulator(object):
     def __init__(self,file=None, fpath=None):
@@ -39,8 +43,14 @@ class simulator(object):
             self.config = file
         
         self.location = self.config.get("configuration", "location")
-        self.array_config = self.config.get("configuration", "config")
-        raw_array = eval("kernuller.%s"%(self.array_config))
+        raw_array, array_config = sf.utilities.get_raw_array(self.config)
+        self.array_config = array_config; del array_config
+        if self.location == "space": # At this point we only want the "statlocs"
+            raw_array = raw_array[0,:,:]
+            self.space = True
+        else:
+            self.space = False
+        
         self.order = self.config.getarray("configuration", "order").astype(np.int16)
         self.array = raw_array[self.order]
         self.n_spec_ch = self.config.getint("photon", "n_spectral_science")
@@ -86,10 +96,13 @@ class simulator(object):
         else :
             logit.error("Did not understand the mode for target")
             raise ValueError("Provide a valid mode for the target creation")
-            
-        self.obs = sf.observatory.observatory(config=theconfig, statlocs=statlocs)
-        # This is the true atmospheric model
-        self.obs.wet_atmo = sf.wet_atmo(self.config)
+        if theconfig.get("configuration", "location") == "space":
+            self.obs = sf.observatory.SpaceObservatory(config=theconfig)
+            self.obs.wet_atmo = None
+        else:
+            self.obs = sf.observatory.observatory(config=theconfig, statlocs=statlocs)
+            # This is the true atmospheric model
+            self.obs.wet_atmo = sf.wet_atmo(self.config)
         
 
     
@@ -323,7 +336,7 @@ class simulator(object):
         #taraltaz, tarPA = self.obs.get_position(self.target, time)
         
         #Pointing should be done already
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        array = self.obs.get_projected_array()
         
         self.integrator.static_xx_r = mas2rad(self.injector.vigneting.xx)
         self.integrator.static_yy_r = mas2rad(self.injector.vigneting.yy)
@@ -607,7 +620,7 @@ class simulator(object):
         self.n_subexps = int(texp/t_co)
         
         #Pointing should be done already
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        array = self.obs.get_projected_array()
         self.computed_static_xx = self.injector.vigneting.xx
         self.computed_static_yy = self.injector.vigneting.yy
         self.integrator.reset()
@@ -762,6 +775,10 @@ class simulator(object):
           False deactivate transverse dispersion.
         """
         # Figuring out what to do for dispersion
+        if self.space:
+            disp_override = False
+            long_disp_override = False
+            
         if disp_override is None:
             disp = self.transverse_dispersion
         elif disp_override is True:
@@ -781,15 +798,15 @@ class simulator(object):
         
         self.obs.point(time, target)
         self.reset_static()
-        thearray = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        thearray = self.obs.get_projected_array()
         if refresh_array:
             self.combiner.refresh_array(thearray)
         
         
-        # Handling transverse dispersion
-        altaz = self.obs.altaz
-        zenith_angle = (np.pi/2)*units.rad - altaz.alt.to(units.rad)
-        
+        if not self.space:
+            # Handling transverse dispersion
+            altaz = self.obs.altaz
+            zenith_angle = (np.pi/2)*units.rad - altaz.alt.to(units.rad)
         zero_screen = np.zeros_like(self.injector.focal_plane[0][0].screen_bias).flatten()
         for i in range(len(self.injector.focal_plane)):
             if disp:
@@ -821,13 +838,14 @@ class simulator(object):
                     self.injector.focal_plane[i][j].screen_bias = zero_screen
                     
             # Handling longitudinal dispersion
-        self.pistons = self.obs.get_projected_geometric_pistons(self.obs.altaz)
+        self.pistons = self.obs.get_projected_geometric_pistons()
         if long_disp:
             # For faster computation:
             # self.ph_disp = self.offband_model.get_ft_correction_on_science(self.pistons)
             self.ph_disp = self.offband_model.get_phase_science_values(self.pistons, mode=ld_mode)
             self.phasor_disp = np.exp(1j*self.ph_disp)
         else:
+            assert self.pistons.shape == (self.ntelescopes,1), f"pistons shape {self.pistons.shape}"
             self.ph_disp = np.zeros_like(self.offband_model.get_phase_science_values(self.pistons, mode=ld_mode))            
             self.phasor_disp = np.exp(1j*self.ph_disp)
         
@@ -982,7 +1000,7 @@ class simulator(object):
         
         """
         self.point(self.sequence[blockindex], self.target)
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        array = self.obs.get_projected_array()
         #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
                 vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
@@ -1023,7 +1041,7 @@ class simulator(object):
         
         """
         self.point(self.sequence[blockindex], self.target)
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        array = self.obs.get_projected_array()
         #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
                 vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
@@ -1064,7 +1082,7 @@ class simulator(object):
         **Returns** the ``static_output``: the map
         """
         self.point(self.sequence[blockindex], self.target)
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        array = self.obs.get_projected_array()
         #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
                 vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
