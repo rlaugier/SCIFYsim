@@ -10,6 +10,11 @@ import scipy.interpolate as interp
 from pathlib import Path
 import scipy.interpolate as interp
 
+VEGA_TEMPERATURE = 9600. # K
+VEGA_DIST = 7.68 # pc
+VEGA_RADIUS = 2.36 # R_sun
+
+
 parent = Path(__file__).parent.absolute()
 
 #qe_file = parent/"data/hawaii2rg_qe.csv"
@@ -376,8 +381,8 @@ def distant_blackbody(lambda_range, T, dist, radius):
                     * np.pi * ((radius * constants.R_sun) / (dist * constants.pc))**2
     return flux_density
 
-def vega_flux_density(lambda_range, T=9600.,
-                        dist=7.68, radius=2.36):
+def vega_flux_bin(lambda_range, T=VEGA_TEMPERATURE,
+                        dist=VEGA_DIST, radius=VEGA_RADIUS):
     """
     Returns the flux density for Vega
     lambda_range : Wavelenght [m]
@@ -392,7 +397,15 @@ def vega_flux_density(lambda_range, T=9600.,
     return fd_unit * distant_blackbody(lambda_range, T=T,
                             dist=dist, radius=radius)
 
-def mag2flux_density(lambda_range, mag):
+def magT2flux_bin(lambda_range, mag, T):
+    base_fd = mag2flux_bin(lambda_range, mag)
+    body_sd = blackbody.get_B_lamb_ph(lambda_range, T)
+    # vega_sd = blackbody.get_B_lamb_ph(lambda_range, VEGA_TEMPERATURE)
+    spectrum = np.sum(base_fd) * body_sd / np.sum(body_sd)
+    return spectrum
+    
+    
+def mag2flux_bin(lambda_range, mag):
     """
     **Arguments**:
     * lambda_range : Wavelength channels [m]
@@ -400,11 +413,11 @@ def mag2flux_density(lambda_range, mag):
 
     Returns: Flux density [ph/s/m^2] arriving to earth
     """
-    vega_fd = vega_flux_density(lambda_range)
+    vega_fd = vega_flux_bin(lambda_range)
     afd = vega_fd * 10**(-mag/2.5)
     return (afd)
 
-def flux_density2mag(lambda_range, fd):
+def flux_bin2mag(lambda_range, fd):
     """
     **Arguments**: 
     * lambda_range : Wavelength channels [m]
@@ -413,7 +426,7 @@ def flux_density2mag(lambda_range, fd):
 
     Returns : magnitude (vega) for each wavelength
     """
-    vega_fd = vega_flux_density(lambda_range)
+    vega_fd = vega_flux_bin(lambda_range)
     amag = -2.5 * np.log10(fd / vega_fd)
     return amag
 
