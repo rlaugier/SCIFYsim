@@ -21,7 +21,8 @@ class simulator(object):
                  #location=None, array=None,
                 #tarname="No name", tarpos=None, n_spec_ch=100):
         """
-        The object meant to assemble and operate the simulator. Construct the injector object from a config file
+        The object meant to assemble and operate the simulator. 
+        Construct the injector object from a config file
         
         **Parameters:**
         

@@ -7,6 +7,7 @@ import dask.array as da
 import copy
 from pdb import set_trace
 from scipy.linalg import sqrtm
+from astropy import units
 
 import matplotlib.pyplot as plt
 import pickle
@@ -398,6 +399,125 @@ def mag2F(mag):
 def F2mag(F):
     mag = -2.5*np.log10(F/1)
     return mag
+
+class BasicETC(object):
+    def __init__(self, asim):
+        """
+        **Parameters:**
+        * ipeak : []
+        * pdiam : [m]
+        * S_collecting [m^2]
+        * lambda_science_range [m]
+        * diffuse []
+        * throughput []
+        * eta [e-/ph]
+        * fiber_etendue [sr]
+        * cold_enclosure [e-/s]
+        * dark_current [e-/s]
+        * src_names []
+        * contribs [ph/s]
+        
+        """
+        asim.integrator.update_enclosure(asim.lambda_science_range)
+        self.peak_contributions = np.abs(asim.combiner.Mcn[:,3,:].mean(axis=0))
+        self.ipeak = np.sum(self.peak_contributions)**2
+        self.pdiam = asim.injector.pdiam
+        self.odiam = asim.injector.odiam
+        self.S_collecting = np.pi * self.pdiam**2/4 - np.pi * self.odiam**2/4
+        self.lambda_science_range = asim.lambda_science_range
+        self.diffuse = asim.diffuse
+        self.throughput = self.diffuse[0].get_downstream_transmission(self.lambda_science_range)
+        self.eta = asim.integrator.eta
+        self.fiber_etendue = np.pi * (self.lambda_science_range / self.pdiam)**2
+        contribs = []
+        self.src_names = []
+        self.cold_enclosure = asim.integrator.det_sources[0]
+        self.dark_current = asim.integrator.det_sources[1]
+        for anelement in self.diffuse:
+            contribs.append(self.fiber_etendue \
+                            * anelement.get_own_brightness(self.lambda_science_range) \
+                            * anelement.get_downstream_transmission(self.lambda_science_range))
+            self.src_names.append(anelement.__name__)
+        contribs.append(asim.integrator.det_sources[0] \
+                        / self.eta)
+        self.src_names.append(asim.integrator.det_labels[0])
+        contribs.append(asim.integrator.det_sources[1] \
+                        * np.ones_like(asim.integrator.det_sources[0])
+                        / self.eta)
+        self.src_names.append(asim.integrator.det_labels[1])
+        self.contribs = np.array(contribs)
+        self.contribs_current = self.eta * self.contribs
+
+
+
+    def planet_photons(self, planet_mag, dit=1., T=None, verbose=False):
+        if T is None:
+            self.fd_planet = sf.sources.mag2flux_bin(
+                            self.lambda_science_range, planet_mag
+            )
+        else:
+            self.fd_planet = sf.sources.magT2flux_bin(
+                            self.lambda_science_range,
+                            planet_mag,
+                            T=T
+            )
+        return dit * self.fd_planet
+
+    def show_signal_noise(self, planet_mag, dit=1., T=None, verbose=True,
+                        decompose=True, plot=True,
+                        show=True):
+        planet_photons = self.planet_photons(planet_mag, dit=dit, T=T,
+                                            verbose=verbose)
+        planet_electrons = planet_photons \
+                        * self.ipeak * self.throughput \
+                        * self.S_collecting * self.eta 
+        if verbose:
+            print(f"Planet photons {np.sum(planet_photons)/dit:.1e} [ph/s] \
+                        for a total of {np.sum(planet_photons):.1e} [ph]")
+            print(f"Mean total transmission {100*np.mean(self.throughput):.2f} \%")
+            print(f"Collecting {self.S_collecting:.1e} [m^2]")
+            print(f"Quantum efficiency {self.eta:.2f}")
+            print(f"Planet e- {np.sum(planet_electrons)/dit:.1e} [e-/s] \
+                        for a total of {np.sum(planet_electrons):.1e} [e-]")
+        background_photons = np.sum(self.contribs * dit, axis=0)
+        background_electrons = background_photons * self.eta
+        background_sigma = np.sqrt(background_electrons)
+        total_background_sigma = np.sqrt(background_electrons.sum())
+        if verbose:
+            print(f"Background photons {background_photons.sum()/dit:.1e} [ph/s] \
+                        for a total of {background_photons.sum():.1e} [ph]")
+            print(f"Background electrons {background_electrons.sum()/dit:.1e} [ph/s] \
+                        for a total of {background_electrons.sum():.1e} [ph]")
+            print(f"Photon noise std {total_background_sigma:.1e} [e-]")
+            print(f"SNR min {np.min(planet_electrons/background_sigma)}\
+                max {np.max(planet_electrons/background_sigma)}")
+        if plot:
+            contribs_current = self.contribs_current * dit
+            import matplotlib.pyplot as plt
+            plt.figure()
+            base = np.zeros_like(contribs_current[0])
+            for i, acontrib in enumerate(contribs_current):
+                plt.fill_between(self.lambda_science_range,
+                    y1=base, y2=np.sqrt(base**2 + acontrib),
+                    label=f"$\\sigma$ {self.src_names[i]}")
+                base = np.sqrt(base**2 + acontrib)
+            plt.plot(self.lambda_science_range, 
+                    np.sqrt(np.sum(contribs_current, axis=0)),
+                    color="r", linestyle="--", label="Total background noise")
+            plt.plot(self.lambda_science_range,
+                    planet_electrons,
+                    label=f"Planet L={planet_mag:.1f}, {T:.0f}K", color="k",)
+            plt.legend(fontsize="x-small")
+            plt.xlabel("Wavelength [m]")
+            plt.ylabel("Planet [e-] \n $\\sigma_{background}$ [e-]")
+            plt.title(f"DIT = {dit} [s]")
+            plt.show()
+        return planet_electrons, background_sigma
+        
+        
+        
+            
+        
 
 
 ##################################
