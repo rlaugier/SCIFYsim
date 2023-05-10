@@ -196,6 +196,8 @@ class observatory(object):
         """
         if loc_array is None:
             loc_array = self.statlocs
+        else:
+            print(f"Using loc_array {loc_array}")
         arrayaz = self.R((180 - taraltaz.az.value)*np.pi/180).dot(loc_array.T).T
         altazarray = self.P(taraltaz.alt.value * np.pi/180).dot(arrayaz.T).T
         

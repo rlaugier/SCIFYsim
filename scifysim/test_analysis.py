@@ -45,6 +45,28 @@ class test_BasicETC(unittest.TestCase):
         del self.asim
         del self.etc
 
+    def test_types(self):
+        self.assertIsInstance(self.etc.pdiam, units.quantity.Quantity)
+        self.assertEqual(self.etc.pdiam.unit, units.m)
+        self.assertIsInstance(self.etc.odiam, units.quantity.Quantity)
+        self.assertEqual(self.etc.pdiam.unit, units.m)
+        self.assertIsInstance(self.etc.S_collecting,
+                        units.quantity.Quantity)
+        self.assertEqual(self.etc.S_collecting.unit, units.m**2)
+        self.assertIsInstance(self.etc.eta, units.quantity.Quantity)
+        self.assertEqual(self.etc.eta.unit,
+                        units.electron/units.photon)
+        self.assertIsInstance(self.etc.dit_0, units.quantity.Quantity)
+        self.assertEqual(self.etc.dit_0.unit,
+                        units.s)
+        self.assertIsInstance(self.etc.contribs, units.quantity.Quantity)
+        self.assertEqual(self.etc.contribs.unit, units.ph/units.s)
+        self.assertIsInstance(self.etc.contribs_current, units.quantity.Quantity)
+        self.assertEqual(self.etc.contribs_current.unit, units.electron/units.s)
+        self.assertIsInstance(self.etc.contribs_variance_rate, units.quantity.Quantity)
+        self.assertEqual(self.etc.contribs_variance_rate.unit, units.electron**2/ units.s)
+
+
     def test_planet_photons(self):
         ref_dit = 10.
         ref_mag = 13.
@@ -73,3 +95,29 @@ class test_BasicETC(unittest.TestCase):
         )
         self.assertTrue(np.allclose(2 * asig, othersig))
         self.assertTrue(np.allclose(np.sqrt(2) * anoise, othernoise))
+        # self.assertTrue(asig.unit, units.)
+        
+    def test_signal_noise_plot(self):
+        ref_dit = 10.
+        ref_mag = 13.
+        ref_T = 800.
+        asig, anoise, afig = self.etc.show_signal_noise(
+            ref_mag, dit=ref_dit, T=ref_T,
+            verbose=False, plot=True,
+            show=False
+        )
+        self.assertIsInstance(asig, units.quantity.Quantity)
+
+    def test_unit_gainmap(self):
+        mysim = copy(asim)
+        mysim.build_all_maps(mapcrop=0.01, mapres=20)
+        againmap = mysim.gain_map
+        self.assertIsInstance(againmap, units.quantity.Quantity)
+        self.assertEqual(againmap.unit, units.m**2 * units.electron \
+                                    /units.photon)
+        ref_dit = 10.
+        ref_mag = 13.
+        ref_T = 800.
+        asig = self.etc.planet_photons(ref_mag, ref_dit, T=ref_T)
+        self.assertEqual((againmap * asig[None,:,None,None,None]).unit, units.electron)
+

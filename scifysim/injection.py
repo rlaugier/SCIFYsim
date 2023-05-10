@@ -1555,6 +1555,7 @@ class injection_vigneting(object):
         self.vig = injector.injection_rate(injector.lambda_range, self.rr_lambdaond)
         self.vig_func = injector.injection_rate
         self.norm = 1/np.max(self.vig)
+
     def vigneted_spectrum(self, spectrum, lambda_range, exptime, transmission=None):
         """
         

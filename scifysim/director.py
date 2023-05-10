@@ -889,6 +889,23 @@ class simulator(object):
                   np.min(self.vigneting_map.yy),
                   np.max(self.vigneting_map.yy)]
         self.map_extent = extent
+
+    def get_loc_map(self, loc):
+        """
+        Get the nearest pixel location of for a relative coordinate
+        **Arguments:**
+        * loc   : the relative coordinate in [mas]
+         defined in (y, x) as per numpy convention
+
+        Returns: (y, x ) coordinate index in pixel as per numpy conv.
+        """
+        xindex_raw = np.argmin(np.abs(self.vigneting_map.xx - loc[1]))
+        yindex_raw = np.argmin(np.abs(self.vigneting_map.yy - loc[0]))
+        xindex = np.unravel_index(xindex_raw,
+                shape=(self.vigneting_map.resol, self.vigneting_map.resol))[1]
+        yindex = np.unravel_index(yindex_raw,
+                shape=(self.vigneting_map.resol, self.vigneting_map.resol))[0]
+        return (yindex, xindex)
         
         
     def build_all_maps_dask(self, mapres=100, mapcrop=1.,
@@ -1092,6 +1109,15 @@ class simulator(object):
         # Warning: modifying the array
         #combined = np.abs(static_output*np.conjugate(static_output)).astype(np.float32)
         return static_output
+
+    @property
+    def gain_map(self):
+        ds_sr = self.vigneting_map.ds_sr
+        # Since maps contain eta, their unti is in electron/photon * m**2 * sr
+        mapunits = units.electron / units.photon * units.m**2 * units.sr
+        throughput_map = 1/(ds_sr*units.sr) * self.maps*mapunits 
+        return throughput_map
+
         
     def __call__(self):
         pass

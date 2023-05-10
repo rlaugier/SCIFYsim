@@ -415,18 +415,20 @@ class BasicETC(object):
         asim.integrator.update_enclosure(asim.lambda_science_range)
         self.peak_contributions = np.abs(asim.combiner.Mcn[:,3,:].mean(axis=0))
         self.ipeak = np.sum(self.peak_contributions)**2
-        self.pdiam = asim.injector.pdiam
-        self.odiam = asim.injector.odiam
+        self.pdiam = asim.injector.pdiam * units.m
+        self.odiam = asim.injector.odiam * units.m
         self.S_collecting = np.pi * self.pdiam**2/4 - np.pi * self.odiam**2/4
         self.lambda_science_range = asim.lambda_science_range
         self.diffuse = asim.diffuse
         self.throughput = self.diffuse[0].get_downstream_transmission(self.lambda_science_range)
-        self.eta = asim.integrator.eta
+        self.eta = asim.integrator.eta * units.electron / units.photon
         self.fiber_etendue = np.pi * (self.lambda_science_range / self.pdiam)**2
         contribs = []
         self.src_names = []
         self.cold_enclosure = asim.integrator.det_sources[0]
         self.dark_current = asim.integrator.det_sources[1]
+        self.dit_0 = asim.config.getfloat("detector", "default_dit") * units.s
+        self.ron = asim.integrator.ron * units.electron
         for anelement in self.diffuse:
             contribs.append(self.fiber_etendue \
                             * anelement.get_own_brightness(self.lambda_science_range) \
@@ -439,12 +441,37 @@ class BasicETC(object):
                         * np.ones_like(asim.integrator.det_sources[0])
                         / self.eta)
         self.src_names.append(asim.integrator.det_labels[1])
-        self.contribs = np.array(contribs)
+        self.contribs = np.array(contribs) * units.photon/units.s
         self.contribs_current = self.eta * self.contribs
 
+    @property
+    def contribs_variance_rate(self):
+        """The variance rate in e-**2/s"""
+        variance_rate = self.contribs_current.sum(axis=0).value \
+                        * units.electron**2/units.s
+        return variance_rate
+
+    def get_min_exp_time(self, planet_mag, planet_T, snr=3., dit_0=None,
+                        verbose=False):
+        if dit_0 is None:
+            dit_0 = self.dit_0
+        if not isinstance(dit_0, units.quantity.Quantity):
+            dit_0 = dit_0 * units.s
+        total_current_planet, total_noise = self.show_signal_noise(planet_mag, dit=1.,
+                                                    T=planet_T, verbose=verbose,
+                                                    plot=False, show=False)
+        at = snr**2* np.sqrt(2) * self.contribs_variance_rate \
+                            /total_current_planet**2
+        at2 = snr**2 * np.sqrt(2) \
+            * ( self.contribs_variance_rate \
+                        + self.ron**2/dit_0) \
+              /total_current_planet**2 
+        return at, at2
 
 
     def planet_photons(self, planet_mag, dit=1., T=None, verbose=False):
+        if not isinstance(dit, units.quantity.Quantity):
+            dit = dit * units.s
         if T is None:
             self.fd_planet = sf.sources.mag2flux_bin(
                             self.lambda_science_range, planet_mag
@@ -465,6 +492,8 @@ class BasicETC(object):
         planet_electrons = planet_photons \
                         * self.ipeak * self.throughput \
                         * self.S_collecting * self.eta 
+        if not isinstance(dit, units.quantity.Quantity):
+            dit = dit * units.s
         if verbose:
             print(f"Planet photons {np.sum(planet_photons)/dit:.1e} [ph/s] \
                         for a total of {np.sum(planet_photons):.1e} [ph]")
@@ -475,8 +504,8 @@ class BasicETC(object):
                         for a total of {np.sum(planet_electrons):.1e} [e-]")
         background_photons = np.sum(self.contribs * dit, axis=0)
         background_electrons = background_photons * self.eta
-        background_sigma = np.sqrt(background_electrons)
-        total_background_sigma = np.sqrt(background_electrons.sum())
+        background_sigma = np.sqrt(background_electrons.value)
+        total_background_sigma = np.sqrt(background_electrons.sum())*units.electron
         if verbose:
             print(f"Background photons {background_photons.sum()/dit:.1e} [ph/s] \
                         for a total of {background_photons.sum():.1e} [ph]")
@@ -488,15 +517,18 @@ class BasicETC(object):
         if plot:
             contribs_current = self.contribs_current * dit
             import matplotlib.pyplot as plt
-            plt.figure()
-            base = np.zeros_like(contribs_current[0])
+            afig = plt.figure()
+            base = np.zeros_like(np.sqrt(contrib2variance(contribs_current[0])))
+            print(base.unit)
             for i, acontrib in enumerate(contribs_current):
+                acontrib_variance = contrib2variance(acontrib)
+                print(acontrib_variance.unit)
                 plt.fill_between(self.lambda_science_range,
-                    y1=base, y2=np.sqrt(base**2 + acontrib),
+                    y1=base, y2=np.sqrt(base**2 + acontrib_variance).value,
                     label=f"$\\sigma$ {self.src_names[i]}")
-                base = np.sqrt(base**2 + acontrib)
+                base = np.sqrt(base**2 + acontrib_variance)
             plt.plot(self.lambda_science_range, 
-                    np.sqrt(np.sum(contribs_current, axis=0)),
+                    np.sqrt(np.sum(contribs_current, axis=0)).value,
                     color="r", linestyle="--", label="Total background noise")
             plt.plot(self.lambda_science_range,
                     planet_electrons,
@@ -505,14 +537,24 @@ class BasicETC(object):
             plt.xlabel("Wavelength [m]")
             plt.ylabel("Planet [e-] \n $\\sigma_{background}$ [e-]")
             plt.title(f"DIT = {dit} [s]")
-            plt.show()
-        return planet_electrons, background_sigma
+            if show:
+                plt.show()
+        if plot and not show:
+            return planet_electrons, background_sigma, afig
+        else:
+            return planet_electrons, background_sigma
         
         
         
             
         
-
+def contrib2variance(acontrib, unit=units.electron):
+    """
+        Assumes incoming signals proportional to electrons.
+    Tweaks the unit to a poisson variance (e.g. from e- to e-**2)
+    """
+    avar = acontrib*unit
+    return avar
 
 ##################################
 # The energy detector test
