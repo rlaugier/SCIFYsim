@@ -2,7 +2,11 @@ import sympy as sp
 import numpy as np
 from kernuller import mas2rad
 from kernuller import rad2mas
-from kernuller import fprint
+import kernuller
+from scifysim.parsefile import ConfigParser
+from pathlib import Path
+
+parent = Path(__file__).parent.absolute()
 
 import logging
 
@@ -46,6 +50,33 @@ def range2R(spectral_range, mode="bins"):
     R = spectral_range/deltalamb
     return R
 
+def get_raw_array(config):
+    """
+        Get the raw array for location of apertures from config file.
+    **Arguments:**
+    * config : a config parser object `sf.parsefile.ConfigParser`
+
+    return:
+    * For ground-based: (n_tel, 2[m])
+    * For space-based:  (t[s], n_tel, 3[m])
+    """
+    assert isinstance(config, ConfigParser)
+    array_config = config.get("configuration", "config")
+    if array_config != "none":
+        raw_array = eval("kernuller.%s"%(array_config))
+        assert len(raw_array.shape) == 2
+        assert raw_array.shape[1] == 2
+    else :
+        apath = Path(config.get("configuration", "array_motion_file"))
+        relative = config.getboolean("configuration", "array_motion_local")
+        if relative:
+            mypath = parent/apath
+        else:
+            mypath = apath
+        raw_array = np.load(mypath)
+        assert len(raw_array.shape) == 3 # Check (n_t, n_tel, X)
+        assert raw_array.shape[2] == 3 # check 3D position
+    return raw_array, array_config
 
 def lambdifyz(symbols, expr, modules="numpy"):
     """
@@ -125,8 +156,9 @@ class ee(object):
     
     def __call__(self,*args):
         return self.callfunction(*args)
+
     def fprint(self):
-        fprint(self.expr)
+        kernuller.fprint(self.expr)
     
 
 def prepare_all(afile, thetarget=None, update_params=False,

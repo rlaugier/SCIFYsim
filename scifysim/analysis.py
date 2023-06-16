@@ -237,9 +237,15 @@ class spectral_context(object):
                             verbose=verbose)
         elif isinstance(vegafile, sf.parsefile.ConfigParser):
             vega_config = self.create_vega_config(vegafile)
+            if vega_config.get("configuration", "location") == "space":
+                use = False
+            else:
+                use = True
             self.avega = sf.utilities.prepare_all(vega_config, update_params=False,
-                            instrumental_errors=False, compensate_chromatic=compensate_chromatic,
-                            verbose=verbose)
+                            instrumental_errors=False,
+                            compensate_chromatic=compensate_chromatic,
+                            verbose=verbose,
+                            update_start_end=use)
             
         else :
             raise TypeError()

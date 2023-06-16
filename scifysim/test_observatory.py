@@ -6,8 +6,12 @@ import unittest
 import observatory
 import astropy
 import astroplan
+from copy import copy
 # import astroplan
 from scifysim.parsefile import parse_file
+
+from dummy_space import asim as aspacesim
+from dummy_space import interpsim as ainterpsim
 
 
 class TestObservatory(unittest.TestCase):
@@ -81,6 +85,22 @@ class TestObservatory(unittest.TestCase):
         self.assertIsInstance(obstimes[0], astropy.time.Time)
         self.assertEqual(len(obstimes), len(self.times))
 
+    def test_behavior_PA_projected_array(self):
+        # aPA = self.anobs.PA
+        # Prefered way:
+        anobs = copy(self.anobs)
+        anobs.point(self.thetime, self.atarget)
+        aproj = anobs.get_projected_array()
+        # Legacy way:
+        aproj_leg = anobs.get_projected_array(taraltaz=anobs.altaz,
+                                            PA=anobs.PA)
+        # Alternate way:
+        aproj_alt = anobs.get_projected_array(taraltaz=anobs.altaz,
+                                            PA=anobs.PA.rad)
+        self.assertTrue(np.allclose(aproj, aproj_leg))
+        self.assertTrue(np.allclose(aproj, aproj_alt))
+        self.assertTrue(np.allclose(aproj_alt, aproj_leg))
+
     def test_config_number_of_points_times(self):
         self.assertEqual(self.config.getint("target", "n_points"), 7)
         
@@ -101,7 +121,7 @@ class TestObservatory(unittest.TestCase):
         # self.anobs.point(self.thetime, self.atarget) ## could use point instead
         altaz = self.anobs.observatory_location.altaz(target=self.atarget,
                                                    time=self.thetime)
-        proj_array = self.anobs.get_projected_array(altaz,)
+        proj_array = self.anobs.get_projected_array(altaz, PA=False)
         ref_proj = np.array([[ 0.        ,  0.        ],
                              [ 1.58675864, -1.45079393],
                              [ 1.27391078, -2.32541767]])
@@ -135,6 +155,90 @@ class TestObservatory(unittest.TestCase):
 #        anobs = observatory.observatory(statlocs=statlocs, location="Paranal")
 #        self.assertIsNotNone(anobs)
         
+
+class TestSpaceObservatory(unittest.TestCase):
+    def setUp(self):
+        # self.aspaceobs = observatory.SpaceObservatory()
+        statlocs = np.array([[-20., -10., 100.],
+                            [-20., +10., 100.],
+                            [+20., -10., 100.],
+                            [+20., +10., 100.]])
+        aconfig = parse_file("config/test_space_default.ini")
+        self.config = aconfig
+        self.statlocs = statlocs
+        self.aspaceobs = observatory.SpaceObservatory(statlocs=statlocs, config=aconfig)
+        self.asim = copy(aspacesim)
+        self.interpsim = copy(ainterpsim)
+
+    def tearDown(self):
+        del self.aspaceobs
+        del self.config
+        del self.statlocs
+
+    def test_spaceobs_has_methods(self):
+        self.assertTrue(hasattr(self.aspaceobs, "point"))
+        self.assertTrue(hasattr(self.aspaceobs, "build_observing_sequence"))
+        self.assertTrue(hasattr(self.aspaceobs, "get_position"))
+        self.assertTrue(hasattr(self.aspaceobs, "get_projected_array"))
+        self.assertTrue(hasattr(self.aspaceobs, "get_projected_geometric_pistons"))
+
+    def test_spaceobs_point(self):
+        aspaceobs = copy(self.asim.obs)
+        aspaceobs.point(self.asim.sequence[0])
+        x_A_t_0 = aspaceobs.x_A_t
+        aspaceobs.point(self.asim.sequence[1])
+        x_A_t_1 = aspaceobs.x_A_t
+        self.assertFalse(np.allclose(x_A_t_0, x_A_t_1))
+        self.assertIsInstance(x_A_t_0, np.ndarray)
+        self.assertEqual(x_A_t_0.shape, (aspaceobs.n_tel, 3))
+
+    def test_time2t(self):
+        aspaceobs = copy(self.asim.obs)
+        ref_t = 1200.0
+        a_t = aspaceobs.time2t(self.asim.sequence[2])
+        self.assertAlmostEqual(ref_t, a_t)
+        self.assertIsInstance(a_t, float)
+
+    def test_spaceobs_motion_rotation(self):
+        aspaceobs = copy(self.asim.obs)
+        atime = self.asim.sequence[2]
+        self.assertEqual(aspaceobs.motion_type, "rotation")
+        self.assertIsInstance(atime, observatory.Time)
+        at = (atime.to_value("unix") - self.asim.sequence[0].to_value("unix"))
+        self.assertIsInstance(at, float)
+        axat_default = aspaceobs.motion(at)
+        axat_same = aspaceobs.motion(at, loc_array=aspaceobs.statlocs)
+        axat_other = aspaceobs.motion(at, loc_array=self.statlocs)
+        self.assertIsInstance(axat_default, np.ndarray)
+        self.assertTrue(np.allclose(axat_default, axat_same))
+        self.assertFalse(np.allclose(axat_default, axat_other))
+        self.assertFalse(np.allclose(axat_same, axat_other))
+        # Testing the full_output:
+        axat, theta, aR = aspaceobs.motion(at, full_output=True)
+        self.assertIsInstance(axat, np.ndarray)
+        self.assertIsInstance(theta, float)
+        self.assertIsInstance(aR, np.ndarray)
+        self.assertEqual(aR.shape, (3,3))
+        self.assertEqual(axat.shape, (aspaceobs.n_tel, 3))
+
+    def test_spaceobs_motion_interp(self):
+        myinterpsim = copy(self.interpsim.obs)
+        atime = self.asim.sequence[2]
+        self.assertEqual(myinterpsim.motion_type, "interpolation")
+        self.assertIsInstance(atime, observatory.Time)
+        at = (atime.to_value("unix") - self.asim.sequence[0].to_value("unix"))
+        self.assertIsInstance(at, float)
+        axat_default = myinterpsim.motion(at)
+        axat_same = myinterpsim.motion(at, loc_array=myinterpsim.statlocs)
+        axat_other = myinterpsim.motion(at, loc_array=self.statlocs)
+        self.assertIsInstance(axat_default, np.ndarray)
+        self.assertTrue(np.allclose(axat_default, axat_same))
+        self.assertTrue(np.allclose(axat_default, axat_other))
+        self.assertTrue(np.allclose(axat_same, axat_other))
+
+        
+
+
 
 
 

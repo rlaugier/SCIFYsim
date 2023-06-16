@@ -5,7 +5,9 @@ import unittest
 import analysis
 import scifysim as sf
 import numpy as np
+from pathlib import Path
 
+parent = Path(__file__).parent.absolute()
 
 class TestConfig(unittest.TestCase):
     def setUp(self):
@@ -29,6 +31,17 @@ class TestConfig(unittest.TestCase):
         self.assertTrue(isinstance(thearray_float, np.ndarray))
         refarray = np.array([8.0, 8.0, 8.0, 8.0])
         self.assertTrue(np.allclose(refarray, thearray_float))
+
+    def tets_get_raw_array(self):
+        raw_array, array_config = sf.utilities.get_raw_array(self.config)
+        self.assertIsInstance(raw_array, np.ndarray)
+        self.assertEqual(raw_array.shape[2]) # Ground based: (n_tel, position)
+        fname = str(parent/"config/test_space_default.ini")
+        space_config = sf.parsefile.parse_file(fname)
+        raw_array, array_config = sf.utilities.get_raw_array(self.config)
+        self.assertIsInstance(raw_array, np.ndarray)
+        self.assertEqual(raw_array.shape[3]) # Ground based: (n_t, n_tel, position)
+        
 
 
 class map_tester(unittest.TestCase):
