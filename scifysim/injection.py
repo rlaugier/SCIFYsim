@@ -461,7 +461,12 @@ class focuser(object):
       
         # final tune-up
         self.update_cam()
-        
+        self.define_TT()
+
+    def define_TT(self):
+        """
+        Defines tip and tilt phase screens based on the pupil
+        """
         self.tip = self.pupil*zernike.mkzer(*zernike.noll_2_zern(2),
                                  self.pupil.shape[0], 100,
                                  limit=False)
@@ -474,6 +479,16 @@ class focuser(object):
         self.ntilt = self.tilt.flatten()/self.tilt.flatten().dot(self.tilt.flatten())
 
     # =========================================================================
+
+    def update_pupil(self, pupil, reference_pupil):
+        assert (pupil.dtype==bool), "Given wrong pupil data type. Needs bool."
+        assert (pupil.shape==self.pupil.shape)
+        self.pupil = pupil
+        self.flatpup = self.pupil.flatten()
+        self.screen_bias = np.zeros_like(self.flatpup)
+        self.pupilsum = np.sum(self.pupil).astype(np.float32)
+        self.update_signal(self.pupilsum * 1./reference_pupil.sum())
+        
     def update_cam(self, wl=None, pscale=None, between_pixel=None):
         '''
         Change the filter, the plate scale or the centering of the camera
@@ -528,7 +543,7 @@ class focuser(object):
         - nph: the total number of photons inside the frame
         '''
         if (nph > 0):
-            self.signal = np.flaot32(nph)
+            self.signal = np.float32(nph)
             self.phot_noise = True
         else:
             self.signal = np.float32(1e6)
@@ -601,7 +616,7 @@ class focuser(object):
                 phs += phscreen
             
         wf = np.exp(1j*phs*self.mu2phase)
-        wf *= np.sqrt(self.signal / self.pupil.sum())  # signal scaling
+        wf *= np.sqrt(self.signal / self.pupilsum)  # signal scaling
         wf *= self.pupil                               # apply the pupil mask
         self._phs = phs * self.pupil                   # store total phase
         self.fc_pa = self.sft(wf)                      # focal plane cplx ampl
@@ -1015,6 +1030,12 @@ class injector(object):
     def give_interpolated(self,interpolation):
         """
         This one will yield the method that interpolates all the injection phasors
+
+        **Arguments:**
+
+        * interpolation:  type of interpolation to use based on the computed n (typically n=3)
+          wavefronts.
+        
         """
         while True:
             injection_values = []
@@ -1036,7 +1057,13 @@ class injector(object):
         
     def compute_best_injection(self,interpolation):
         """
-        This one will yield the method that interpolates all the injection phasors
+        This one will yield the method that interpolates ideal injection
+
+        **Arguments:**
+
+        * interpolation:  type of interpolation to use based on the computed n (typically n=3)
+          wavefronts.
+        
         """
         from scipy.interpolate import interp1d
         
@@ -1084,9 +1111,12 @@ class injector(object):
                 focal_wl = []
                 for fiberwl in scope:
                     focal_wl.append(fiberwl.getimage(thescreen))
+                    # focal_wl.append(fiberwl.get_injection(thescreen))
                 focal_planes.append(focal_wl)
             focal_planes = np.array(focal_planes)
             injected = np.sum(focal_planes*self.lpmap[None,:,:,:], axis=(2,3))[0]
+            # print(focal_planes.shape)
+            # injected = np.sum(focal_planes[0])
             #print(injected.dtype)
             injecteds.append(injected)
         injecteds = np.array(injecteds)
