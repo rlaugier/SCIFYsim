@@ -684,9 +684,11 @@ class injector(object):
     def __init__(self,pupil="VLT",
                  pdiam=8.,odiam=1., ntelescopes=4, tt_correction=None,
                  no_piston=False, lambda_range=None,
+                 fiber_mode="diameter",
                  NA = 0.23,
                  a = 4.25e-6,
                  ncore = 2.7,
+                 wl_mfd = None,
                  focal_hrange=20.0e-6,
                  focal_res=50,
                  pscale = 4.5,
@@ -732,9 +734,11 @@ class injector(object):
         self.atmo_config = atmo_config
         
         ##########
-        self.NA = NA #0.23#0.21
-        self.a = a #4.25e-6#3.0e-6
-        self.ncore = ncore #2.7
+        self.fiber_mode = fiber_mode
+        self.NA = NA # 0.23#0.21
+        self.a = a # 4.25e-6#3.0e-6
+        self.ncore = ncore # 2.7
+        self.wl_mfd = wl_mfd
         self.focal_hrange = focal_hrange # 20.0e-6
         self.focal_res = focal_res # 50
         
@@ -787,6 +791,8 @@ class injector(object):
                 confpath = Path(fpath)
         
         # Numerical aperture
+        fiber_mode = theconfig.get("fiber", "fiber_mode")
+        wl_mfd = theconfig.get("fiber", "fib_wav")
         NA = theconfig.getfloat("fiber", "num_app")
         # Core radius
         a = theconfig.getfloat("fiber", "core")
@@ -861,7 +867,6 @@ class injector(object):
         focal_res = focal_res
         focal_hrange = theconfig.getfloat("fiber", "focal_hrange")
         pscale = theconfig.getfloat("fiber", "pscale")
-        logit.warning("Needs a nice way to build pupils in here")
         if pupil is None:
             pres = theconfig.getint("atmo", "pup_res")
             radius = pres//2
@@ -876,8 +881,10 @@ class injector(object):
                  ntelescopes=ntelescopes, tt_correction=None,
                  no_piston=False, lambda_range=lambda_range,
                  atmo_config=atmo_config,
+                 fiber_mode=fiber_mode,
                  NA=NA,
                  a=a,
+                 wl_mfd=wl_mfd,
                  ncore=ncore,
                  focal_hrange=focal_hrange,
                  focal_res=focal_res,
@@ -911,7 +918,12 @@ class injector(object):
                                              xsz=self.focal_res, ysz=self.focal_res, pupil=self.pupil,
                                              pscale=self.pscale, pdiam=self.pdiam,
                                              wl=wl, rm_inj_piston=self.rm_inj_piston) for wl in self.lambda_range])
-            self.fiber = fiber_head()
+            if self.fiber_mode == "gaussian":
+                self.fiber = gaussian_fiber_head()
+            elif self.fiber_mode == "diameter":
+                self.fiber = fiber_head()
+            else :
+                self.fibfiber = fiber_head()
         # Caluclating the focal length of the focuser
         self.focal_length = self.focal_hrange/utilities.mas2rad(self.focal_plane[0][0].fov/2)
         for fp in self.focal_plane:
@@ -1387,9 +1399,9 @@ class gaussian_fiber_head(object):
         elif mfd is not None:
             self.mfd_value = mfd
             self.wl_mfd_value = wl_mfd
-            self.NA_value = (self.lamb0/(sp.pi*self.w_0)).subs([(self.lamb0, self.mfd_value),
-                                                                (self.w_0, mfd/2)])
-            self.thesubs.append((self.NA, ))
+            self.NA_value = sp.N((self.lamb0/(sp.pi*self.w_0)).subs([(self.lamb0, self.wl_mfd_value),
+                                                                (self.w_0, self.mfd_value/2)]))
+            self.thesubs.append((self.NA, self.NA_value))
         #self.consolidate_equation(self.thesubs)
         if apply:
             self.consolidate_equation(self.thesubs)

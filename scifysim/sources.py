@@ -8,7 +8,9 @@ from astropy import constants
 from astropy import units
 import scipy.interpolate as interp
 from pathlib import Path
-import scipy.interpolate as interp
+import logging
+
+logit = logging.getLogger(__name__)
 
 VEGA_TEMPERATURE = 9600. # K
 VEGA_DIST = 7.68 # pc
@@ -23,7 +25,7 @@ parent = Path(__file__).parent.absolute()
 #                             kind=order, bounds_error=False )
 
 class transmission_emission(object):
-    def __init__(self,trans_file="data/MK_trans_sfs.txt", T=285,
+    def __init__(self, trans_file=None, T=285,
                  airmass=False, observatory=None, name="noname"):
         """
         Reproduces a basic behaviour in emission-transmission of a medium in the optical
@@ -42,6 +44,8 @@ class transmission_emission(object):
             object contains an ss attribute, it already
             takes into account the transmission through the insturment.
         """
+        if trans_file is None:
+            raise ValueError("No default value for transmission file")
         self.__name__ = name
         if isinstance(trans_file, float):
             # Flat value from 1 nm to 50µm
@@ -97,8 +101,10 @@ class transmission_emission(object):
         # Add offset of 3.25e-3 Jy/as² to account fot OH emission lines (see Vanzi & Hainaut)
         #if bright:
         #    sky[wl<2.5e-6] = sky[wl<2.5e-6] + 3.25e-3*units.sr.to(units.arcsec**2)
+
         if np.any(wl<2.5e-6):
-            raise NotImplementedError("Must account for OH emisison lines")
+            logit.warning("OH emission lines are not accounted for")
+            ## raise NotImplementedError("Must account for OH emisison lines")
         
         return sky
         
@@ -471,6 +477,7 @@ class star_planet_target(object):
         # Building the transmission chain
         self.t_sky = self.config.getfloat("atmo", "t_sky")
         self.t_vlti = self.config.getfloat("vlti", "T_vlti")
+        self.sky_trans_file = self.config.get("atmo", "tfile")
         
         
         # Creating absorbtion / emission chain:
@@ -481,7 +488,7 @@ class star_planet_target(object):
                                              observatory=director.obs,
                                              name="Sky")
         else:
-            self.sky = transmission_emission(trans_file="data/MK_trans_sfs.txt",
+            self.sky = transmission_emission(trans_file=self.sky_trans_file,
                                              T=self.t_sky, airmass=True,
                                              observatory=director.obs,
                                              name="Sky")

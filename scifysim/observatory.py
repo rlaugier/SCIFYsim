@@ -34,7 +34,6 @@ Basic usage:
     newarray = myobs.get_projected_array(myobs.get_positions(targets, obstimes)[0,0])
 """
 
-
 class observatory(object):
     """
     This class help define the properties of the observatory infrastructure, especially the uv coverage.
@@ -249,6 +248,75 @@ class observatory(object):
             taraltaz = self.altaz
         arrayaz = self.R((180 - taraltaz.az.value)*np.pi/180).dot(self.statlocs.T).T
         pistons = self.C(taraltaz.alt.value * np.pi/180).dot(arrayaz.T).T
+        if self.verbose:
+            logit.debug("=== pistons:")
+            logit.debug("az "+ str(taraltaz.az.value -180))
+            logit.debug("alt "+ str(taraltaz.alt.value))
+            logit.debug("old array "+ str(self.statlocs))
+            logit.debug("new array "+ str(pistons))
+        return pistons
+
+class ObservatoryAltAz(observatory):
+    """
+    For observatories that are mounted on a single alt-az mount.
+        
+    """
+
+    def get_projected_array(self, taraltaz=None, PA=True, loc_array=None):
+        """
+        **Parameters:**
+        
+        * taraltaz : the astropy.coordinates.AltAz of the target
+        * PA       : parallactic angle to derotate 
+        * loc_array: the array of points to use (None: use self.statlocs)
+        
+        **Returns** the new coordinates for the projected array
+        """
+        if taraltaz is None:
+            taraltaz = self.altaz
+        if loc_array is None:
+            loc_array = self.statlocs
+        else:
+            print(f"Using loc_array {loc_array}")
+
+        # For an AltAz mount, no need to project or rotate on Azimuth
+            
+        if PA is False: 
+            newarray = loc_array
+        elif PA is True:
+            radecarray = self.R(self.PA.rad).dot(loc_array.T).T
+            newarray = radecarray
+            
+        elif isinstance(PA, u.quantity.Quantity):
+            radecarray = self.R(PA.rad).dot(loc_array.T).T
+            newarray = radecarray
+        elif isinstance(PA, float):
+            # raise TypeError("Provide PA as a quantity in [rad]")
+            radecarray = self.R(u.rad * PA).dot(loc_array.T).T
+            newarray = radecarray
+        if PA is None: 
+            raise AttributeError("This path is deprecated: ")
+            newarray = loc_array
+            
+        if self.verbose:
+            logit.debug("=== AltAz position:")
+            logit.debug("az "+ str(taraltaz.az.value -180))
+            logit.debug("alt "+ str(taraltaz.alt.value))
+            logit.debug("old array "+ str(loc_array))
+            logit.debug("new array "+ str(newarray))
+        return newarray
+    def get_projected_geometric_pistons(self, taraltaz=None):
+        """
+        **Parameters:**
+        
+        * taraltaz : the astropy.coordinates.AltAz of the target
+        
+        **Returns** the geomtric piston resutling from the pointing
+        of the array.
+        """
+        if taraltaz is None:
+            taraltaz = self.altaz
+        pistons = self.C(taraltaz.alt.value * np.pi/180).dot(self.statlocs.T).T
         if self.verbose:
             logit.debug("=== pistons:")
             logit.debug("az "+ str(taraltaz.az.value -180))

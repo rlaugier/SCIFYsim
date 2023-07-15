@@ -63,7 +63,7 @@ def get_raw_array(config):
     assert isinstance(config, ConfigParser)
     array_config = config.get("configuration", "config")
     if array_config != "none":
-        raw_array = eval("kernuller.%s"%(array_config))
+        raw_array = eval("kernuller.interferometers.%s"%(array_config))
         assert len(raw_array.shape) == 2
         assert raw_array.shape[1] == 2
     else :

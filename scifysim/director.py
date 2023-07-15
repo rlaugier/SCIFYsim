@@ -101,7 +101,10 @@ class simulator(object):
             self.obs = sf.observatory.SpaceObservatory(config=theconfig)
             self.obs.wet_atmo = None
         else:
-            self.obs = sf.observatory.observatory(config=theconfig, statlocs=statlocs)
+            if self.multi_dish:
+                self.obs = sf.observatory.observatory(config=theconfig, statlocs=statlocs)
+            elif self.multi_dish is False:
+                self.obs = sf.observatory.ObservatoryAltAz(config=theconfig, statlocs=statlocs)
             # This is the true atmospheric model
             self.obs.wet_atmo = sf.wet_atmo(self.config)
         

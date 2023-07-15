@@ -82,7 +82,10 @@ class integrator():
                 self.well = well
         self.reset()
         
-    def update_enclosure(self, wavelength_range):
+    def update_enclosure(self, wavelength_range,
+                        bottom_range=2.55e-6,
+                        top_range=5.8e-6,
+                        n_ch_enclosure=200):
         """
         **Arguments:**
         * wavelength_range : [m] the channels for which to compute the flux.
@@ -96,7 +99,7 @@ class integrator():
         self.enclosure = sf.sources.enclosure(solid_angle=2*np.pi,T=self.T_enclosure, name="Enclosure")
         # Note: the radiometric background is computed summed over a broad wavelength range
         # then broadcast over all the spectral channels.
-        enclosure_range = np.linspace(2.55e-6, 5.8e-6, 200)
+        enclosure_range = np.linspace(bottom_range, top_range, n_ch_enclosure)
         # QE eta is included through the QE curve similarly to transmission
         self.cold_bg = self.pix_area * np.sum(self.enclosure.get_total_emission(enclosure_range,
                                                                                 bright=True,
