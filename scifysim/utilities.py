@@ -225,6 +225,9 @@ def prepare_all(afile, thetarget=None, update_params=False,
     asim.prepare_corrector(optimize=compensate_chromatic)
     return asim
 
+def wrap_phase(theta):
+    a = np.mod(theta + np.pi, 2*np.pi) - np.pi
+    return a
 
 import itertools
 def get_uv(puparray):

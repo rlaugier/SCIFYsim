@@ -219,7 +219,9 @@ class offband_ft(object):
         **Output**: The phases for the science wavelengths for a closed loop correction
         by the fringe tracker [rad]
         """
-        # The true phase at the FT
+        # The true piston that gives the best mean phase in the FT band
+        # This should remain true in white fringe phase tracking mode
+        # because of closed loop
         self.simple_piston_ft = np.mean(self.corrector.theoretical_piston(self.wl_ft,
                                                                          pistons,
                                                                          model=self.wa_true,
@@ -363,7 +365,53 @@ class offband_ft(object):
         
         
         
+    def get_S_GD_star(self, band=None, model=None, resample=None):
+        """
+        S_GD_star is the transform matrix (flat in this case) that projects
+        the phase of vacuum created phases into piston that minimize the
+        group delay.
+
+        This is inspired by Tango 1990. In the case of only air conpensation,
+        equation 
         
+        **Arguments**:
+        * band  : if None: will save `self.sld_sxs`
+        * pistons : 
+        * mode    : Type of correction to apply
+
+
+        """
+        if band is None:
+            band = self.wl_ft
+        if resample is None:
+            wls = band
+        else:
+            wls = np.linspace(band[0], band[-1], resample)
+        if model is None:
+            model = self.wa_true
+        # sig is the spectroscopic wavenumber 1/lambda
+        sig = 1/wls
+        nair = model.get_Nair_wn(sig, add=1)
+        sigX = sig * nair
+        s_dsigX_dsig = np.mean(np.gradient(sigX)/np.gradient(sig))
+        s_gd = s_dsigX_dsig /nair**2
+        if band is None:
+            self.s_gd = s_gd
+        return s_gd
+
+    def get_phase_GD_tracking(self, pistons, band=None, model=None, resample=None):
+        if band is None:
+            band = self.wl_ft
+        if model is None:
+            model = self.wa_true
+        s_gd = self.get_S_GD_star(band=band, model=model, resample=resample)
+
+        n_air = model.get_Nair(band, add=1)
+        
+        phase_GD_target = 2*np.pi/band * pistons * (1- s_gd * n_air)
+        if band is None:
+            self.phase_GD_target = phase_GD_target
+        return phase_GD_target
         
     
     def get_phase_on_band(self, band, pistons, mode="ideal"):
