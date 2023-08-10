@@ -21,6 +21,14 @@ znse_file = parent/"data/znse_Connolly.csv"
 thetas = np.linspace(-np.pi, np.pi, 10000)
 comphasor = np.ones(4)[None,:]*np.exp(1j*thetas[:,None])
 
+def get_max_differential(array):
+    """
+    Gets the maximum differential between beams:
+    
+    * returns : max(array) - min(array)
+    """
+    return np.max(array) - np.min(array)
+
 # Utility functions for optimization
 ##################################################
 
@@ -197,7 +205,8 @@ class offband_ft(object):
 
     def refresh_corrector_models(self):
         self.S_model_science = self.corrector.solve_air_corrector(self.wl_science)
-        self.S_model_ft = self.corrector.solve_air_corrector(self.wl_ft)# Solving based on the FT measurements
+        self.S_model_ft = self.corrector.solve_air_corrector(self.wl_ft)# Solving based for the closed_loop FT
+        self.S_model_ft_feedforward = self.corrector.solve_air_corrector(self.wl_ft)# Solving based on the FT measurements
         
         
     def get_ft_correction_on_science(self, pistons, band=None):
@@ -770,7 +779,7 @@ class corrector(object):
         phase = proj_opds * (nair - nref)
         return phase.T
         
-    def solve_air(self, lambs, model):
+    def solve_air(self, lambs, model, corrector_shape=True):
         """
         Computes a least squares compensation model (see
         **Koresko et al. 2003 DOI: 10.1117/12.458032**)
@@ -779,16 +788,30 @@ class corrector(object):
         
         * lambs :     The wavelength channels to consider [m]
         * model   : The wet atmosphere model (see n_air.wet_atmo object)
+        * corrector_shape : (bool) if True: the matrix will be adjusted to
+          give vectors adapted to a corrector with the correct number of materials.
         
         **Returns:** :math:`\Big( \mathbf{A}^T\mathbf{A}\mathbf{A}^T \Big)^{-1}`
         """
-        nair = model.get_Nair(lambs,add=1)
+        nair = model.get_Nair(lambs, add=1)
         #nplate -1 because it is air displacing glass
-        ns = np.array([nair, (self.nplate(lambs)-1)]).T 
+        # ns = np.array([nair, (self.nplate(lambs)-1)]).T 
+        ns = nair[:,None]
         A = 2*np.pi/lambs[:,None] * ns
         
         self.S = np.linalg.inv(A.T.dot(A)).dot(A.T)
-        return self.S
+        if corrector_shape:
+            n_corrections = np.count_nonzero(np.array([True, 
+                                        self.nplate is not no_material,
+                                        self.nmat2 is not no_material]))
+            S_0 = np.zeros((n_corrections, self.S.shape[1]))
+            S_0[0] = self.S[0]
+            self.S = S_0
+            return self.S
+        else:
+            return self.S
+        
+        
                               
                               
     def solve_air_corrector(self, lambs):
