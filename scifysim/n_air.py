@@ -79,11 +79,11 @@ class wet_atmo(object):
         #print("H2O", F_h2o)
         #print("CO2", F_co2)
         #print("DA", F_da)
-        c = constants.c.value
         n_ref = ((r_index_DA(lambs))*F_da + (r_index_co2(lambs))*F_co2 + (r_index_h2o(lambs))*F_h2o)
         n_compound_air = constants.c.value*P_tot/(constants.R.value * self.temp) * n_ref
         self.Nair = n_compound_air + add
         return self.Nair
+
     def get_Nair_wn(self, sig, add=1):
         """
         Add=1 by default

@@ -188,13 +188,17 @@ class offband_ft(object):
         self.wa_model = wa_model
         self.corrector = corrector
         
-        self.S_model_science = self.corrector.solve_air_corrector(self.wl_science)
-        self.S_model_ft = self.corrector.solve_air_corrector(self.wl_ft)# Solving based on the FT measurements
+        self.refresh_corrector_models()
         
         #self.corrector = corrector
         self.simple_piston_ft = None
         self.phase_correction_ft = None
         self.phase_correction_ft_science = None
+
+    def refresh_corrector_models(self):
+        self.S_model_science = self.corrector.solve_air_corrector(self.wl_science)
+        self.S_model_ft = self.corrector.solve_air_corrector(self.wl_ft)# Solving based on the FT measurements
+        
         
     def get_ft_correction_on_science(self, pistons, band=None):
         """
@@ -208,33 +212,69 @@ class offband_ft(object):
         """
         # The true phase at the FT
         self.simple_piston_ft = np.mean(self.corrector.theoretical_piston(self.wl_ft,
-                                                                         pistons, model=self.wa_true, add=0), axis=0)
+                                                                         pistons,
+                                                                         model=self.wa_true,
+                                                                         add=0), axis=0)
         # The corrected phase:
-        self.phase_correction_ft = self.corrector.get_raw_phase_correction(self.wl_ft[:,None], b=self.simple_piston_ft, c=0)
-        self.phase_correction_ft_science = self.corrector.get_raw_phase_correction(self.wl_science[:,None], b=self.simple_piston_ft, c=0)
+        self.phase_correction_ft = self.corrector.get_raw_phase_correction(self.wl_ft[:,None],
+                                                                            b=self.simple_piston_ft,
+                                                                            c=0)
+        self.phase_correction_ft_science = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+                                                                                    b=self.simple_piston_ft,
+                                                                                    c=0)
         if band is not None:
-            return self.corrector.get_raw_phase_correction(band[:,None], b=self.simple_piston_ft, c=0)
-        
-        return self.phase_correction_ft_science
+            return self.corrector.get_raw_phase_correction(band[:,None],
+                                                            b=self.simple_piston_ft, c=0)
+        else:
+            return self.phase_correction_ft_science
     
     
     def update_NCP_corrections(self,pistons, band=None):
         """
+        Called by `get_phase_on_band` and `get_phase_on_science_values` and therefore
+        called each time the `director.point` is called.
+        
         **Arguments**:
         
         * pistons : The value of optical path length missing at 
           the reference plane [m]
+
+        **Refreshes**:
+
+        * `self.true_phase_on_science`
+        self.model_phase_on_science
+        self.correction_ft_to_science
+        self.phase_seen_by_ft 
+        self.b_ft
+        self.correction_feedforward
+        self.b_science_ideal
+        
+        * Computing the feedforward correction based on the FT phase:
+          - `self.b_ft` : The atmospheric corrector for the FT band
+          - `self.correction_feedforward` : The atmospheric corrector for the FT band
+        
+        * Computing the ideal correction for perfect knowledge of atmosphere
+          (If we could measure the actual phase and close a loop)
+          - `self.b_science_ideal` : The atmospherci corrector for the science band
+          - `self.correction_closed_loop`
+        
+        * Computing a biased estimation based on a full model
+          - `self.b_science_model` : The atmospherci corrector for the science band
+          - `self.correction_blind`
+
         """
         # Computing the errors in the L' band
+        # The total phase from the piston on the band
         self.true_phase_on_science = self.corrector.theoretical_phase(self.wl_science, pistons, model=self.wa_true, add=0)
         if band is not None:
-            true_phase_on_band = self.corrector.theoretical_phase(band, pistons,
+            total_phase_on_band = self.corrector.theoretical_phase(band, pistons,
                                                                   model=self.wa_true, add=0)
         self.model_phase_on_science = self.corrector.theoretical_phase(self.wl_science, pistons,
                                                                        model=self.wa_model, add=0)
+        # The phase from piston, only from FT to science (assusming a closed loop on the FT)
         self.correction_ft_to_science = self.get_ft_correction_on_science(pistons)
         if band is not None:
-            correction_ft_to_band = self.get_ft_correction_on_science(pistons, band=band)
+            correction_to_phase_ft = self.get_ft_correction_on_science(pistons, band=band)
         self.phase_seen_by_ft = self.corrector.theoretical_phase(self.wl_ft, pistons, model=self.wa_true, add=0) - self.phase_correction_ft
         
         # Computing the feedforward correction based on the FT phase:
@@ -261,7 +301,7 @@ class offband_ft(object):
         self.correction_blind = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
                                                                        vector=self.b_science_model)
         if band is not None:
-            return true_phase_on_band, correction_ft_to_band
+            return total_phase_on_band, correction_to_phase_ft
 
     def get_modeled_law(self, max_baseline=133, model=None):
         """
@@ -433,8 +473,9 @@ class corrector(object):
             print("Not spotted ncomp")
             self.ncomp = generic_vacuum
         else:
+            self.wa_comp = model_comp
             # print("successfully spotted ncomp")
-            self.ncomp = model_comp.get_Nair
+            self.ncomp = self.wa_comp.get_Nair
             
         if model_material2 is None:
             self.nmat2 = no_material

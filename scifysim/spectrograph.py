@@ -96,7 +96,7 @@ class integrator():
         
         """
         self.pix_area = self.xs*self.ys
-        self.enclosure = sf.sources.enclosure(solid_angle=2*np.pi,T=self.T_enclosure, name="Enclosure")
+        self.enclosure = sf.sources.enclosure(solid_angle=2*np.pi, T=self.T_enclosure, name="Enclosure")
         # Note: the radiometric background is computed summed over a broad wavelength range
         # then broadcast over all the spectral channels.
         enclosure_range = np.linspace(bottom_range, top_range, n_ch_enclosure)
@@ -150,7 +150,7 @@ class integrator():
         """
         if n_pixsplit is not None: # Splitting the signal over a number pixels
             thepixels = self.acc.copy()
-            thepixels = ((thepixels/n_pixsplit)[None,:,:]*np.ones(n_pixsplit)[:,None,None])
+            thepixels = ((thepixels/n_pixsplit)[None,:,:]*np.ones(int(n_pixsplit))[:,None,None])
             logit.warning("Usin post-defined n_pixsplit")
         else:
             thepixels = self.acc.copy()

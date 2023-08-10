@@ -8,6 +8,7 @@ from kernuller import mas2rad, rad2mas
 from astropy import units
 from pdb import set_trace
 from pathlib import Path
+from copy import deepcopy
 
 import dask.array as da
 
@@ -253,7 +254,7 @@ class simulator(object):
             config = self.config
         myair = sf.wet_atmo(config)
         if model_air is None:
-            mymodel = myair
+            mymodel = deepcopy(myair)
         else:
             mymodel = model_air
             
@@ -298,7 +299,98 @@ class simulator(object):
                                                       wa_true=myair, wa_model=mymodel,
                                                      corrector=self.corrector)
         
+    def point(self, time, target, refresh_array=False, disp_override=None,
+                    long_disp_override=None, ld_mode_override=None):
+        """
+        Points the array towards the target. Updates the combiner
         
+        **Parameters:**
+        
+        * time    : The time to make the observation
+        * target  : The skycoord object to point
+        * refresh_array : Whether to call a lambdification of the array
+        * disp_override : None (default) follows the value given by self.transverse_dispersion;
+          True force the transverse dispersion;
+          False deactivate transverse dispersion.
+        """
+        # Figuring out what to do for dispersion
+        if self.space:
+            disp_override = False
+            long_disp_override = False
+            
+        if disp_override is None:
+            disp = self.transverse_dispersion
+        elif disp_override is True:
+            disp = True
+        elif disp_override is False:
+            disp = False
+        if long_disp_override is None:
+            long_disp = self.longitudinal_dispersion
+        elif long_disp_override is True:
+            long_disp = True
+        elif long_disp_override is False:
+            long_disp = False
+        if ld_mode_override is None:
+            ld_mode = "ideal"
+        else:
+            ld_mode = ld_mode_override
+        
+        self.obs.point(time, target)
+        self.reset_static()
+        thearray = self.obs.get_projected_array()
+        if refresh_array:
+            self.combiner.refresh_array(thearray)
+        
+        
+        if not self.space:
+            # Handling transverse dispersion
+            altaz = self.obs.altaz
+            zenith_angle = (np.pi/2)*units.rad - altaz.alt.to(units.rad)
+        zero_screen = np.zeros_like(self.injector.focal_plane[0][0].screen_bias).flatten()
+        for i in range(len(self.injector.focal_plane)):
+            if disp:
+                a = self.injector.focal_plane[i][0]
+                # Refreshing the asmospheric dispersion
+                Xs = np.linspace(-a.pdiam/2, a.pdiam/2, a.csz)
+                Ys = np.linspace(-a.pdiam/2, a.pdiam/2, a.csz)
+                XX, YY = np.meshgrid(Xs, Ys)
+
+                #print("zenith_angle", zenith_angle.to(units.deg))
+                ppixel_pistons = YY * np.tan(zenith_angle.value)
+
+                # Note: we do not account for the main image offset here
+                injwl = self.injector.lambda_range
+                #import pdb
+                #pdb.set_trace()
+                pup_phases = self.corrector.theoretical_phase(injwl, ppixel_pistons.flatten(),
+                            model=self.obs.wet_atmo,
+                            add=0,
+                            db=False,
+                            ref="center").reshape((injwl.shape[0], *ppixel_pistons.shape))
+                pup_op = pup_phases*injwl[:,None,None]/(2*np.pi)
+            for j in range(len(self.injector.focal_plane[i])):
+                if disp:
+                    self.injector.focal_plane[i][j].screen_bias = pup_op[j,:,:].flatten()*1e6
+                    # import pdb
+                    # pdb.set_trace()
+                else:
+                    self.injector.focal_plane[i][j].screen_bias = zero_screen
+                    
+            # Handling longitudinal dispersion
+        self.pistons = self.obs.get_projected_geometric_pistons()
+        if long_disp:
+            # For faster computation:
+            # self.ph_disp = self.offband_model.get_ft_correction_on_science(self.pistons)
+            logit.debug("Pointing including longitudinal dispersion")
+            self.ph_disp = self.offband_model.get_phase_science_values(self.pistons,
+                                                                        mode=ld_mode)
+            self.phasor_disp = np.exp(1j*self.ph_disp)
+        else:
+            assert self.pistons.shape == (self.ntelescopes,1), f"pistons shape {self.pistons.shape}"
+            logit.debug("Pointing with no longitudinal dispersion")
+            self.ph_disp = np.zeros_like(self.offband_model.get_phase_science_values(self.pistons,
+                                                                                    mode=ld_mode))            
+            self.phasor_disp = np.exp(1j*self.ph_disp)   
 
 
     def make_metrologic_exposure(self, interest, star, diffuse,
@@ -764,94 +856,7 @@ class simulator(object):
         """
         pass
     
-    def point(self, time, target, refresh_array=False, disp_override=None,
-                    long_disp_override=None, ld_mode_override=None):
-        """
-        Points the array towards the target. Updates the combiner
-        
-        **Parameters:**
-        
-        * time    : The time to make the observation
-        * target  : The skycoord object to point
-        * refresh_array : Whether to call a lambdification of the array
-        * disp_override : None (default) follows the value given by self.transverse_dispersion;
-          True force the transverse dispersion;
-          False deactivate transverse dispersion.
-        """
-        # Figuring out what to do for dispersion
-        if self.space:
-            disp_override = False
-            long_disp_override = False
-            
-        if disp_override is None:
-            disp = self.transverse_dispersion
-        elif disp_override is True:
-            disp = True
-        elif disp_override is False:
-            disp = False
-        if long_disp_override is None:
-            long_disp = self.longitudinal_dispersion
-        elif long_disp_override is True:
-            long_disp = True
-        elif long_disp_override is False:
-            long_disp = False
-        if ld_mode_override is None:
-            ld_mode = "ideal"
-        else:
-            ld_mode = ld_mode_override
-        
-        self.obs.point(time, target)
-        self.reset_static()
-        thearray = self.obs.get_projected_array()
-        if refresh_array:
-            self.combiner.refresh_array(thearray)
-        
-        
-        if not self.space:
-            # Handling transverse dispersion
-            altaz = self.obs.altaz
-            zenith_angle = (np.pi/2)*units.rad - altaz.alt.to(units.rad)
-        zero_screen = np.zeros_like(self.injector.focal_plane[0][0].screen_bias).flatten()
-        for i in range(len(self.injector.focal_plane)):
-            if disp:
-                a = self.injector.focal_plane[i][0]
-                # Refreshing the asmospheric dispersion
-                Xs = np.linspace(-a.pdiam/2, a.pdiam/2, a.csz)
-                Ys = np.linspace(-a.pdiam/2, a.pdiam/2, a.csz)
-                XX, YY = np.meshgrid(Xs, Ys)
-
-                #print("zenith_angle", zenith_angle.to(units.deg))
-                ppixel_pistons = YY * np.tan(zenith_angle.value)
-
-                # Note: we do not account for the main image offset here
-                injwl = self.injector.lambda_range
-                #import pdb
-                #pdb.set_trace()
-                pup_phases = self.corrector.theoretical_phase(injwl, ppixel_pistons.flatten(),
-                            model=self.obs.wet_atmo,
-                            add=0,
-                            db=False,
-                            ref="center").reshape((injwl.shape[0], *ppixel_pistons.shape))
-                pup_op = pup_phases*injwl[:,None,None]/(2*np.pi)
-            for j in range(len(self.injector.focal_plane[i])):
-                if disp:
-                    self.injector.focal_plane[i][j].screen_bias = pup_op[j,:,:].flatten()*1e6
-                    # import pdb
-                    # pdb.set_trace()
-                else:
-                    self.injector.focal_plane[i][j].screen_bias = zero_screen
-                    
-            # Handling longitudinal dispersion
-        self.pistons = self.obs.get_projected_geometric_pistons()
-        if long_disp:
-            # For faster computation:
-            # self.ph_disp = self.offband_model.get_ft_correction_on_science(self.pistons)
-            self.ph_disp = self.offband_model.get_phase_science_values(self.pistons, mode=ld_mode)
-            self.phasor_disp = np.exp(1j*self.ph_disp)
-        else:
-            assert self.pistons.shape == (self.ntelescopes,1), f"pistons shape {self.pistons.shape}"
-            self.ph_disp = np.zeros_like(self.offband_model.get_phase_science_values(self.pistons, mode=ld_mode))            
-            self.phasor_disp = np.exp(1j*self.ph_disp)
+    
         
         
     
@@ -1124,7 +1129,7 @@ class simulator(object):
         static_output = static_output.swapaxes(0, -1)
         static_output = static_output.swapaxes(0, 1)
         #static_output = static_output# * np.sqrt(vigneted_spectrum[:,None,:])
-        # lambdified argument order matters! This should remain synchronous
+        # lambdifiked argument order matters! This should remain synchronous
         # with the lambdify call
         # incoherently combining over sources
         # Warning: modifying the array
