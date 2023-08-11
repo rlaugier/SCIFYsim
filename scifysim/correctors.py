@@ -7,6 +7,8 @@ from . import n_air
 #from astropy import units
 import scipy.interpolate as interp
 from pathlib import Path
+import logging
+logit = logging.getLogger(__name__)
 
 import pdb
 
@@ -205,8 +207,10 @@ class offband_ft(object):
 
     def refresh_corrector_models(self):
         self.S_model_science = self.corrector.solve_air_corrector(self.wl_science)
-        self.S_model_ft = self.corrector.solve_air_corrector(self.wl_ft)# Solving based for the closed_loop FT
+        self.S_model_ft = self.corrector.solve_air(self.wl_ft, self.wa_true)# Solving based for the closed_loop FT
         self.S_model_ft_feedforward = self.corrector.solve_air_corrector(self.wl_ft)# Solving based on the FT measurements
+        self.S_gd_ft = self.get_S_GD_star(band=self.wl_ft, model=self.wa_true)
+        self.S_gd_science = self.get_S_GD_star(band=self.wl_science, model=self.wa_true)
         
         
     def get_ft_correction_on_science(self, pistons, band=None):
@@ -239,8 +243,145 @@ class offband_ft(object):
         else:
             return self.phase_correction_ft_science
     
+
     
-    def update_NCP_corrections(self,pistons, band=None):
+    def update_NCP_corrections(self,pistons, band=None, mode="phase"):
+        """
+        Called by `get_phase_on_band` and `get_phase_on_science_values` and therefore
+        called each time the `director.point` is called.
+        
+        **Arguments**:
+        
+        * pistons : The value of optical path length missing at 
+          the reference plane [m]
+
+        **Refreshes**:
+
+        * `self.true_phase_on_science`
+        self.model_phase_on_science
+        self.correction_ft_to_science
+        self.phase_seen_by_ft 
+        self.b_ft
+        self.correction_feedforward
+        self.b_science_ideal
+        
+        * Computing the feedforward correction based on the FT phase:
+          - `self.b_ft` : The atmospheric corrector for the FT band
+          - `self.correction_feedforward` : The atmospheric corrector for the FT band
+        
+        * Computing the ideal correction for perfect knowledge of atmosphere
+          (If we could measure the actual phase and close a loop)
+          - `self.b_science_ideal` : The atmospherci corrector for the science band
+          - `self.correction_closed_loop`
+        
+        * Computing a biased estimation based on a full model
+          - `self.b_science_model` : The atmospherci corrector for the science band
+          - `self.correction_blind`
+
+        **New implementation**:
+        
+        In the idea that the phase of phase at entrance of the NOTT chip phi_tot:
+        ```
+        phi_tot = phi_v + phi_DL + phi_nott                            
+                    |        |        |-> Phase from the NOTT LDC
+                    |        |----------> Phase from the DL correction
+                    |-------------------> Phase from the vacuum piston imbalance
+        phi_A = phi_v + phi_DL
+          |->  the Asgard phase
+        phi_nott = phi_AN + phi_ZN + phi_CN + phi_LN
+                    |        |        |        |-> phase from LiNb plates
+                    |        |        |----------> phase from CO2 cells
+                    |        |-------------------> phase from ZnSe plates
+                    |----------------------------> phase from the air DL and TT
+
+        ```
+
+        """
+        # In the idea that the phase of phase at entrance of the NOTT chip phi_tot
+        # The vacuum phase:
+        self.phi_v = 2*np.pi/self.wl_science * pistons
+        self.phi_v_ft = 2*np.pi/self.wl_ft * pistons
+        if mode == "phase":
+            # Computing the feedforward correction based on the FT phase:
+            self.b_ft = self.S_model_ft.dot(self.phi_v).T
+            self.phi_DL = self.corrector.get_raw_phase_correction(self.wl_science, vector=self.b_ft)
+            self.phi_DL_ft = self.corrector.get_raw_phase_correction(self.wl_ft, vector=self.b_ft)
+        elif mode == "group":
+            raise NotImplementedError("Group delay FT tracking not ready yet")
+            n_air = self.wa_true.get_Nair(self.wl_science, add=1)
+            self.phi_DL = - 2*np.pi/self.wl_science * self.S_gd_science * n_air * pistons 
+            n_air_ft = self.wa_true.get_Nair(self.wl_ft, add=1)
+            self.phi_DL_ft = - 2*np.pi/self.wl_ft * self.S_gd_ft * n_air_ft * pistons 
+        self.phi_asgard = self.phi_v + self.phi_DL
+
+        # Computing the ideal correction (If we could measure the actual phase and close a loop)
+        self.b_science_ideal = self.S_model_science.dot(self.true_phase_on_science - self.correction_ft_to_science).T
+        #self.correction_closed_loop = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+        #                                                      b=self.b_science_ideal[0,:],
+        #                                                      c=self.b_science_ideal[1,:])
+        self.correction_ideal = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+                                                                             vector=self.b_science_ideal)
+        
+        # Computing a biased estimation based on a full model
+        self.b_science_model = self.S_model_science.dot(self.model_phase_on_science - self.correction_ft_to_science).T
+        #self.correction_blind = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+        #                                                      b=self.b_science_model[0,:],
+        #                                                      c=self.b_science_model[1,:])
+        self.correction_blind = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+                                                                       vector=self.b_science_model)
+
+        self.phi_tot_ft = self.phi_v_ft + self.phi_DL_ft
+        self.phi_tot    = self.phi_v + self.phi_DL
+        
+        if band is not None:
+            
+            return total_phase_on_band, correction_to_phase_ft    
+
+
+
+    
+        # Computing the errors in the L' band
+        # The total phase from the piston on the band
+        self.true_phase_on_science = self.corrector.theoretical_phase(self.wl_science, pistons, model=self.wa_true, add=0)
+        if band is not None:
+            total_phase_on_band = self.corrector.theoretical_phase(band, pistons,
+                                                                  model=self.wa_true, add=0)
+        self.model_phase_on_science = self.corrector.theoretical_phase(self.wl_science, pistons,
+                                                                       model=self.wa_model, add=0)
+        # The phase from piston, only from FT to science (assusming a closed loop on the FT)
+        self.correction_ft_to_science = self.get_ft_correction_on_science(pistons)
+        if band is not None:
+            correction_to_phase_ft = self.get_ft_correction_on_science(pistons, band=band)
+        # becomes self.phi_v
+        self.phase_seen_by_ft = self.corrector.theoretical_phase(self.wl_ft, pistons, model=self.wa_true, add=0) - self.phase_correction_ft
+        
+        # Computing the feedforward correction based on the FT phase:
+        self.b_ft = self.S_model_ft.dot(self.phase_seen_by_ft).T
+        #self.correction_feedforward = asim.corrector.get_raw_phase_correction(self.wl_science[:,None],
+        #                                                      b=self.b_ft[0,:],
+        #                                                      c=self.b_ft[1,:])
+        self.correction_feedforward = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+                                                                             vector=self.b_ft)
+        
+        # Computing the ideal correction (If we could measure the actual phase and close a loop)
+        self.b_science_ideal = self.S_model_science.dot(self.true_phase_on_science - self.correction_ft_to_science).T
+        #self.correction_closed_loop = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+        #                                                      b=self.b_science_ideal[0,:],
+        #                                                      c=self.b_science_ideal[1,:])
+        self.correction_closed_loop = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+                                                                             vector=self.b_science_ideal)
+        
+        # Computing a biased estimation based on a full model
+        self.b_science_model = self.S_model_science.dot(self.model_phase_on_science - self.correction_ft_to_science).T
+        #self.correction_blind = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+        #                                                      b=self.b_science_model[0,:],
+        #                                                      c=self.b_science_model[1,:])
+        self.correction_blind = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+                                                                       vector=self.b_science_model)
+        if band is not None:
+            return total_phase_on_band, correction_to_phase_ft    
+
+    def update_NCP_corrections_old(self,pistons, band=None):
         """
         Called by `get_phase_on_band` and `get_phase_on_science_values` and therefore
         called each time the `director.point` is called.
@@ -377,7 +518,9 @@ class offband_ft(object):
         **Arguments**:
         * band  : if None: will save `self.sld_sxs`
         * pistons : 
-        * mode    : Type of correction to apply
+        * model    : A specific model with which to compute the correction
+        * resample: None (default) to keep the sampling of the band,
+          or int to resample band with that number of samples.
 
 
         """
@@ -400,6 +543,15 @@ class offband_ft(object):
         return s_gd
 
     def get_phase_GD_tracking(self, pistons, band=None, model=None, resample=None):
+        """
+        **Arguments**:
+
+        * band  : if None: will save `self.sld_sxs`
+        * pistons : 
+        * model    : A specific model with which to compute the correction
+        * resample: None (default) to keep the sampling of the band,
+          or int to resample band with that number of samples.
+        """
         if band is None:
             band = self.wl_ft
         if model is None:
