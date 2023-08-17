@@ -9,10 +9,11 @@ import scipy.interpolate as interp
 from pathlib import Path
 import logging
 logit = logging.getLogger(__name__)
+from copy import deepcopy
 
-import pdb
+# import pdb
 
-from pdb import set_trace
+# from pdb import set_trace
 
 
 parent = Path(__file__).parent.absolute()
@@ -199,6 +200,8 @@ class offband_ft(object):
         self.wa_true = wa_true
         self.wa_model = wa_model
         self.corrector = corrector
+        self.corrector_model = deepcopy(corrector)
+        self.corrector_model.ncomp = self.wa_model.get_Nair
         
         self.refresh_corrector_models()
         
@@ -208,9 +211,14 @@ class offband_ft(object):
         self.phase_correction_ft_science = None
 
     def refresh_corrector_models(self):
-        self.S_model_science = self.corrector.solve_air_corrector(self.wl_science)
-        self.S_model_ft = self.corrector.solve_air(self.wl_ft, self.wa_true)# Solving based for the closed_loop FT
-        self.S_model_ft_feedforward = self.corrector.solve_air_corrector(self.wl_ft)# Solving based on the FT measurements
+        self.S_model_science = self.corrector_model.solve_air_corrector(self.wl_science)
+        self.S_model_ft = self.corrector_model.solve_air(self.wl_ft, self.wa_true)# Solving based for the closed_loop FT
+        self.S_model_ft_feedforward = self.corrector_model.solve_air_corrector(self.wl_ft)# Solving based on the FT measurements
+        self.S_truth_science = self.corrector.solve_air_corrector(self.wl_science)
+        self.S_truth_ft = self.corrector.solve_air(self.wl_ft, self.wa_true)# Solving based for the closed_loop FT
+        self.S_truth_ft_feedforward = self.corrector.solve_air_corrector(self.wl_ft)# Solving based on the FT measurements
+        self.S_gd_model_ft = self.get_S_GD_star(band=self.wl_ft, model=self.wa_model)
+        self.S_gd_model_science = self.get_S_GD_star(band=self.wl_science, model=self.wa_model)
         self.S_gd_ft = self.get_S_GD_star(band=self.wl_ft, model=self.wa_true)
         self.S_gd_science = self.get_S_GD_star(band=self.wl_science, model=self.wa_true)
         
@@ -305,19 +313,35 @@ class offband_ft(object):
         self.phi_v_ft = (2*np.pi/self.wl_ft * pistons).T
         if mode == "phase":
             # Computing the feedforward correction based on the FT phase:
-            self.b_ft = self.S_model_ft.dot(self.phi_v_ft).T
+            # This is using the true phase since it is closed loop
+            self.b_ft = self.S_truth_ft.dot(self.phi_v_ft).T
             self.phi_DL = self.corrector.get_raw_phase_correction(self.wl_science[:,None], vector=self.b_ft)
             self.phi_DL_ft = self.corrector.get_raw_phase_correction(self.wl_ft[:,None], vector=self.b_ft)
+            # This is what we believe Heimdallr has accomplished
+            self.b_ft_model = self.S_model_ft.dot(self.phi_v_ft).T
+            self.phi_DL_model = self.corrector_model.get_raw_phase_correction(self.wl_science[:,None], vector=self.b_ft_model)
+            self.phi_DL_ft_model = self.corrector_model.get_raw_phase_correction(self.wl_ft[:,None], vector=self.b_ft_model)
         elif mode == "group":
             raise NotImplementedError("Group delay FT tracking not ready yet")
             n_air = self.wa_true.get_Nair(self.wl_science, add=1)
-            self.phi_DL = - 2*np.pi/self.wl_science * self.S_gd_science * n_air * pistons 
             n_air_ft = self.wa_true.get_Nair(self.wl_ft, add=1)
-            self.phi_DL_ft = - 2*np.pi/self.wl_ft * self.S_gd_ft * n_air_ft * pistons 
-        self.phi_asgard = self.phi_v + self.phi_DL
+            self.phi_DL_model = - 2*np.pi/self.wl_science * self.S_gd_science * n_air * pistons 
+            self.phi_DL_ft_model = - 2*np.pi/self.wl_ft * self.S_gd_ft * n_air_ft * pistons 
+            n_air_model = self.wa_model.get_Nair(self.wl_science, add=1)
+            n_air_ft_model = self.wa_model.get_Nair(self.wl_ft, add=1)
+            self.phi_DL_model = - 2*np.pi/self.wl_science * self.S_gd_model_science * n_air_model * pistons 
+            self.phi_DL_ft_model = - 2*np.pi/self.wl_ft * self.S_gd_model_ft * n_air_ft_model * pistons 
+        self.phi_asgard_model = self.phi_v + self.phi_DL_model
+        self.phi_asgard_true = self.phi_v + self.phi_DL
+        
+
+        # Now to compute the correction
+        # Temp correction
+        ###########################
+        # 
 
         # Computing the ideal correction (If we could measure the actual phase and close a loop)
-        self.b_science_ideal = self.S_model_science.dot(self.true_phase_on_science - self.correction_ft_to_science).T
+        self.b_science_ideal = self.S_model_science.dot(self.phi_asgard_true).T
         #self.correction_closed_loop = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
         #                                                      b=self.b_science_ideal[0,:],
         #                                                      c=self.b_science_ideal[1,:])
@@ -325,7 +349,7 @@ class offband_ft(object):
                                                                              vector=self.b_science_ideal)
         
         # Computing a biased estimation based on a full model
-        self.b_science_model = self.S_model_science.dot(self.model_phase_on_science - self.correction_ft_to_science).T
+        self.b_science_model = self.S_model_science.dot(self.phi_asgard_model).T
         #self.correction_blind = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
         #                                                      b=self.b_science_model[0,:],
         #                                                      c=self.b_science_model[1,:])
