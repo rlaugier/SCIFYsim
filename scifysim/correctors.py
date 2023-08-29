@@ -517,7 +517,8 @@ class offband_ft(object):
         """
         # Computing the errors in the L' band
         # The total phase from the piston on the band
-        self.true_phase_on_science = self.corrector.theoretical_phase(self.wl_science, pistons, model=self.wa_true, add=0)
+        self.true_phase_on_science = self.corrector.theoretical_phase(self.wl_science, pistons,
+                                                                        model=self.wa_true, add=0)
         if band is not None:
             total_phase_on_band = self.corrector.theoretical_phase(band, pistons,
                                                                   model=self.wa_true, add=0)
@@ -527,7 +528,8 @@ class offband_ft(object):
         self.correction_ft_to_science = self.get_ft_correction_on_science(pistons)
         if band is not None:
             correction_to_phase_ft = self.get_ft_correction_on_science(pistons, band=band)
-        self.phase_seen_by_ft = self.corrector.theoretical_phase(self.wl_ft, pistons, model=self.wa_true, add=0) - self.phase_correction_ft
+        self.phase_seen_by_ft = self.corrector.theoretical_phase(self.wl_ft, pistons,
+                                                model=self.wa_true, add=0) - self.phase_correction_ft
         
         # Computing the feedforward correction based on the FT phase:
         self.b_ft = self.S_model_ft.dot(self.phase_seen_by_ft).T
