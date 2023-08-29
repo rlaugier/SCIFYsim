@@ -658,7 +658,10 @@ def update_observing_night(config, time=None, duration=6.,  verbose=True,
     
 def get_location(simple_map, map_extent=None,
                  search_function=np.argmax, mode="polar"):
-    maxraw = np.unravel_index(np.argmax(simple_map), simple_map.shape)
+    """
+    Get location of the max or min of the map.
+    """
+    maxraw = np.unravel_index(search_function(simple_map), simple_map.shape)
     frac = np.array(maxraw)/np.array(simple_map.shape) 
     if map_extent is not None:
         gain = np.array(map_extent[1]-map_extent[0], map_extent[3]-map_extent[2])

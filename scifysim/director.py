@@ -754,7 +754,12 @@ class simulator(object):
         maps = []
         for i, time in enumerate(self.sequence):
             self.point(self.sequence[i], self.target)
-            amap = self.make_map(i, self.vigneting_map, dtype=dtype)
+            if transmission is None:
+                local_transmission = 1.
+            else:
+                local_transmission = transmission.get_downstream_transmission(self.lambda_science_range)
+            amap = self.make_map(i, self.vigneting_map, dtype=dtype,
+                                         transmission=transmission)
             maps.append(amap)
         maps = np.array(maps)
         print(maps.shape)
@@ -830,7 +835,6 @@ class simulator(object):
                   np.min(self.vigneting_map.yy),
                   np.max(self.vigneting_map.yy)]
         self.map_extent = extent
-        #self.maps = maps
         
     def persist_maps_to_disk(self, fname="/tmp/full_maps.zarr"):
         """
