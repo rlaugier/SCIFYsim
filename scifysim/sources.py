@@ -612,6 +612,7 @@ class resolved_source(object):
         self.dr = np.gradient(self.r)[0]
         self.dtheta = np.gradient(self.theta)[1]
         self.ds = self.r*self.dr*self.dtheta
+        self.ds_sr = (self.ds*units.mas**2).to(units.sr).value # In sr
         
     def get_spectrum_map(self):
         """
@@ -645,6 +646,129 @@ class resolved_source(object):
         flux_density = blackbody.get_B_lamb_ph(self.lambda_range, self.T)*dlambda \
                         * np.pi * ((self.radius * constants.R_sun) / (self.distance * constants.pc))**2#That gives the scaling of the flux density by the distance
         return flux_density
+
+    @property
+    def L(self):
+        """
+        Computes the luminosity (in solar luminosity)
+        returns the approximate star luminosity based on blackbody
+        and the Stefan-Boltzman law.
+        """
+        a = 4*np.pi*((self.radius * units.R_sun).to(units.m))**2
+        P = 1 * a * constants.sigma_sb * (self.T*units.K)**4
+        
+        return P.to(units.L_sun)
+
+class exozodi_simple(object):
+    def __init__(self, lambda_range, distance, radius,
+                 star, z, 
+                 angular_res=10, radial_res=15, offset=(0.,0.),
+                 build_map=True ):
+        """
+        **Parameters:**
+        
+        * distance             : Distance of the source [pc]
+        * radius             : The radius of the source [R_sun]
+        * star                 : a star object
+        * z                    : The amount of zodi  [zodi]
+        * L_star               : the star luminosity [L_sun]
+        * angular_res          : Number of bins in position angle
+        * radial_res           : Number of bins in radius
+        * offset               : Offset of the source radial ([mas], [deg])
+        * build_map            : Whether to precompute a mapped spectrum 
+        
+        
+        After building the map, ``self.ss`` (wl, pos_x, pos_y) contains the map
+        of flux density corresponding to positions ``self.xx``, ``self.yy``
+        """
+        self.lambda_range = lambda_range
+        self.distance = distance
+        self.radius = radius
+        self.offset = offset
+        # self.ang_radius is in radians
+        self.build_grid(angular_res, radial_res)
+        self.ang_radius = self.radius / (self.distance*units.pc.to(units.R_sun))
+        self.total_solid_angle = np.pi * self.ang_radius**2 # disk section [sr]
+        self.total_flux_density = self.distant_blackbody()/ self.total_solid_angle # [ph / s / m^2 / sr]
+
+         # calculate the parameters required by Kennedy2015
+        self.star = star
+        self.L_star = self.star.L
+        self.T_star = self.star.T
+        self.z = z
+        
+        self.alpha = 0.34
+        self.r_in = 0.034422617777777775 * np.sqrt(self.L_star)
+        self.r_0 = np.sqrt(self.L_star)
+        self.sigma_zero = 7.11889e-8  # Sigma_{m,0} from Kennedy+2015 (doi:10.1088/0067-0049/216/2/23)
+        
+        self.exozodiacal_disk()
+     
+    def build_grid(self, angular_res, radial_res):
+        """
+        Routine used to construct resolved source:
+        
+        **Creates** self.xx, self.yy, self.ds, self.theta, self.r
+        
+        """
+        radial_step = self.ang_radius/radial_res
+        self.theta, self.r = np.meshgrid( np.linspace(0., 2*np.pi, angular_res, endpoint=False), np.linspace(0.+radial_step/2, self.ang_radius-radial_step/2, radial_res, endpoint=True) )
+        # Angular positions referenced East of North
+        self.xx = -self.r*np.sin(self.theta)*units.rad.to(units.mas) \
+                    - self.offset[0]
+        self.yy =  self.r*np.cos(self.theta)*units.rad.to(units.mas) \
+                    + self.offset[1]
+        
+        self.dr = np.gradient(self.r)[0]
+        self.dtheta = np.gradient(self.theta)[1]
+        self.ds = self.r*self.dr*self.dtheta
+        self.ds_sr = (self.ds*units.mas**2).to(units.sr).value # In sr
+        
+    def get_spectrum_map(self):
+        """
+        Maps self.total_flux_density
+        
+        This **produces** numerical integration over solid angle elements
+        """
+        themap =  self.total_flux_density[:,None,None]*self.ds[None,:,:,] #self.r[None,:,:]*self.dr[None,:,:]*self.dtheta[None,:,:]
+        return themap
+    
+    def build_spectrum_map(self):
+        """
+        The map is saved in a flat shape
+        xx_f and yy_f are created to be flat versions of the coordinates.
+        ss is a total flux (ph/s/m^2) at the entrance of earth atmosphere.
+        """
+        self.ss = self.get_spectrum_map().value # Fixing a bug that appears in the spectrograph?
+        self.ss = self.ss.reshape(self.ss.shape[0], self.ss.shape[1]*self.ss.shape[2])
+        self.xx_f = self.xx.flatten()
+        self.yy_f = self.yy.flatten()
+        self.xx_r = mas2rad(self.xx_f)
+        self.yy_r = mas2rad(self.yy_f)
+        
+
+    def exozodiacal_disk(self):
+        """
+        * z       : Zodi level [solar zodiacal level]
+        * L_star  : Star luminosity [L_sun]
+        """
+
+        z = self.z
+        L_star = self.L
+        
+        r_mas = np.sqrt(self.xx**2 + self.yy**2)
+        r_au = r_mas*units.mas.to(units.rad) * (self.distance*units.pc.to(units.au))
+        t_dust = 278.3*L_star**(0.25)*r_au**(-0.5)
+        sigma = np.zeros_like(r_au)
+        sigma[r_au>=self.r_in] = self.sigma_zero * z * (r_au / self.r_0) ** (-self.alpha)
+
+        dlambda = np.gradient(self.lambda_range)
+        #Discretization by spectral bins
+        b_lamb = sigma[None,:,:] * blackbody.get_B_lamb_ph(self.lambda_range, t_dust) # [ph / s /m^2 / m / sr]
+        b_1 = b_lamb * dlambda # [ph/s/m^2/sr]
+        self.ss = b_1 * np.pi * self.ds_sr[None,:,:] # [ph/s/m^2]
+        # f(wavelength[m], T[K]) Computes the Planck law in [ph / s / m^2 / m / sr]
+        self.total_flux_density = np.sum(self.ss, axis=(1,2))
         
 
 
