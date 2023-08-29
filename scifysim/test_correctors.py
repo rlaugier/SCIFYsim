@@ -123,6 +123,42 @@ class test_corrector_behavior_from_file(unittest.TestCase):
     # def test_dcomp_from_vector(self):
     #     self.corrector_single.get_dcomp_from_vector()
 
+class test_sellmeier_linb(unittest.TestCase):
+    def setUp(self):
+        self.lamb_ref = 3.758e-6
+        # Values pulled from https://refractiveindex.info/?shelf=main&book=LiNbO3&page=Zelmon-o
+        self.n_e_linb_ref = 2.06665321225504
+        self.n_o_linb_ref = 2.12698094060923
+        self.bs_e_test = np.array([2.9804,
+                                  0.02047,
+                                  0.5981,
+                                  0.0666,
+                                  8.9543,
+                                  416.08])
+        self.b_e_test = np.array([2.9804,
+                                  0.5981,
+                                  8.9543])
+        self.c_e_test = np.array([0.02047,
+                                  0.0666,
+                                  416.08])
+
+
+    def test_make_sellmeier_single(self):
+        mylinb = correctors.material_sellmeier(self.bs_e_test)
+        # Note: by default, add should be 0
+        self.assertAlmostEqual(self.n_e_linb_ref, 1+mylinb.get_n(self.lamb_ref))
+        self.assertAlmostEqual(self.n_e_linb_ref, mylinb.get_n(self.lamb_ref, add=1))
+        
+    def test_make_sellmeier_double(self):
+        mylinb = correctors.material_sellmeier(bs=self.b_e_test, cs=self.c_e_test)
+        # Note: by default, add should be 0
+        self.assertAlmostEqual(self.n_e_linb_ref, 1+mylinb.get_n(self.lamb_ref))
+        self.assertAlmostEqual(self.n_e_linb_ref, mylinb.get_n(self.lamb_ref, add=1))
+
+    def test_builtin_linb(self):
+        self.assertAlmostEqual(self.n_e_linb_ref, correctors.linb_e.get_n(self.lamb_ref, add=1))
+        self.assertAlmostEqual(self.n_o_linb_ref, correctors.linb_o.get_n(self.lamb_ref, add=1))
+
 
 class test_correcor_in_simulator(unittest.TestCase):
     def setUp(self):

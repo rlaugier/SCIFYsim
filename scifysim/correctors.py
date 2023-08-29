@@ -37,6 +37,56 @@ def get_max_differential(array):
 # Utility functions for optimization
 ##################################################
 
+class material_sellmeier(object):
+    def __init__(self, bs, cs=None):
+        """
+        * bs  : the B terms of the Sellmeier equation
+        * cs  : the C terms of the Sellmeier equation [µm^2]
+
+        if cs is not provided, then we expect coefficients given from `bs`
+        as (B1, C1, B2, C2, ...)
+        
+        """
+        if cs is None:
+            self.bs, self.cs = bs2bcs(bs)
+        else:
+            self.bs = bs
+            self.cs = cs
+            
+    def get_n(self, lamb, add=0):
+        lamb_microns = lamb*1e6
+        terms = np.array([ab*lamb_microns**2 / (lamb_microns**2 - ac) \
+                        for (ab, ac) in zip(self.bs, self.cs)])
+        nr = -1 + np.sqrt(1 + np.sum(terms, axis=0))
+        return nr + add
+
+def bs2bcs(bs):
+    """
+    Transforms a flat list of sellmeier coefficients (B1, C1, B2, C2, ...)
+    into two vectors fo coefficients B and C.
+    """
+    order = bs.shape[0]//2
+    b2 = bs.reshape((order, 2))
+    return b2[:,0], b2[:,1]    
+
+# Adding builtin material for the linb
+bs_e = np.array([2.9804,
+              0.02047,
+              0.5981,
+              0.0666,
+              8.9543,
+              416.08])
+bs_o = np.array([2.6734,
+                0.01764,
+                1.2290,
+                0.05914,
+                12.614,
+                474.6])
+
+linb_o = material_sellmeier(bs_o)
+linb_e = material_sellmeier(bs_e)
+
+
 from lmfit import Parameters, minimize
 def extract_corrector_params(corrector, params):
     """
@@ -202,6 +252,8 @@ class offband_ft(object):
         self.corrector = corrector
         self.corrector_model = deepcopy(corrector)
         self.corrector_model.ncomp = self.wa_model.get_Nair
+        # corrector_model should be used mostly to compute b_ft or make predictions
+        # Estimates of the real phases should always use the true corrector
         
         self.refresh_corrector_models()
         
@@ -317,23 +369,37 @@ class offband_ft(object):
             self.b_ft = self.S_truth_ft.dot(self.phi_v_ft).T
             self.phi_DL = self.corrector.get_raw_phase_correction(self.wl_science[:,None], vector=self.b_ft)
             self.phi_DL_ft = self.corrector.get_raw_phase_correction(self.wl_ft[:,None], vector=self.b_ft)
+            if band is not None:
+                phi_DL_band = self.corrector.get_raw_phase_correction(band[:,None], vector=self.b_ft)
             # This is what we believe Heimdallr has accomplished
             self.b_ft_model = self.S_model_ft.dot(self.phi_v_ft).T
             self.phi_DL_model = self.corrector_model.get_raw_phase_correction(self.wl_science[:,None], vector=self.b_ft_model)
             self.phi_DL_ft_model = self.corrector_model.get_raw_phase_correction(self.wl_ft[:,None], vector=self.b_ft_model)
+            if band is not None:
+                phi_DL_model_band = self.corrector_model.get_raw_phase_correction(band[:,None], vector=self.b_ft_model)
         elif mode == "group":
-            raise NotImplementedError("Group delay FT tracking not ready yet")
+            # raise NotImplementedError("Group delay FT tracking not ready yet")
+            logit.warning("Early implementation of GD tracking")
             n_air = self.wa_true.get_Nair(self.wl_science, add=1)
             n_air_ft = self.wa_true.get_Nair(self.wl_ft, add=1)
-            self.phi_DL_model = - 2*np.pi/self.wl_science * self.S_gd_science * n_air * pistons 
-            self.phi_DL_ft_model = - 2*np.pi/self.wl_ft * self.S_gd_ft * n_air_ft * pistons 
+            self.phi_DL = (- 2*np.pi/self.wl_science * self.S_gd_science * n_air * pistons ).T
+            self.phi_DL_ft = (- 2*np.pi/self.wl_ft * self.S_gd_ft * n_air_ft * pistons ).T
+            if band is not None:
+                n_air_band = self.wa_true.get_Nair(band, add=1)
+                phi_DL_band = (- 2*np.pi/band * self.S_gd_science * n_air_band * pistons).T
             n_air_model = self.wa_model.get_Nair(self.wl_science, add=1)
             n_air_ft_model = self.wa_model.get_Nair(self.wl_ft, add=1)
-            self.phi_DL_model = - 2*np.pi/self.wl_science * self.S_gd_model_science * n_air_model * pistons 
-            self.phi_DL_ft_model = - 2*np.pi/self.wl_ft * self.S_gd_model_ft * n_air_ft_model * pistons 
-        self.phi_asgard_model = self.phi_v + self.phi_DL_model
-        self.phi_asgard_true = self.phi_v + self.phi_DL
-        
+            self.phi_DL_model = (- 2*np.pi/self.wl_science * self.S_gd_model_science * n_air_model * pistons ).T
+            self.phi_DL_ft_model = (- 2*np.pi/self.wl_ft * self.S_gd_model_ft * n_air_ft_model * pistons ).T
+            if band is not None:
+                n_air_model_band = self.wa_model.get_Nair(band, add=1)
+                phi_DL_model_band = (- 2*np.pi/band * self.S_gd_model_science * n_air_model_band * pistons ).T
+        self.phi_asgard_model = self.phi_v - self.phi_DL_model
+        self.phi_asgard_true = self.phi_v - self.phi_DL
+        if band is not None:
+            phi_v_band = (2*np.pi/band * pistons).T
+            phi_asgard_true_band = phi_v_band - phi_DL_band
+            phi_asgard_model_band = phi_v_band - phi_DL_model_band
 
         # Now to compute the correction
         # Temp correction
@@ -356,14 +422,20 @@ class offband_ft(object):
         self.correction_blind = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
                                                                        vector=self.b_science_model)
 
-        self.phi_tot_ft = self.phi_v_ft + self.phi_DL_ft
-        self.phi_tot    = self.phi_v + self.phi_DL
+        # self.phi_tot_ft = self.phi_v_ft + self.phi_DL_ft
+        # self.phi_tot    = self.phi_v + self.phi_DL
+        
+        self.phi_nott_ideal = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+                                                vector=self.b_science_ideal)
+        self.phi_nott_model = self.corrector.get_raw_phase_correction(self.wl_science[:,None],
+                                                vector=self.b_science_model)
         
         if band is not None:
-            total_phase_on_band = self.corrector.theoretical_phase(band, pistons,
-                                                                  model=self.wa_true, add=0)
-            correction_to_phase_ft = self.get_ft_correction_on_science(pistons, band=band)
-            return total_phase_on_band, correction_to_phase_ft    
+            phi_nott_ideal_band = self.corrector.get_raw_phase_correction(band[:,None],
+                                                    vector=self.b_science_ideal)
+            phi_nott_model_band = self.corrector.get_raw_phase_correction(band[:,None],
+                                                    vector=self.b_science_model)
+            return phi_asgard_true_band, phi_asgard_model_band, phi_nott_ideal_band, phi_nott_model_band 
 
 
 
@@ -594,7 +666,9 @@ class offband_ft(object):
         return phase_GD_target
         
     
-    def get_phase_on_band(self, band, pistons, mode="ideal"):
+    def get_phase_on_band(self, band, pistons,
+                                mode="ideal",
+                                ft_mode="phase"):
         """Similar to ``get_phase_science_values`` but for an arbitrary band 
         for illustration purposes.
         
@@ -608,8 +682,12 @@ class offband_ft(object):
               which may deviate from ground truth.
             - `feedforward` : Assumes the dispersion is being measured at teh FT band
         """
-        true_phase_on_band, correction_ft_to_band =  self.update_NCP_corrections(pistons, band=band)
-        
+        # `phi_asgard_model_band` normally used only to compute b_xxx
+        phi_asgard_true_band,\
+        phi_asgard_model_band,\
+        phi_nott_ideal_band,\
+        phi_nott_model_band = self.update_NCP_corrections(pistons, band=band, mode=ft_mode)
+
         #true_phase_on_band = self.corrector.theoretical_phase(band, pistons, model=self.wa_true, add=0)
         #model_phase_on_band = self.corrector.theoretical_phase(band, pistons, model=self.wa_model, add=0)
         if mode == "ideal":
@@ -619,7 +697,7 @@ class offband_ft(object):
             #                                                  c=self.b_science_ideal[1,:])
             correction_closed_loop = self.corrector.get_raw_phase_correction(band[:,None],
                                                                             vector=self.b_science_ideal)
-            return true_phase_on_band - correction_ft_to_band - correction_closed_loop
+            return phi_asgard_true_band - phi_nott_ideal_band - correction_closed_loop
             
         elif mode == "blind":
             # Assumes only atmosphere is good and setpoint of FT is solid
@@ -627,33 +705,38 @@ class offband_ft(object):
             #                                                  b=self.b_science_model[0,:],
             #                                                  c=self.b_science_model[1,:])
             correction_blind = self.corrector.get_raw_phase_correction(band[:,None],
-                                                                      vector=self.b_science_ideal)
-            return true_phase_on_band - correction_ft_to_band - correction_blind
+                                                                      vector=self.b_science_model)
+            return phi_asgard_true_band - phi_asgard_model_band - correction_blind
+            # NB: phi_asgard_model_band is used only for computing b_model
         
         elif mode == "feedforward":
             # Assumes a measurement of dispersion in the FT band
             #correction_feedforward = asim.corrector.get_raw_phase_correction(band[:,None],
             #                                                  b=self.b_ft[0,:],
             #                                                  c=self.b_ft[1,:])
+            logit.warning("feedfoward not implemented yet. returns model-model")
             correction_feedforward = self.corrector.get_raw_phase_correction(band[:,None],
                                                                             vector=self.b_ft)
-            return true_phase_on_band - correction_ft_to_band - correction_feedforward
+            return phi_asgard_model_band - phi_nott_model_band - correction_feedforward
         
         
         
-    def get_phase_science_values(self,pistons, mode="ideal"):
-        self.update_NCP_corrections(pistons)
+    def get_phase_science_values(self,pistons,
+                                    mode="ideal",
+                                    ft_mode="phase"):
+        self.update_NCP_corrections(pistons, mode=ft_mode)
         if mode == "ideal":
             # Assumes a closed loop in the science band
-            return self.true_phase_on_science - self.correction_ft_to_science - self.correction_closed_loop
+            return self.phi_asgard_true - self.phi_nott_ideal
             
         elif mode == "blind":
             # Assumes only atmosphere is good and setpoint of FT is solid
-            return self.true_phase_on_science - self.correction_ft_to_science - self.correction_blind
+            return self.phi_asgard_true - self.phi_nott_model
         
         elif mode == "feedforward":
             # Assumes a measurement of dispersion in the FT band
-            return self.true_phase_on_science - self.correction_ft_to_science - self.correction_feedforward
+            logit.warning("feedfoward not implemented yet. returns model-model")
+            return self.phi_asgard_model - self.phi_nott_model
 
         
 

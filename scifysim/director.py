@@ -298,9 +298,18 @@ class simulator(object):
         self.offband_model = sf.correctors.offband_ft(wl_ft, self.lambda_science_range,
                                                       wa_true=myair, wa_model=mymodel,
                                                      corrector=self.corrector)
+
+    def backup_ldc(self):
+        self.bu_corrector = deepcopy(self.corrector)
+        self.bu_offband = deepcopy(self.offband_model)
+
+    def restore_ldc(self):
+        self.corrector = deepcopy(self.bu_corrector)
+        self.offband_model = deepcopy(self.bu_offband)
         
     def point(self, time, target, refresh_array=False, disp_override=None,
-                    long_disp_override=None, ld_mode_override=None):
+                    long_disp_override=None, ld_mode_override=None,
+                    ft_mode="phase"):
         """
         Points the array towards the target. Updates the combiner
         
@@ -383,13 +392,15 @@ class simulator(object):
             # self.ph_disp = self.offband_model.get_ft_correction_on_science(self.pistons)
             logit.debug("Pointing including longitudinal dispersion")
             self.ph_disp = self.offband_model.get_phase_science_values(self.pistons,
-                                                                        mode=ld_mode)
+                                                                        mode=ld_mode,
+                                                                        ft_mode=ft_mode)
             self.phasor_disp = np.exp(1j*self.ph_disp)
         else:
             assert self.pistons.shape == (self.ntelescopes,1), f"pistons shape {self.pistons.shape}"
             logit.debug("Pointing with no longitudinal dispersion")
             self.ph_disp = np.zeros_like(self.offband_model.get_phase_science_values(self.pistons,
-                                                                                    mode=ld_mode))            
+                                                                                    mode=ld_mode,
+                                                                                    ft_mode=ft_mode))            
             self.phasor_disp = np.exp(1j*self.ph_disp)   
 
 
