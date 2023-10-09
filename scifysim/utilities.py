@@ -12,6 +12,20 @@ import logging
 
 logit = logging.getLogger(__name__)
 
+def sp2mod(array, dtype=complex, mod=np):
+    """
+    Converts a sympy array/Matrix into an array of a given module
+
+    ** Arguments :**
+
+    * array : A sympy Matrix, vector or expression, 
+      with no free symbols
+    * dtype : data type to aim for (default: complex)
+    * mod   : the module to convert to (default: numpy)
+      will work with cupy, jax, etc...
+    """
+    return mod.array(sp.N(array), dtype=dtype)
+
 def vec2diag(vec):
     """
     Replictes in sympy the np.diag functionnality to create a
@@ -173,6 +187,8 @@ def prepare_all(afile, thetarget=None, update_params=False,
     
     - afile      : Config file 
     - thetarget  : target name to replace in config file
+    - update_params: (bool) default: False. When True, updates the
+      parameters of the star based on databases such as GAIA DR3
     - instrumental_errors : Bool. Whether to include instrumental
       errors
     - seed       : seed to pass when generating the 

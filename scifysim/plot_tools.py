@@ -262,6 +262,9 @@ def plot_multiple_maps(maplist, mag,  cmap="viridis", show=True, detector="E",la
     comparison. 
     
     **hint:** 
+    
+    .. code-block:: language
+    
         adjust_params = {"bottom":0.,
                         "right":0.9,
                         "top":1.,
@@ -280,7 +283,7 @@ def plot_multiple_maps(maplist, mag,  cmap="viridis", show=True, detector="E",la
     * titles     : A list of titles to add to the plots
     * remove_titles: The indices for which to remove titles
     * remove_xlabels: the indices for which to remove xlabels
-    * **kwargs : Keyword arguments to pass to plt.figure()
+    * **kwargs : Keyword arguments to pass to `plt.figure()`
 
     **Returns** the figure object
     """
@@ -524,7 +527,7 @@ def plot_response_map(asim, outputs=None,
     * wavelength   : np.ndarray containing wl indices (if None: use all the wavelength channels)
     * sequence_index : The indices of the sequence to plot
     * show         : Whether to call plt.show() for each plot
-    * save         : either False or a string containing the root of a path like "maps/figures_"
+    * save         : either False or a string containing the root of a path like `maps/figures_`
     * figsize      : 2 tuple to pass to plt.figure()
     * dpi          : The dpi for the maps
     * layout       : "h" for horizontal array of map, "v" for vertical
@@ -610,7 +613,7 @@ def plot_differential_map(asim, kernel=None,
     * wavelength   : np.ndarray containing wl indices (if None: use all the wavelength channels)
     * sequence_index : The indices of the sequence to plot
     * show         : Whether to call plt.show() for each plot
-    * save         : either False or a string containing the root of a path like "maps/figures_"
+    * save         : either False or a string containing the root of a path like `maps/figures_`
     * figsize      : 2 tuple to pass to plt.figure()
     * dpi          : The dpi for the maps
     * **kwargs     : Additional kwargs to pass to imshow

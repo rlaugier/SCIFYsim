@@ -48,4 +48,4 @@ logit = logging.getLogger(__name__)
 
 logit.info("SCIFYsim successfully loaded")
 
-version = "0.2.2"
+version = "dev-0.2.3"
