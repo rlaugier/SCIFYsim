@@ -686,10 +686,10 @@ class exozodi_simple(object):
         self.radius = radius
         self.offset = offset
         # self.ang_radius is in radians
-        self.build_grid(angular_res, radial_res)
         self.ang_radius = self.radius / (self.distance*units.pc.to(units.R_sun))
+        self.build_grid(angular_res, radial_res)
         self.total_solid_angle = np.pi * self.ang_radius**2 # disk section [sr]
-        self.total_flux_density = self.distant_blackbody()/ self.total_solid_angle # [ph / s / m^2 / sr]
+        # self.total_flux_density = self.distant_blackbody()/ self.total_solid_angle # [ph / s / m^2 / sr]
 
          # calculate the parameters required by Kennedy2015
         self.star = star
@@ -698,7 +698,7 @@ class exozodi_simple(object):
         self.z = z
         
         self.alpha = 0.34
-        self.r_in = 0.034422617777777775 * np.sqrt(self.L_star)
+        self.r_in = 0.034422617777777775 * np.sqrt(self.L_star.to(units.solLum).value)
         self.r_0 = np.sqrt(self.L_star)
         self.sigma_zero = 7.11889e-8  # Sigma_{m,0} from Kennedy+2015 (doi:10.1088/0067-0049/216/2/23)
         
@@ -707,8 +707,11 @@ class exozodi_simple(object):
     def build_grid(self, angular_res, radial_res):
         """
         Routine used to construct resolved source:
-        
         **Creates** self.xx, self.yy, self.ds, self.theta, self.r
+
+        **Arguments**:
+        * angular_res : Number of angulare elements
+        * radial_res  : Number of radial elements
         
         """
         radial_step = self.ang_radius/radial_res
@@ -739,35 +742,42 @@ class exozodi_simple(object):
         xx_f and yy_f are created to be flat versions of the coordinates.
         ss is a total flux (ph/s/m^2) at the entrance of earth atmosphere.
         """
-        self.ss = self.get_spectrum_map().value # Fixing a bug that appears in the spectrograph?
+        self.ss = self.get_spectrum_map()#.value # Fixing a bug that appears in the spectrograph?
         self.ss = self.ss.reshape(self.ss.shape[0], self.ss.shape[1]*self.ss.shape[2])
         self.xx_f = self.xx.flatten()
         self.yy_f = self.yy.flatten()
         self.xx_r = mas2rad(self.xx_f)
         self.yy_r = mas2rad(self.yy_f)
         
-
+    
     def exozodiacal_disk(self):
         """
-        * z       : Zodi level [solar zodiacal level]
-        * L_star  : Star luminosity [L_sun]
+        Computes the emission spectrum of each disk element.
+        Updates:
+
+        * `self.ss` the spectral illuminance
+        * `self.total_flux density`
+        * `self.sigma` the opacity
+        * `self.t_dust` the temperature of the dust
         """
 
         z = self.z
-        L_star = self.L
         
         r_mas = np.sqrt(self.xx**2 + self.yy**2)
         r_au = r_mas*units.mas.to(units.rad) * (self.distance*units.pc.to(units.au))
-        t_dust = 278.3*L_star**(0.25)*r_au**(-0.5)
+        self.t_dust = (278.3*self.L_star.to(units.solLum).value**(0.25)*r_au**(-0.5))*units.K
         sigma = np.zeros_like(r_au)
-        sigma[r_au>=self.r_in] = self.sigma_zero * z * (r_au / self.r_0) ** (-self.alpha)
-
+        mask_radius = r_au>=self.r_in
+        print("self.t_dust",self.t_dust.shape)
+        # print(self.sigma_zero * z * (r_au / self.r_0) ** (-self.alpha))
+        sigma[mask_radius] = (self.sigma_zero * z * (r_au / self.r_0) ** (-self.alpha))[mask_radius]
+        self.sigma=sigma
         dlambda = np.gradient(self.lambda_range)
         #Discretization by spectral bins
-        b_lamb = sigma[None,:,:] * blackbody.get_B_lamb_ph(self.lambda_range, t_dust) # [ph / s /m^2 / m / sr]
-        b_1 = b_lamb * dlambda # [ph/s/m^2/sr]
+        # of get_B_lamb_ph: f(wavelength[m], T[K]) Computes the Planck law in [ph / s / m^2 / m / sr]
+        b_lamb = self.sigma[None,:,:] * blackbody.get_B_lamb_ph(self.lambda_range[:,None,None], self.t_dust[None,:,:].value) # [ph / s /m^2 / m / sr]
+        b_1 = b_lamb * dlambda[:,None,None] # [ph/s/m^2/sr]
         self.ss = b_1 * np.pi * self.ds_sr[None,:,:] # [ph/s/m^2]
-        # f(wavelength[m], T[K]) Computes the Planck law in [ph / s / m^2 / m / sr]
         self.total_flux_density = np.sum(self.ss, axis=(1,2))
         
 
