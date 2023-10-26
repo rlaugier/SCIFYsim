@@ -210,7 +210,10 @@ class combiner(object):
             M, bright, dark, photo = sf.combiners.angel_woolf_ph_chromatic(Mc=Mc, ph_shifters=ph_shifters,
                                                             include_masks=True, tap_ratio=tap_ratio,
                                                             input_ph_shifters=input_offset*np.array([0,1,0,1]))
-            lamb, = M.free_symbols
+            if M.free_symbols == set():
+                lamb = sp.symbols("lambda")
+            else:
+                lamb, = M.free_symbols
         elif combiner_type == "GLINT":
             hasph = True
             M, bright, dark, photo = sf.combiners.GLINT(include_masks=True,

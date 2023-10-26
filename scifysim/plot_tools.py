@@ -650,7 +650,10 @@ def plot_differential_map(asim, kernel=None,
             
     difmaps = np.einsum("k o, s w o x y -> s w k x y", kernel,  asim.maps)
     
-    amax = np.max(np.abs(difmaps.sum(axis=1)))
+    if sumall:
+        amax = np.max(np.abs(difmaps.sum(axis=1)))
+    else:
+        amax = np.max(np.abs(difmaps[:,wavelength,:,:,:]))
     
     
     figs = []
