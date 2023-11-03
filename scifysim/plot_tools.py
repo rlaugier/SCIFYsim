@@ -206,7 +206,8 @@ def plot_projected_uv(asim, seq_indices=None,
                          grid=False, grid_res=5,
                          compass=True, compass_length=10.,
                          usize=150., dist=140., perspective=True,
-                         show=True, dpi=100):
+                         show=True, dpi=100, legend=True,
+                         **kwargs):
     """
     Designed as a wrapper around plot_pupil that also handles
     additional illustration.
@@ -223,7 +224,9 @@ def plot_projected_uv(asim, seq_indices=None,
     * show    : Whether to call ``plt.show`` before returning
     """
     anarray = asim.obs.statlocs
-    
+    if legend is not False:
+        all_legends = legend
+        legend = True
     if seq_indices is None:
         thesequence = asim.sequence
     else:
@@ -244,11 +247,13 @@ def plot_projected_uv(asim, seq_indices=None,
     fig = plt.figure(dpi=dpi)
     for at in alluvs:
         for i, abl in enumerate(at):
-            plt.scatter(abl[0], abl[1], color=f"C{i}", label=i)
-            plt.scatter(-abl[0], -abl[1], color=f"C{i}", label=i)
+            plt.scatter(abl[0], abl[1], color=f"C{i}", label=i,**kwargs)
+            plt.scatter(-abl[0], -abl[1], color=f"C{i}", label=i,**kwargs)
     plt.gca().set_aspect("equal")
     plt.xlabel("Baseline U (RA) [m]")
     plt.ylabel("Baseline V (dec) [m]")
+    if legend:
+        plt.legend()
     if show:
         plt.show()
     
@@ -257,7 +262,7 @@ def plot_projected_uv(asim, seq_indices=None,
 
 def plot_colored_uv(asim, title="Plot of the uv coverage",
     show=True, figsize=None,
-    dpi=100):
+    dpi=100, **kwargs):
     wls = asim.lambda_science_range
     fig = plt.figure(figsize=figsize, dpi=dpi)
     for at in asim.sequence:
@@ -267,8 +272,8 @@ def plot_colored_uv(asim, title="Plot of the uv coverage",
         for asuv, wl in zip(auv, wls):
             # print(asuv)
             col = plt.cm.rainbow(util.trois(wl, wls[0], wls[-1], ymin=0.1))
-            plt.scatter(*asuv.T, color=[col])
-            plt.scatter(*(-asuv.T), color=[col])
+            plt.scatter(*asuv.T, color=[col], **kwargs)
+            plt.scatter(*(-asuv.T), color=[col], **kwargs)
     plt.xlabel(f"$ u = \\frac{{b}}{{\lambda}}$")
     plt.gca().set_aspect("equal")
     plt.title(title)
