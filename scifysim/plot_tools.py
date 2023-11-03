@@ -206,7 +206,7 @@ def plot_projected_uv(asim, seq_indices=None,
                          grid=False, grid_res=5,
                          compass=True, compass_length=10.,
                          usize=150., dist=140., perspective=True,
-                         show=True):
+                         show=True, dpi=100):
     """
     Designed as a wrapper around plot_pupil that also handles
     additional illustration.
@@ -230,15 +230,18 @@ def plot_projected_uv(asim, seq_indices=None,
         thesequence = asim.sequence[seq_indices]
     alluvs = []
     for atime in thesequence:
-        #Get the pointing of the array:
-        altaz, PA = asim.obs.get_position(asim.target, atime)
-        p_array = asim.obs.get_projected_array(altaz, PA=PA, loc_array=anarray)
+        if not asim.space:
+            #Get the pointing of the array:
+            altaz, PA = asim.obs.get_position(asim.target, atime)
+            p_array = asim.obs.get_projected_array(altaz, PA=PA, loc_array=anarray)
+        else:
+            p_array = asim.obs.get_projected_array(time=atime)
         uvs, indices = util.get_uv(p_array)
         alluvs.append(uvs)
     alluvs = np.array(alluvs)
     #thepistons = asim.obs.get_projected_geometric_pistons(altaz)
     
-    fig = plt.figure(dpi=200)
+    fig = plt.figure(dpi=dpi)
     for at in alluvs:
         for i, abl in enumerate(at):
             plt.scatter(abl[0], abl[1], color=f"C{i}", label=i)
@@ -250,6 +253,29 @@ def plot_projected_uv(asim, seq_indices=None,
         plt.show()
     
     return fig, alluvs
+
+
+def plot_colored_uv(asim, title="Plot of the uv coverage",
+    show=True, figsize=None,
+    dpi=100):
+    wls = asim.lambda_science_range
+    fig = plt.figure(figsize=figsize, dpi=dpi)
+    for at in asim.sequence:
+        asim.point(at, asim.target)
+        mybs = asim.obs.uv
+        auv = mybs[None,:,:]/wls[:,None,None]
+        for asuv, wl in zip(auv, wls):
+            # print(asuv)
+            col = plt.cm.rainbow(util.trois(wl, wls[0], wls[-1], ymin=0.1))
+            plt.scatter(*asuv.T, color=[col])
+            plt.scatter(*(-asuv.T), color=[col])
+    plt.xlabel(f"$ u = \\frac{{b}}{{\lambda}}$")
+    plt.gca().set_aspect("equal")
+    plt.title(title)
+    if show:
+        plt.show()
+    return fig
+
 
 def plot_multiple_maps(maplist, mag,  cmap="viridis", show=True, detector="E",layout=(1,1),
                        single_bar=True, adjust_params=None,

@@ -15,6 +15,8 @@ import astroplan
 from astroplan import plots
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz, get_sun
 
+from itertools import combinations
+
 import logging
 
 logit = logging.getLogger(__name__)
@@ -88,6 +90,20 @@ class observatory(object):
         self.Cs = sp.Matrix([[0, sp.cos(self.theta)]])
         self.C = sp.lambdify(self.theta, self.Cs, modules="numpy")
         
+        n_tel = self.statlocs.shape[0]
+        bl_list = list(combinations(np.arange(n_tel), 2))
+        bl_mat = []
+        for abl in bl_list:
+            avec = np.zeros(n_tel)
+            avec[abl[0]] = -1
+            avec[abl[1]] = 1
+            bl_mat.append(avec)
+        bl_mat = np.array(bl_mat)
+        self.bl_mat = bl_mat
+        del bl_mat
+        del bl_list
+        
+        
     def point(self, obstime, target):
         """
         Points the array towards the target, updating its position angle (PA) and altaz (used for airmass).
@@ -103,6 +119,8 @@ class observatory(object):
         self.altaz = self.observatory_location.altaz(target=target,
                                                    time=obstime)
         self.PA = self.observatory_location.parallactic_angle(obstime, target=target)
+        current_proj_array = self.get_projected_array(self.altaz, self.PA)
+        self.uv = self.bl_mat.dot(current_proj_array)
         
 
         
@@ -392,6 +410,16 @@ class SpaceObservatory(observatory):
                                 bounds_error=False,
                                 fill_value="extrapolate")
             self.motion = self.interpolation
+        # Creating the baseline matrix
+        bl_list = list(combinations(np.arange(self.n_tel), 2))
+        bl_mat = []
+        for abl in bl_list:
+            avec = np.zeros(self.n_tel)
+            avec[abl[0]] = -1
+            avec[abl[1]] = 1
+            bl_mat.append(avec)
+        bl_mat = np.array(bl_mat)
+        self.bl_mat = bl_mat
         # Initializing by pointing to instant 0
         self.point(self.time_0)
 
@@ -455,6 +483,8 @@ class SpaceObservatory(observatory):
             self.R_rotation = motion_result[2]
         else:
             self.x_A_t = motion_result
+        current_proj_array = self.get_projected_array()
+        self.uv = self.bl_mat.dot(current_proj_array[:,:2])
 
     # def build_observing_sequence(self):
     #     pass

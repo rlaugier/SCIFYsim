@@ -137,6 +137,19 @@ class TestObservatory(unittest.TestCase):
                                  [-0.98467457]])
         self.assertTrue(np.allclose(pistons, ref_pistons))
 
+    def test_getUV(self):
+        anobs = copy(self.anobs)
+        anobs.point(self.times[0], self.atarget)
+        self.assertTrue(hasattr(anobs, "bl_mat"))
+        n = anobs.statlocs.shape[0]
+        self.assertEqual(anobs.bl_mat.shape[0], (n*(n-1))//2)
+        self.assertEqual(anobs.bl_mat.shape[1], n)
+        self.assertTrue(hasattr(anobs, "uv"))
+        self.assertEqual(anobs.uv.shape[0], (n*(n-1))//2)
+        self.assertEqual(anobs.uv.shape[1], 2)
+        self.assertTrue(np.max(anobs.uv)<= np.max(2*np.abs(anobs.statlocs)))
+        
+
 
 
 #    def test_init(self):
@@ -174,6 +187,18 @@ class TestSpaceObservatory(unittest.TestCase):
         del self.aspaceobs
         del self.config
         del self.statlocs
+
+    def test_getUV(self):
+        aspaceobs = copy(self.asim.obs)
+        aspaceobs.point(self.asim.sequence[0])
+        self.assertTrue(hasattr(aspaceobs, "bl_mat"))
+        self.assertEqual(aspaceobs.bl_mat.shape[0], 6)
+        self.assertEqual(aspaceobs.bl_mat.shape[1], 4)
+        self.assertTrue(hasattr(aspaceobs, "uv"))
+        self.assertEqual(aspaceobs.uv.shape[0], 6)
+        self.assertEqual(aspaceobs.uv.shape[1], 2)
+        self.assertTrue(np.max(aspaceobs.uv)<= np.max(2*np.abs(aspaceobs.statlocs)))
+
 
     def test_spaceobs_has_methods(self):
         self.assertTrue(hasattr(self.aspaceobs, "point"))
