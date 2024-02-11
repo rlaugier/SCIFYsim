@@ -2,6 +2,9 @@ include README.rst
 include scifysim/data/gravity_piston_ps.csv
 include scifysim/data/MK_trans_sfs.txt
 include scifysim/data/n_mathar.dat
+include scifysim/data/n_mathar_co2.dat
+include scifysim/data/n_mathar_air_370co2.dat
+include scifysim/data/n_mathar_h2o.dat
 include scifysim/data/VLTI_AT_trans_sfs.txt
 include scifysim/data/VLTI_UT_trans_sfs.txt
 include scifysim/config/logger.ini
@@ -11,10 +14,13 @@ include scifysim/config/default_R200.ini
 include scifysim/config/default_R20.ini
 include scifysim/config/vega.ini
 include scifysim/config/vega_R200.ini
+include scifysim/config/test_default.ini
 include scifysim/data/asymetric_coupling_rate_gls.csv
 include scifysim/data/asymmetric_coupling_rate_gross.csv
 include scifysim/data/asymmetric_diff_phase_gls.csv
 include scifysim/data/directional_coupling_bar.csv
 include scifysim/data/directional_coupling_cross.csv
 include scifysim/data/znse_index.csv
+include scifysim/data/znse_Connolly.csv
 include scifysim/data/hawaii2rg_qe.csv
+include scifysim/data/ref_maps_test.npy

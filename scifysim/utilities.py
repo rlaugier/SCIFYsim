@@ -2,11 +2,29 @@ import sympy as sp
 import numpy as np
 from kernuller import mas2rad
 from kernuller import rad2mas
-from kernuller import fprint
+import kernuller
+from scifysim.parsefile import ConfigParser
+from pathlib import Path
+
+parent = Path(__file__).parent.absolute()
 
 import logging
 
 logit = logging.getLogger(__name__)
+
+def sp2mod(array, dtype=complex, mod=np):
+    """
+    Converts a sympy array/Matrix into an array of a given module
+
+    ** Arguments :**
+
+    * array : A sympy Matrix, vector or expression, 
+      with no free symbols
+    * dtype : data type to aim for (default: complex)
+    * mod   : the module to convert to (default: numpy)
+      will work with cupy, jax, etc...
+    """
+    return mod.array(sp.N(array), dtype=dtype)
 
 def vec2diag(vec):
     """
@@ -46,6 +64,33 @@ def range2R(spectral_range, mode="bins"):
     R = spectral_range/deltalamb
     return R
 
+def get_raw_array(config):
+    """
+        Get the raw array for location of apertures from config file.
+    **Arguments:**
+    * config : a config parser object `sf.parsefile.ConfigParser`
+
+    return:
+    * For ground-based: (n_tel, 2[m])
+    * For space-based:  (t[s], n_tel, 3[m])
+    """
+    assert isinstance(config, ConfigParser)
+    array_config = config.get("configuration", "config")
+    if array_config != "none":
+        raw_array = eval("kernuller.interferometers.%s"%(array_config))
+        assert len(raw_array.shape) == 2
+        assert raw_array.shape[1] == 2
+    else :
+        apath = Path(config.get("configuration", "array_motion_file"))
+        relative = config.getboolean("configuration", "array_motion_local")
+        if relative:
+            mypath = parent/apath
+        else:
+            mypath = apath
+        raw_array = np.load(mypath)
+        assert len(raw_array.shape) == 3 # Check (n_t, n_tel, X)
+        assert raw_array.shape[2] == 3 # check 3D position
+    return raw_array, array_config
 
 def lambdifyz(symbols, expr, modules="numpy"):
     """
@@ -125,8 +170,9 @@ class ee(object):
     
     def __call__(self,*args):
         return self.callfunction(*args)
+
     def fprint(self):
-        fprint(self.expr)
+        kernuller.fprint(self.expr)
     
 
 def prepare_all(afile, thetarget=None, update_params=False,
@@ -134,13 +180,15 @@ def prepare_all(afile, thetarget=None, update_params=False,
                crop=1., target_coords=None,
                compensate_chromatic=True,
                modificators=None, update_start_end=True,
-               statlocs=None):
+               statlocs=None, verbose=False):
     """
     A shortcut to prepare a simulator object
     **Parameters:**
     
     - afile      : Config file 
     - thetarget  : target name to replace in config file
+    - update_params: (bool) default: False. When True, updates the
+      parameters of the star based on databases such as GAIA DR3
     - instrumental_errors : Bool. Whether to include instrumental
       errors
     - seed       : seed to pass when generating the 
@@ -168,7 +216,8 @@ def prepare_all(afile, thetarget=None, update_params=False,
     if update_params:
         update_star_params(config=asim.config)
     if update_start_end:
-        update_observing_night(config=asim.config, target_coords=target_coords)
+        update_observing_night(config=asim.config, target_coords=target_coords,
+        verbose=verbose)
     asim.prepare_observatory(file=asim.config, statlocs=statlocs)
     if modificators is not None:
         for amod in modificators:
@@ -192,6 +241,9 @@ def prepare_all(afile, thetarget=None, update_params=False,
     asim.prepare_corrector(optimize=compensate_chromatic)
     return asim
 
+def wrap_phase(theta):
+    a = np.mod(theta + np.pi, 2*np.pi) - np.pi
+    return a
 
 import itertools
 def get_uv(puparray):

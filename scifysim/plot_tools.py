@@ -12,8 +12,21 @@ from pdb import set_trace
 
 logit = logging.getLogger(__name__)
 
-# Some colormaps chosen to mirror the default (Cx) series of colors
+# Some colormaps chosen to mirror to avoid deuteranomalyl Reds is swapped with RdBu
+# This avoids confusion between 2 and 3 
 colortraces = [plt.matplotlib.cm.Blues,
+              plt.matplotlib.cm.YlOrBr, # This in order to use oranges for the brouwns
+              plt.matplotlib.cm.Greens,
+              plt.matplotlib.cm.RdPu,
+              plt.matplotlib.cm.Purples,
+              plt.matplotlib.cm.Oranges,
+              plt.matplotlib.cm.Reds,
+              plt.matplotlib.cm.Greys,
+              plt.matplotlib.cm.YlOrRd,
+              plt.matplotlib.cm.GnBu]
+
+# Some colormaps chosen to mirror the default (Cx) series of colors
+colortraces_0 = [plt.matplotlib.cm.Blues,
               plt.matplotlib.cm.YlOrBr, # This in order to use oranges for the brouwns
               plt.matplotlib.cm.Greens,
               plt.matplotlib.cm.Reds,
@@ -148,8 +161,9 @@ def plot_projected_pupil(asim, seq_index,
     * compass : Whether to plot a little North and East symbol for direction
     * compoass_length: In meters the length of the compass needles.
     """
+    if asim.space:
+        grid = False
     anarray = asim.obs.statlocs
-    
     #Get the pointing of the array:
     altaz, PA = asim.obs.get_position(asim.target, asim.sequence[seq_index])
     #Building a grid
@@ -162,7 +176,7 @@ def plot_projected_pupil(asim, seq_index,
         formatted_grid = np.array([parallels,meridians])
         projected_grid = formatted_grid.copy()
         for i in range(formatted_grid.shape[0]):
-            for j in range(formatted_grid.shape[1]):
+            for j in range(formatted_gridid.shape[1]):
                 projected_grid[i,j] = asim.obs.get_projected_array(altaz,
                                                                PA=PA,
                                                                loc_array=formatted_grid[i,j])
@@ -172,7 +186,10 @@ def plot_projected_pupil(asim, seq_index,
     if compass:
         mycompass = np.array([[0., 10.],
                              [10.,0.]])
-        pcompass = asim.obs.get_projected_array(altaz, PA=PA, loc_array=mycompass)
+        if asim.space:
+            pcompass = mycompass
+        else:
+            pcompass = asim.obs.get_projected_array(altaz, PA=PA, loc_array=mycompass)
     else:
         compass = None
         
@@ -189,7 +206,8 @@ def plot_projected_uv(asim, seq_indices=None,
                          grid=False, grid_res=5,
                          compass=True, compass_length=10.,
                          usize=150., dist=140., perspective=True,
-                         show=True):
+                         show=True, dpi=100, legend=True,
+                         **kwargs):
     """
     Designed as a wrapper around plot_pupil that also handles
     additional illustration.
@@ -206,33 +224,63 @@ def plot_projected_uv(asim, seq_indices=None,
     * show    : Whether to call ``plt.show`` before returning
     """
     anarray = asim.obs.statlocs
-    
+    if legend is not False:
+        all_legends = legend
+        legend = True
     if seq_indices is None:
         thesequence = asim.sequence
     else:
         thesequence = asim.sequence[seq_indices]
     alluvs = []
     for atime in thesequence:
-        #Get the pointing of the array:
-        altaz, PA = asim.obs.get_position(asim.target, atime)
-        p_array = asim.obs.get_projected_array(altaz, PA=PA, loc_array=anarray)
+        if not asim.space:
+            #Get the pointing of the array:
+            altaz, PA = asim.obs.get_position(asim.target, atime)
+            p_array = asim.obs.get_projected_array(altaz, PA=PA, loc_array=anarray)
+        else:
+            p_array = asim.obs.get_projected_array(time=atime)
         uvs, indices = util.get_uv(p_array)
         alluvs.append(uvs)
     alluvs = np.array(alluvs)
     #thepistons = asim.obs.get_projected_geometric_pistons(altaz)
     
-    fig = plt.figure(dpi=200)
+    fig = plt.figure(dpi=dpi)
     for at in alluvs:
         for i, abl in enumerate(at):
-            plt.scatter(abl[0], abl[1], color=f"C{i}", label=i)
-            plt.scatter(-abl[0], -abl[1], color=f"C{i}", label=i)
+            plt.scatter(abl[0], abl[1], color=f"C{i}", label=i,**kwargs)
+            plt.scatter(-abl[0], -abl[1], color=f"C{i}", label=i,**kwargs)
     plt.gca().set_aspect("equal")
     plt.xlabel("Baseline U (RA) [m]")
     plt.ylabel("Baseline V (dec) [m]")
+    if legend:
+        plt.legend()
     if show:
         plt.show()
     
     return fig, alluvs
+
+
+def plot_colored_uv(asim, title="Plot of the uv coverage",
+    show=True, figsize=None,
+    dpi=100, **kwargs):
+    wls = asim.lambda_science_range
+    fig = plt.figure(figsize=figsize, dpi=dpi)
+    for at in asim.sequence:
+        asim.point(at, asim.target)
+        mybs = asim.obs.uv
+        auv = mybs[None,:,:]/wls[:,None,None]
+        for asuv, wl in zip(auv, wls):
+            # print(asuv)
+            col = plt.cm.rainbow(util.trois(wl, wls[0], wls[-1], ymin=0.1))
+            plt.scatter(*asuv.T, color=[col], **kwargs)
+            plt.scatter(*(-asuv.T), color=[col], **kwargs)
+    plt.xlabel(f"$ u = \\frac{{b}}{{\lambda}}$")
+    plt.gca().set_aspect("equal")
+    plt.title(title)
+    if show:
+        plt.show()
+    return fig
+
 
 def plot_multiple_maps(maplist, mag,  cmap="viridis", show=True, detector="E",layout=(1,1),
                        single_bar=True, adjust_params=None,
@@ -245,6 +293,9 @@ def plot_multiple_maps(maplist, mag,  cmap="viridis", show=True, detector="E",la
     comparison. 
     
     **hint:** 
+    
+    .. code-block:: language
+    
         adjust_params = {"bottom":0.,
                         "right":0.9,
                         "top":1.,
@@ -263,7 +314,7 @@ def plot_multiple_maps(maplist, mag,  cmap="viridis", show=True, detector="E",la
     * titles     : A list of titles to add to the plots
     * remove_titles: The indices for which to remove titles
     * remove_xlabels: the indices for which to remove xlabels
-    * **kwargs : Keyword arguments to pass to plt.figure()
+    * **kwargs : Keyword arguments to pass to `plt.figure()`
 
     **Returns** the figure object
     """
@@ -495,6 +546,7 @@ def plot_response_map(asim, outputs=None,
                       dpi=100,
                       central_marker=True,
                       layout="h",
+                      cbar=False,
                       **kwargs):
     """
     Plot the response map of the instrument for the target and sequence
@@ -506,7 +558,7 @@ def plot_response_map(asim, outputs=None,
     * wavelength   : np.ndarray containing wl indices (if None: use all the wavelength channels)
     * sequence_index : The indices of the sequence to plot
     * show         : Whether to call plt.show() for each plot
-    * save         : either False or a string containing the root of a path like "maps/figures_"
+    * save         : either False or a string containing the root of a path like `maps/figures_`
     * figsize      : 2 tuple to pass to plt.figure()
     * dpi          : The dpi for the maps
     * layout       : "h" for horizontal array of map, "v" for vertical
@@ -549,6 +601,8 @@ def plot_response_map(asim, outputs=None,
             else :
                 themap = seqmap[wavelength,:,:]
             plt.imshow(themap, extent=asim.map_extent, **kwargs)
+            if cbar:
+                plt.colorbar()
             if central_marker is not False:
                 plt.scatter(**central_marker)
             plt.title("Output %d"%(o))
@@ -590,7 +644,7 @@ def plot_differential_map(asim, kernel=None,
     * wavelength   : np.ndarray containing wl indices (if None: use all the wavelength channels)
     * sequence_index : The indices of the sequence to plot
     * show         : Whether to call plt.show() for each plot
-    * save         : either False or a string containing the root of a path like "maps/figures_"
+    * save         : either False or a string containing the root of a path like `maps/figures_`
     * figsize      : 2 tuple to pass to plt.figure()
     * dpi          : The dpi for the maps
     * **kwargs     : Additional kwargs to pass to imshow
@@ -627,7 +681,10 @@ def plot_differential_map(asim, kernel=None,
             
     difmaps = np.einsum("k o, s w o x y -> s w k x y", kernel,  asim.maps)
     
-    amax = np.max(np.abs(difmaps.sum(axis=1)))
+    if sumall:
+        amax = np.max(np.abs(difmaps.sum(axis=1)))
+    else:
+        amax = np.max(np.abs(difmaps[:,wavelength,:,:,:]))
     
     
     figs = []
@@ -644,7 +701,7 @@ def plot_differential_map(asim, kernel=None,
                 themap = seqmap.sum(axis=0)
             else :
                 themap = seqmap[wavelength,:,:]
-            plt.imshow(themap, extent=asim.map_extent, 
+            plt.imshow(themap, extent=asim.map_extent,
                        vmin=-amax, vmax=amax, **kwargs)
             if cbar:
                 plt.colorbar()
@@ -758,8 +815,12 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     # Normalisation factor is the peak intensity
     normalization = np.sum(np.abs(combiner.Mcn[:,3,:]), axis=-1)**2
     
-    orig_vecs = (np.ones_like(corrector.b), np.ones_like(corrector.c))
-    current_vecs = (corrector.b, corrector.c)
+    orig_vecs = np.array([np.ones_like(corrector.b),
+                np.ones_like(corrector.c),
+                np.ones_like(corrector.e)]).T
+    current_vecs = np.array([corrector.b,
+                             corrector.c,
+                             corrector.e]).T
     origIs = get_Is(orig_vecs, combiner, corrector, lambs)
     bestIs = get_Is(current_vecs, combiner, corrector, lambs)
 
@@ -792,33 +853,36 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     bar_width = 0.15
     
     bar_plot = plt.figure()
-    plt.bar(np.arange(corrector.b.shape[0]),static_tuning_air, width=bar_width, label="Geometric piston")
+    plt.bar(np.arange(corrector.b.shape[0]),static_tuning_air, width=bar_width, label="Geometric tuning")
     plt.bar(np.arange(corrector.b.shape[0])+bar_width,static_correction_air,
-            width=bar_width, label="Geometric compensation")
-    plt.bar(np.arange(corrector.b.shape[0])+4*bar_width,static_tuning_glass, width=bar_width, label="ZnSe length")
+            width=bar_width, label="Geometric comp. tuning")
+    plt.bar(np.arange(corrector.b.shape[0])+4*bar_width, static_tuning_glass, width=bar_width, label="Glass tuning")
     if wv_model is not None:
         pointing_tuning_glass = wv_model[1,:]
         pointing_tuning_air = wv_model[0,:]
         pointing_correction_air = -(corrector.nmean-1)*pointing_tuning_glass
-        total_air += pointing_tuning_air + pointing_correction_air
-        total_glass += pointing_tuning_glass
+        total_air = total_air + pointing_tuning_air + pointing_correction_air
+        total_glass = total_glass + pointing_tuning_glass
         
+        for i in range(total_air.shape[0]):
+            plt.text(np.arange(pointing_tuning_air.shape[0])[i]+2*bar_width,
+                     total_air[i],  f"{total_air[i]*1000:.2f}mm")
+            plt.text(np.arange(pointing_tuning_glass.shape[0])[i]+5*bar_width,
+                     total_glass[i], f"{total_glass[i]*1000:.2f}mm")
         
         plt.bar(np.arange(pointing_tuning_air.shape[0])+2*bar_width, pointing_tuning_air,
-                bottom=static_correction_air, width=bar_width, label="Geometric tuning. atmo.")
+                bottom=static_correction_air, width=bar_width, label="Geometric pointing K to L")
         plt.bar(np.arange(pointing_correction_air.shape[0])+2.5*bar_width, pointing_correction_air,
-                bottom=static_correction_air+pointing_tuning_air, width=bar_width, label="Geometric comp. atmo.")
+                bottom=static_correction_air+pointing_tuning_air, width=bar_width, label="Geometric comp. across L")
         plt.bar(np.arange(pointing_tuning_glass.shape[0])+5*bar_width, pointing_tuning_glass,
-                bottom=static_tuning_glass, width=bar_width, label="Glass lenght atmo.")
+                bottom=static_tuning_glass, width=bar_width, label="Glass length atmo.")
     plt.axhline(0, color="k", linestyle="--", linewidth=0.5)
     plt.legend()
     plt.xlabel("Input index")
     plt.ylabel("Path length [m]")
     plt.title("Path lengths of corrector")
-    if show : plt.show()
-        
-        
-        
+    if show :
+        plt.show()
     #  The morphology residual (enantiomorph excursion)
     
     thetas = np.linspace(-np.pi, np.pi, 10000)

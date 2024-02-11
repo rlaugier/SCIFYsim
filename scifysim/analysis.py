@@ -7,8 +7,10 @@ import dask.array as da
 import copy
 from pdb import set_trace
 from scipy.linalg import sqrtm
+from astropy import units
 
 import matplotlib.pyplot as plt
+import pickle
 
 from scipy.stats import chi2, ncx2, norm
 from scipy.optimize import leastsq
@@ -207,10 +209,10 @@ class noiseprofile(object):
         print(f" s_dark_current = {self.s_dark_current} [e-/s] the dark current")
         print(f" s_enc_bg = {self.s_enc_bg} [e-/s] the enclosure background")
         
-        
 
 class spectral_context(object):
-    def __init__(self, vegafile="config/vega.ini", compensate_chromatic=True):
+    def __init__(self, vegafile="config/vega.ini", compensate_chromatic=True,
+                    verbose=False):
         """Spectral context for magnitude considerations
         
         **Arguments:**
@@ -224,15 +226,26 @@ class spectral_context(object):
               in the same spectral configuration.
         
         * compensate_chromatic: Argument to be passed to the new simulator
+        * verbose     : whether to give more details
         
         """
         if isinstance(vegafile, str):
+            raise AttributeError("no longer supported\
+                Please provide a ConfigParser object (asim.config)")
             self.avega = sf.utilities.prepare_all(vegafile, update_params=False,
-                            instrumental_errors=False, compensate_chromatic=compensate_chromatic)
+                            instrumental_errors=False, compensate_chromatic=compensate_chromatic,
+                            verbose=verbose)
         elif isinstance(vegafile, sf.parsefile.ConfigParser):
             vega_config = self.create_vega_config(vegafile)
+            if vega_config.get("configuration", "location") == "space":
+                use = False
+            else:
+                use = True
             self.avega = sf.utilities.prepare_all(vega_config, update_params=False,
-                            instrumental_errors=False, compensate_chromatic=compensate_chromatic)
+                            instrumental_errors=False,
+                            compensate_chromatic=compensate_chromatic,
+                            verbose=verbose,
+                            update_start_end=use)
             
         else :
             raise TypeError()
@@ -368,6 +381,16 @@ class spectral_context(object):
             raise NotImplementedError
         
 
+class simplified_context(spectral_context):
+    def __init__(self, mycontext): 
+        self.thevegassflux = mycontext.thevegassflux
+
+    def to_pickle(self, apath):
+        """
+        Saving the context to a pickle file.
+        """
+        with open(apath, "wb") as thefile:
+            pickle.dump(self, thefile)
         
     
 def mag2F(mag):
@@ -377,6 +400,167 @@ def F2mag(F):
     mag = -2.5*np.log10(F/1)
     return mag
 
+class BasicETC(object):
+    def __init__(self, asim):
+        """
+        **Parameters:**
+        * ipeak : []
+        * pdiam : [m]
+        * S_collecting [m^2]
+        * lambda_science_range [m]
+        * diffuse []
+        * throughput []
+        * eta [e-/ph]
+        * fiber_etendue [sr]
+        * cold_enclosure [e-/s]
+        * dark_current [e-/s]
+        * src_names []
+        * contribs [ph/s]
+        
+        """
+        asim.integrator.update_enclosure(asim.lambda_science_range)
+        self.peak_contributions = np.abs(asim.combiner.Mcn[:,3,:].mean(axis=0))
+        self.ipeak = np.sum(self.peak_contributions)**2
+        self.pdiam = asim.injector.pdiam * units.m
+        self.odiam = asim.injector.odiam * units.m
+        self.S_collecting = np.pi * self.pdiam**2/4 - np.pi * self.odiam**2/4
+        self.lambda_science_range = asim.lambda_science_range
+        self.diffuse = asim.diffuse
+        self.throughput = self.diffuse[0].get_downstream_transmission(self.lambda_science_range)
+        self.eta = asim.integrator.eta * units.electron / units.photon
+        self.fiber_etendue = np.pi * (self.lambda_science_range / self.pdiam)**2
+        contribs = []
+        self.src_names = []
+        self.cold_enclosure = asim.integrator.det_sources[0]
+        self.dark_current = asim.integrator.det_sources[1]
+        self.dit_0 = asim.config.getfloat("detector", "default_dit") * units.s
+        self.ron = asim.integrator.ron * units.electron
+        for anelement in self.diffuse:
+            contribs.append(self.fiber_etendue \
+                            * anelement.get_own_brightness(self.lambda_science_range) \
+                            * anelement.get_downstream_transmission(self.lambda_science_range))
+            self.src_names.append(anelement.__name__)
+        contribs.append(asim.integrator.det_sources[0] \
+                        / self.eta)
+        self.src_names.append(asim.integrator.det_labels[0])
+        contribs.append(asim.integrator.det_sources[1] \
+                        * np.ones_like(asim.integrator.det_sources[0])
+                        / self.eta)
+        self.src_names.append(asim.integrator.det_labels[1])
+        self.contribs = np.array(contribs) * units.photon/units.s
+        self.contribs_current = self.eta * self.contribs
+
+    @property
+    def contribs_variance_rate(self):
+        """The variance rate in e-**2/s"""
+        variance_rate = self.contribs_current.sum(axis=0).value \
+                        * units.electron**2/units.s
+        return variance_rate
+
+    def get_min_exp_time(self, planet_mag, planet_T, snr=3., dit_0=None,
+                        verbose=False):
+        if dit_0 is None:
+            dit_0 = self.dit_0
+        if not isinstance(dit_0, units.quantity.Quantity):
+            dit_0 = dit_0 * units.s
+        total_current_planet, total_noise = self.show_signal_noise(planet_mag, dit=1.,
+                                                    T=planet_T, verbose=verbose,
+                                                    plot=False, show=False)
+        at = snr**2* np.sqrt(2) * self.contribs_variance_rate \
+                            /total_current_planet**2
+        at2 = snr**2 * np.sqrt(2) \
+            * ( self.contribs_variance_rate \
+                        + self.ron**2/dit_0) \
+              /total_current_planet**2 
+        return at, at2
+
+
+    def planet_photons(self, planet_mag, dit=1., T=None, verbose=False):
+        if not isinstance(dit, units.quantity.Quantity):
+            dit = dit * units.s
+        if T is None:
+            self.fd_planet = sf.sources.mag2flux_bin(
+                            self.lambda_science_range, planet_mag
+            )
+        else:
+            self.fd_planet = sf.sources.magT2flux_bin(
+                            self.lambda_science_range,
+                            planet_mag,
+                            T=T
+            )
+        return dit * self.fd_planet
+
+    def show_signal_noise(self, planet_mag, dit=1., T=None, verbose=True,
+                        decompose=True, plot=True,
+                        show=True):
+        planet_photons = self.planet_photons(planet_mag, dit=dit, T=T,
+                                            verbose=verbose)
+        planet_electrons = planet_photons \
+                        * self.ipeak * self.throughput \
+                        * self.S_collecting * self.eta 
+        if not isinstance(dit, units.quantity.Quantity):
+            dit = dit * units.s
+        if verbose:
+            print(f"Planet photons {np.sum(planet_photons)/dit:.1e} [ph/s] \
+                        for a total of {np.sum(planet_photons):.1e} [ph]")
+            print(f"Mean total transmission {100*np.mean(self.throughput):.2f} \%")
+            print(f"Collecting {self.S_collecting:.1e} [m^2]")
+            print(f"Quantum efficiency {self.eta:.2f}")
+            print(f"Planet e- {np.sum(planet_electrons)/dit:.1e} [e-/s] \
+                        for a total of {np.sum(planet_electrons):.1e} [e-]")
+        background_photons = np.sum(self.contribs * dit, axis=0)
+        background_electrons = background_photons * self.eta
+        background_sigma = np.sqrt(background_electrons.value)
+        total_background_sigma = np.sqrt(background_electrons.sum())*units.electron
+        if verbose:
+            print(f"Background photons {background_photons.sum()/dit:.1e} [ph/s] \
+                        for a total of {background_photons.sum():.1e} [ph]")
+            print(f"Background electrons {background_electrons.sum()/dit:.1e} [ph/s] \
+                        for a total of {background_electrons.sum():.1e} [ph]")
+            print(f"Photon noise std {total_background_sigma:.1e} [e-]")
+            print(f"SNR min {np.min(planet_electrons/background_sigma)}\
+                max {np.max(planet_electrons/background_sigma)}")
+        if plot:
+            contribs_current = self.contribs_current * dit
+            import matplotlib.pyplot as plt
+            afig = plt.figure()
+            base = np.zeros_like(np.sqrt(contrib2variance(contribs_current[0])))
+            print(base.unit)
+            for i, acontrib in enumerate(contribs_current):
+                acontrib_variance = contrib2variance(acontrib)
+                print(acontrib_variance.unit)
+                plt.fill_between(self.lambda_science_range,
+                    y1=base, y2=np.sqrt(base**2 + acontrib_variance).value,
+                    label=f"$\\sigma$ {self.src_names[i]}")
+                base = np.sqrt(base**2 + acontrib_variance)
+            plt.plot(self.lambda_science_range, 
+                    np.sqrt(np.sum(contribs_current, axis=0)).value,
+                    color="r", linestyle="--", label="Total background noise")
+            plt.plot(self.lambda_science_range,
+                    planet_electrons,
+                    label=f"Planet L={planet_mag:.1f}, {T:.0f}K", color="k",)
+            plt.legend(fontsize="x-small")
+            plt.xlabel("Wavelength [m]")
+            plt.ylabel("Planet [e-] \n $\\sigma_{background}$ [e-]")
+            plt.title(f"DIT = {dit} [s]")
+            if show:
+                plt.show()
+        if plot and not show:
+            return planet_electrons, background_sigma, afig
+        else:
+            return planet_electrons, background_sigma
+        
+        
+        
+            
+        
+def contrib2variance(acontrib, unit=units.electron):
+    """
+        Assumes incoming signals proportional to electrons.
+    Tweaks the unit to a poisson variance (e.g. from e- to e-**2)
+    """
+    avar = acontrib*unit
+    return avar
 
 ##################################
 # The energy detector test
@@ -711,7 +895,9 @@ def get_sensitivity_Tnp_old(maps, pfa=0.002, pdet=0.9, postproc_mat=None, ref_ma
         plt.colorbar()
         plt.show()
     return mag_map
- 
+
+
+## Tools for interpretation 
 
 def correlation_map(signal, maps, postproc=None, K=None, n_diffobs=1, verbose=False):
     """
@@ -769,6 +955,7 @@ def correlation_map(signal, maps, postproc=None, K=None, n_diffobs=1, verbose=Fa
 def make_source(params, lambda_range, distance):
     """
     Creates a source from scratch for purpose of model fitting.
+    
     **Arguments:**
     
     * params: An lmfit Parameters object containing:

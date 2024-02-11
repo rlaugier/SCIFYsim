@@ -11,6 +11,7 @@ from . import spectrograph # Simulate the behaviour of the spectrograph and came
 from . import director  # A class to rule them all
 from . import sources   # A library of sources
 from . import correctors # A classes to simulate OPD and chromatic compensators
+from . import plot_tools # Helper functions fot plotting results
 
 from . import n_air # Manages the refractive index of air
 from .n_air import *
@@ -47,4 +48,4 @@ logit = logging.getLogger(__name__)
 
 logit.info("SCIFYsim successfully loaded")
 
-version = "0.2.2"
+version = "dev-0.2.3"

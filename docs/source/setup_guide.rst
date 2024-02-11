@@ -8,6 +8,22 @@ Prerequisites
 
 Managing your environments through ``conda`` is highly recommended.
 
+Quick install
+-------------
+
+The quickest way to install SCIFY
+
+.. code-block::
+
+	conda install git pip
+	pip install git+https://github.com/rlaugier/kernuller
+	pip install git+https://github.com/fmartinache/xaosim
+	pip install git+https://github.com/rlaugier/SCIFYsim@develop
+
+Note that the installation of ``xaosim`` cand pose problems on windows, and will not have all functionality. However it should still be sufficient to run SCIFYsim.
+
+For more control you can install from a local clone of the repo using the classical approach described in the following section:
+
 Kernuller
 ---------
 

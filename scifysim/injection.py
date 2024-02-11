@@ -442,6 +442,7 @@ class focuser(object):
         else:
             self.pupil = pupil
         self.flatpup = self.pupil.flatten()
+        self.screen_bias = np.zeros_like(self.flatpup)
         self.pupilsum = np.sum(self.pupil).astype(np.float32)
 
         self.pdiam  = pdiam                 # pupil diameter in meters
@@ -460,7 +461,12 @@ class focuser(object):
       
         # final tune-up
         self.update_cam()
-        
+        self.define_TT()
+
+    def define_TT(self):
+        """
+        Defines tip and tilt phase screens based on the pupil
+        """
         self.tip = self.pupil*zernike.mkzer(*zernike.noll_2_zern(2),
                                  self.pupil.shape[0], 100,
                                  limit=False)
@@ -473,6 +479,16 @@ class focuser(object):
         self.ntilt = self.tilt.flatten()/self.tilt.flatten().dot(self.tilt.flatten())
 
     # =========================================================================
+
+    def update_pupil(self, pupil, reference_pupil):
+        assert (pupil.dtype==bool), "Given wrong pupil data type. Needs bool."
+        assert (pupil.shape==self.pupil.shape)
+        self.pupil = pupil
+        self.flatpup = self.pupil.flatten()
+        self.screen_bias = np.zeros_like(self.flatpup)
+        self.pupilsum = np.sum(self.pupil).astype(np.float32)
+        self.update_signal(self.pupilsum * 1./reference_pupil.sum())
+        
     def update_cam(self, wl=None, pscale=None, between_pixel=None):
         '''
         Change the filter, the plate scale or the centering of the camera
@@ -527,7 +543,7 @@ class focuser(object):
         - nph: the total number of photons inside the frame
         '''
         if (nph > 0):
-            self.signal = np.flaot32(nph)
+            self.signal = np.float32(nph)
             self.phot_noise = True
         else:
             self.signal = np.float32(1e6)
@@ -600,7 +616,7 @@ class focuser(object):
                 phs += phscreen
             
         wf = np.exp(1j*phs*self.mu2phase)
-        wf *= np.sqrt(self.signal / self.pupil.sum())  # signal scaling
+        wf *= np.sqrt(self.signal / self.pupilsum)  # signal scaling
         wf *= self.pupil                               # apply the pupil mask
         self._phs = phs * self.pupil                   # store total phase
         self.fc_pa = self.sft(wf)                      # focal plane cplx ampl
@@ -620,7 +636,7 @@ class focuser(object):
         """
         #set_trace()
         phs = phscreen.flatten()
-        phs -= np.mean(phs[self.flatpup])
+        phs += -np.mean(phs[self.flatpup]) + self.screen_bias
         # We do only the needed operations thanks to masking
         wf = np.sqrt(self.signal / self.pupilsum) * np.exp(1j*phs[self.flatpup]*self.mu2phase)  # signal scaling
         #wf *= self.pupil                               # apply the pupil mask
@@ -668,9 +684,11 @@ class injector(object):
     def __init__(self,pupil="VLT",
                  pdiam=8.,odiam=1., ntelescopes=4, tt_correction=None,
                  no_piston=False, lambda_range=None,
+                 fiber_mode="diameter",
                  NA = 0.23,
                  a = 4.25e-6,
                  ncore = 2.7,
+                 wl_mfd = None,
                  focal_hrange=20.0e-6,
                  focal_res=50,
                  pscale = 4.5,
@@ -716,11 +734,11 @@ class injector(object):
         self.atmo_config = atmo_config
         
         ##########
-        # Temporary
-        logit.warning("Hard-coded variables:")
-        self.NA = NA #0.23#0.21
-        self.a = a #4.25e-6#3.0e-6
-        self.ncore = ncore #2.7
+        self.fiber_mode = fiber_mode
+        self.NA = NA # 0.23#0.21
+        self.a = a # 4.25e-6#3.0e-6
+        self.ncore = ncore # 2.7
+        self.wl_mfd = wl_mfd
         self.focal_hrange = focal_hrange # 20.0e-6
         self.focal_res = focal_res # 50
         
@@ -773,6 +791,8 @@ class injector(object):
                 confpath = Path(fpath)
         
         # Numerical aperture
+        fiber_mode = theconfig.get("fiber", "fiber_mode")
+        wl_mfd = theconfig.get("fiber", "fib_wav")
         NA = theconfig.getfloat("fiber", "num_app")
         # Core radius
         a = theconfig.getfloat("fiber", "core")
@@ -847,7 +867,6 @@ class injector(object):
         focal_res = focal_res
         focal_hrange = theconfig.getfloat("fiber", "focal_hrange")
         pscale = theconfig.getfloat("fiber", "pscale")
-        logit.warning("Needs a nice way to build pupils in here")
         if pupil is None:
             pres = theconfig.getint("atmo", "pup_res")
             radius = pres//2
@@ -862,8 +881,10 @@ class injector(object):
                  ntelescopes=ntelescopes, tt_correction=None,
                  no_piston=False, lambda_range=lambda_range,
                  atmo_config=atmo_config,
+                 fiber_mode=fiber_mode,
                  NA=NA,
                  a=a,
+                 wl_mfd=wl_mfd,
                  ncore=ncore,
                  focal_hrange=focal_hrange,
                  focal_res=focal_res,
@@ -897,7 +918,12 @@ class injector(object):
                                              xsz=self.focal_res, ysz=self.focal_res, pupil=self.pupil,
                                              pscale=self.pscale, pdiam=self.pdiam,
                                              wl=wl, rm_inj_piston=self.rm_inj_piston) for wl in self.lambda_range])
-            self.fiber = fiber_head()
+            if self.fiber_mode == "gaussian":
+                self.fiber = gaussian_fiber_head()
+            elif self.fiber_mode == "diameter":
+                self.fiber = fiber_head()
+            else :
+                self.fibfiber = fiber_head()
         # Caluclating the focal length of the focuser
         self.focal_length = self.focal_hrange/utilities.mas2rad(self.focal_plane[0][0].fov/2)
         for fp in self.focal_plane:
@@ -1016,6 +1042,12 @@ class injector(object):
     def give_interpolated(self,interpolation):
         """
         This one will yield the method that interpolates all the injection phasors
+
+        **Arguments:**
+
+        * interpolation:  type of interpolation to use based on the computed n (typically n=3)
+          wavefronts.
+        
         """
         while True:
             injection_values = []
@@ -1037,7 +1069,13 @@ class injector(object):
         
     def compute_best_injection(self,interpolation):
         """
-        This one will yield the method that interpolates all the injection phasors
+        This one will yield the method that interpolates ideal injection
+
+        **Arguments:**
+
+        * interpolation:  type of interpolation to use based on the computed n (typically n=3)
+          wavefronts.
+        
         """
         from scipy.interpolate import interp1d
         
@@ -1085,9 +1123,12 @@ class injector(object):
                 focal_wl = []
                 for fiberwl in scope:
                     focal_wl.append(fiberwl.getimage(thescreen))
+                    # focal_wl.append(fiberwl.get_injection(thescreen))
                 focal_planes.append(focal_wl)
             focal_planes = np.array(focal_planes)
             injected = np.sum(focal_planes*self.lpmap[None,:,:,:], axis=(2,3))[0]
+            # print(focal_planes.shape)
+            # injected = np.sum(focal_planes[0])
             #print(injected.dtype)
             injecteds.append(injected)
         injecteds = np.array(injecteds)
@@ -1358,9 +1399,9 @@ class gaussian_fiber_head(object):
         elif mfd is not None:
             self.mfd_value = mfd
             self.wl_mfd_value = wl_mfd
-            self.NA_value = (self.lamb0/(sp.pi*self.w_0)).subs([(self.lamb0, self.mfd_value),
-                                                                (self.w_0, mfd/2)])
-            self.thesubs.append((self.NA, ))
+            self.NA_value = sp.N((self.lamb0/(sp.pi*self.w_0)).subs([(self.lamb0, self.wl_mfd_value),
+                                                                (self.w_0, self.mfd_value/2)]))
+            self.thesubs.append((self.NA, self.NA_value))
         #self.consolidate_equation(self.thesubs)
         if apply:
             self.consolidate_equation(self.thesubs)
@@ -1556,6 +1597,7 @@ class injection_vigneting(object):
         self.vig = injector.injection_rate(injector.lambda_range, self.rr_lambdaond)
         self.vig_func = injector.injection_rate
         self.norm = 1/np.max(self.vig)
+
     def vigneted_spectrum(self, spectrum, lambda_range, exptime, transmission=None):
         """
         

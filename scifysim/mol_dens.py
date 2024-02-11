@@ -57,8 +57,8 @@ def mol_dens( temp, pres, rhum, co2, ph2o=None,
     # Density of dry air and water vapor
     t = temp - 273.15
     Z = 1e0 - (ptot/temp) *\
-            (a0 + a1 * t + a2 * t * t + (b0 + b1 * t) * xw + (c0 + c1 * t) * xw * xw ) +\
-            (ptot/temp)**2 * (d0 + d1 * xw * xw)
+            (a0 + a1*t + a2*t**2 + (b0 + b1*t)*xw + (c0 + c1*t)*xw**2 ) +\
+            (ptot/temp)**2 * (d0 + d1*xw**2)
 
     dax = ptot / (Z * R * temp) * (1e0 - xw)
     if wvdens:

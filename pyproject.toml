@@ -1,0 +1,4 @@
+pylsp.plugins.ruff.enabled = true
+
+
+

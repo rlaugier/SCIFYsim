@@ -7,17 +7,23 @@ import logging
 from kernuller import mas2rad, rad2mas
 from astropy import units
 from pdb import set_trace
+from pathlib import Path
+from copy import deepcopy
 
 import dask.array as da
 
+parent = Path(__file__).parent.absolute()
+
 logit = logging.getLogger(__name__)
+
 
 class simulator(object):
     def __init__(self,file=None, fpath=None):
                  #location=None, array=None,
                 #tarname="No name", tarpos=None, n_spec_ch=100):
         """
-        The object meant to assemble and operate the simulator. Construct the injector object from a config file
+        The object meant to assemble and operate the simulator. 
+        Construct the injector object from a config file
         
         **Parameters:**
         
@@ -39,13 +45,22 @@ class simulator(object):
             self.config = file
         
         self.location = self.config.get("configuration", "location")
-        self.array_config = self.config.get("configuration", "config")
-        raw_array = eval("kernuller.%s"%(self.array_config))
+        raw_array, array_config = sf.utilities.get_raw_array(self.config)
+        self.array_config = array_config; del array_config
+        if self.location == "space": # At this point we only want the "statlocs"
+            raw_array = raw_array[0,:,:]
+            self.space = True
+        else:
+            self.space = False
+        
         self.order = self.config.getarray("configuration", "order").astype(np.int16)
         self.array = raw_array[self.order]
         self.n_spec_ch = self.config.getint("photon", "n_spectral_science")
         
         self.multi_dish = self.config.getboolean("configuration", "multi_dish")
+        
+        self.transverse_dispersion = True
+        self.longitudinal_dispersion = True
         
 
         #self.obs = sf.observatory.observatory(self.array, location=location)
@@ -83,9 +98,18 @@ class simulator(object):
         else :
             logit.error("Did not understand the mode for target")
             raise ValueError("Provide a valid mode for the target creation")
-            
-        self.obs = sf.observatory.observatory(config=theconfig, statlocs=statlocs)
+        if theconfig.get("configuration", "location") == "space":
+            self.obs = sf.observatory.SpaceObservatory(config=theconfig)
+            self.obs.wet_atmo = None
+        else:
+            if self.multi_dish:
+                self.obs = sf.observatory.observatory(config=theconfig, statlocs=statlocs)
+            elif self.multi_dish is False:
+                self.obs = sf.observatory.ObservatoryAltAz(config=theconfig, statlocs=statlocs)
+            # This is the true atmospheric model
+            self.obs.wet_atmo = sf.wet_atmo(self.config)
         
+
     
     
     
@@ -208,7 +232,8 @@ class simulator(object):
                                                  self.lambda_science_range,
                                                  n_chan=n_chan)
         
-    def prepare_corrector(self, config=None, optimize=True):
+    def prepare_corrector(self, config=None, optimize=True,
+                         model_air=None):
         """
         Prepare the corrector object for the simulator, based
         on a config file.
@@ -222,22 +247,161 @@ class simulator(object):
                     
         * optimize : Boolean. If True, will optimize both depth and shape
         * apply    : Boolean. If True, apply the optimization 
+        * model_air: Provide a model for delay line air different from the true air
+          if None (default) the model will be exactly the properties of air.
         """
         if config is None:
             config = self.config
+        myair = sf.wet_atmo(config)
+        if model_air is None:
+            mymodel = deepcopy(myair)
+        else:
+            mymodel = model_air
+            
+        if config.get("corrector","mode") == "znse":
+            print("----------------------------------------")
+            print("Switching to znse")
+            logit.error("Correcting with only ZnSe")
+            self.corrector = sf.correctors.corrector(config,
+                                                 self.lambda_science_range,
+                                                model_comp=myair)
+        elif config.get("corrector","mode") == "znse_co2":
+            print("----------------------------------------")
+            print("Switching to znse+co2")
+            logit.error("Correcting with only ZnSe and CO2")
+            co2_for_compensation = sf.wet_atmo(temp=myair.temp, pres=myair.pres,
+                                               rhum=0., co2=1.0e6)
+            self.corrector = sf.correctors.corrector(config,
+                                                 self.lambda_science_range,
+                                                model_comp=myair,
+                                                model_material2=co2_for_compensation)
         
-        self.corrector = sf.correctors.corrector(config,
-                                                 self.lambda_science_range)
+        elif config.get("corrector","mode") == "dispersed":
+            raise NotImplementedError("Dispersed not implemented")
+        else:
+            raise NotImplementedError("Did not understand the corrector type")
+            
         if optimize is not False:
+            # First tune the null depth, then the shape parameter
             asol = self.corrector.tune_static(self.lambda_science_range,
                                               combiner=self.combiner, apply=optimize)
+            # Usage of sync_params to preserve a fixed difference (the one already existing) between
+            # two of the parameters, preserving the adjustment made previously.
             sol = self.corrector.tune_static_shape(self.lambda_science_range,
                              self.combiner,
                              sync_params=[("b3", "b2", self.corrector.b[3] - self.corrector.b[2]),
                                          ("c3", "c2", self.corrector.c[3] - self.corrector.c[2])],
                              apply=True)
         
+        ft_wavelengths = config.getarray("fringe tracker", "wl_ft")
+        wl_ft = np.linspace(ft_wavelengths[0], ft_wavelengths[-1], 6)
+        self.offband_model = sf.correctors.offband_ft(wl_ft, self.lambda_science_range,
+                                                      wa_true=myair, wa_model=mymodel,
+                                                     corrector=self.corrector)
+
+    def backup_ldc(self):
+        self.bu_corrector = deepcopy(self.corrector)
+        self.bu_offband = deepcopy(self.offband_model)
+
+    def restore_ldc(self):
+        self.corrector = deepcopy(self.bu_corrector)
+        self.offband_model = deepcopy(self.bu_offband)
         
+    def point(self, time, target, refresh_array=False, disp_override=None,
+                    long_disp_override=None, ld_mode_override=None,
+                    ft_mode="phase"):
+        """
+        Points the array towards the target. Updates the combiner
+        
+        **Parameters:**
+        
+        * time    : The time to make the observation
+        * target  : The skycoord object to point
+        * refresh_array : Whether to call a lambdification of the array
+        * disp_override : None (default) follows the value given by self.transverse_dispersion;
+          True force the transverse dispersion;
+          False deactivate transverse dispersion.
+        """
+        # Figuring out what to do for dispersion
+        if self.space:
+            disp_override = False
+            long_disp_override = False
+            
+        if disp_override is None:
+            disp = self.transverse_dispersion
+        elif disp_override is True:
+            disp = True
+        elif disp_override is False:
+            disp = False
+        if long_disp_override is None:
+            long_disp = self.longitudinal_dispersion
+        elif long_disp_override is True:
+            long_disp = True
+        elif long_disp_override is False:
+            long_disp = False
+        if ld_mode_override is None:
+            ld_mode = "ideal"
+        else:
+            ld_mode = ld_mode_override
+        
+        self.obs.point(time, target)
+        self.reset_static()
+        thearray = self.obs.get_projected_array()
+        if refresh_array:
+            self.combiner.refresh_array(thearray)
+        
+        
+        if not self.space:
+            # Handling transverse dispersion
+            altaz = self.obs.altaz
+            zenith_angle = (np.pi/2)*units.rad - altaz.alt.to(units.rad)
+        zero_screen = np.zeros_like(self.injector.focal_plane[0][0].screen_bias).flatten()
+        for i in range(len(self.injector.focal_plane)):
+            if disp:
+                a = self.injector.focal_plane[i][0]
+                # Refreshing the asmospheric dispersion
+                Xs = np.linspace(-a.pdiam/2, a.pdiam/2, a.csz)
+                Ys = np.linspace(-a.pdiam/2, a.pdiam/2, a.csz)
+                XX, YY = np.meshgrid(Xs, Ys)
+
+                #print("zenith_angle", zenith_angle.to(units.deg))
+                ppixel_pistons = YY * np.tan(zenith_angle.value)
+
+                # Note: we do not account for the main image offset here
+                injwl = self.injector.lambda_range
+                #import pdb
+                #pdb.set_trace()
+                pup_phases = self.corrector.theoretical_phase(injwl, ppixel_pistons.flatten(),
+                            model=self.obs.wet_atmo,
+                            add=0,
+                            db=False,
+                            ref="center").reshape((injwl.shape[0], *ppixel_pistons.shape))
+                pup_op = pup_phases*injwl[:,None,None]/(2*np.pi)
+            for j in range(len(self.injector.focal_plane[i])):
+                if disp:
+                    self.injector.focal_plane[i][j].screen_bias = pup_op[j,:,:].flatten()*1e6
+                    # import pdb
+                    # pdb.set_trace()
+                else:
+                    self.injector.focal_plane[i][j].screen_bias = zero_screen
+                    
+            # Handling longitudinal dispersion
+        self.pistons = self.obs.get_projected_geometric_pistons()
+        if long_disp:
+            # For faster computation:
+            # self.ph_disp = self.offband_model.get_ft_correction_on_science(self.pistons)
+            logit.debug("Pointing including longitudinal dispersion")
+            self.ph_disp = self.offband_model.get_phase_science_values(self.pistons,
+                                                                        mode=ld_mode,
+                                                                        ft_mode=ft_mode)
+            self.phasor_disp = np.exp(1j*self.ph_disp)
+        else:
+            assert self.pistons.shape == (self.ntelescopes,1), f"pistons shape {self.pistons.shape}"
+            logit.debug("Pointing with no longitudinal dispersion")
+            self.ph_disp = np.zeros_like(self.offband_model.get_phase_science_values(self.pistons,
+                                                                                    mode=ld_mode,
+                                                                                    ft_mode=ft_mode))            
+            self.phasor_disp = np.exp(1j*self.ph_disp)   
 
 
     def make_metrologic_exposure(self, interest, star, diffuse,
@@ -279,7 +443,7 @@ class simulator(object):
         #taraltaz, tarPA = self.obs.get_position(self.target, time)
         
         #Pointing should be done already
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        array = self.obs.get_projected_array()
         
         self.integrator.static_xx_r = mas2rad(self.injector.vigneting.xx)
         self.integrator.static_yy_r = mas2rad(self.injector.vigneting.yy)
@@ -326,7 +490,7 @@ class simulator(object):
         self.integrator.inj_amp = []
         
         for i in tqdm(range(self.n_subexps)):
-            injected = next(self.injector.get_efunc)(self.lambda_science_range)
+            injected = self.phasor_disp.T * next(self.injector.get_efunc)(self.lambda_science_range)
             tracked = next(self.fringe_tracker.phasor)
             if perfect:
                 injected = self.injector.best_injection(self.lambda_science_range)
@@ -563,7 +727,7 @@ class simulator(object):
         self.n_subexps = int(texp/t_co)
         
         #Pointing should be done already
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        array = self.obs.get_projected_array()
         self.computed_static_xx = self.injector.vigneting.xx
         self.computed_static_yy = self.injector.vigneting.yy
         self.integrator.reset()
@@ -611,7 +775,7 @@ class simulator(object):
             it_subexp = range(self.n_subexps)
         for i in it_subexp:
             self.integrator.exposure += t_co
-            injected = next(self.injector.get_efunc)(self.lambda_science_range)
+            injected = self.phasor_disp.T * next(self.injector.get_efunc)(self.lambda_science_range)
             tracked = next(self.fringe_tracker.phasor)
             if monitor_phase:
                 self.integrator.ft_phase.append(np.angle(tracked[:,0]))
@@ -703,21 +867,9 @@ class simulator(object):
         """
         pass
     
-    def point(self, time, target, refresh_array=False):
-        """
-        Points the array towards the target. Updates the combiner
+    
         
-        **Parameters:**
         
-        * time    : The time to make the observation
-        * target  : The skycoord object to point
-        * refresh_array : Whether to call a lambdification of the array
-        """
-        self.obs.point(time, target)
-        self.reset_static()
-        thearray = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
-        if refresh_array:
-            self.combiner.refresh_array(thearray)
     
     def build_all_maps(self, mapres=100, mapcrop=1.,
                        dtype=np.float32, transmission="default"):
@@ -774,6 +926,23 @@ class simulator(object):
                   np.min(self.vigneting_map.yy),
                   np.max(self.vigneting_map.yy)]
         self.map_extent = extent
+
+    def get_loc_map(self, loc):
+        """
+        Get the nearest pixel location of for a relative coordinate
+        **Arguments:**
+        * loc   : the relative coordinate in [mas]
+         defined in (y, x) as per numpy convention
+
+        Returns: (y, x ) coordinate index in pixel as per numpy conv.
+        """
+        xindex_raw = np.argmin(np.abs(self.vigneting_map.xx - loc[1]))
+        yindex_raw = np.argmin(np.abs(self.vigneting_map.yy - loc[0]))
+        xindex = np.unravel_index(xindex_raw,
+                shape=(self.vigneting_map.resol, self.vigneting_map.resol))[1]
+        yindex = np.unravel_index(yindex_raw,
+                shape=(self.vigneting_map.resol, self.vigneting_map.resol))[0]
+        return (yindex, xindex)
         
         
     def build_all_maps_dask(self, mapres=100, mapcrop=1.,
@@ -868,7 +1037,7 @@ class simulator(object):
         
         """
         self.point(self.sequence[blockindex], self.target)
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        array = self.obs.get_projected_array()
         #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
                 vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
@@ -880,7 +1049,8 @@ class simulator(object):
         #self.mapsource.ss = vigneted_spectrum
         dummy_collected = da.ones(self.lambda_science_range.shape[0])
         perfect_injection = da.ones((self.lambda_science_range.shape[0], self.ntelescopes))\
-            * self.corrector.get_phasor(self.lambda_science_range)
+            * self.corrector.get_phasor(self.lambda_science_range)\
+            * self.phasor_disp
         static_output = self.combine_light_dask(self.mapsource, perfect_injection,
                                            array, dummy_collected,
                                            dosum=False, map_index=map_index)
@@ -908,7 +1078,7 @@ class simulator(object):
         
         """
         self.point(self.sequence[blockindex], self.target)
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        array = self.obs.get_projected_array()
         #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
                 vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
@@ -949,7 +1119,7 @@ class simulator(object):
         **Returns** the ``static_output``: the map
         """
         self.point(self.sequence[blockindex], self.target)
-        array = self.obs.get_projected_array(self.obs.altaz, PA=self.obs.PA)
+        array = self.obs.get_projected_array()
         #injected = self.injector.best_injection(self.lambda_science_range)
         vigneted_spectrum = \
                 vigneting_map.vigneted_spectrum(np.ones_like(self.lambda_science_range),
@@ -961,7 +1131,8 @@ class simulator(object):
         #self.mapsource.ss = vigneted_spectrum
         dummy_collected = np.ones(self.lambda_science_range.shape[0])
         perfect_injection = np.ones((self.lambda_science_range.shape[0], self.ntelescopes))\
-            * self.corrector.get_phasor(self.lambda_science_range)
+            * self.corrector.get_phasor(self.lambda_science_range)\
+            * self.phasor_disp
         static_output = self.combine_light(self.mapsource, perfect_injection,
                                            array, dummy_collected,
                                            dtype=dtype,
@@ -969,12 +1140,21 @@ class simulator(object):
         static_output = static_output.swapaxes(0, -1)
         static_output = static_output.swapaxes(0, 1)
         #static_output = static_output# * np.sqrt(vigneted_spectrum[:,None,:])
-        # lambdified argument order matters! This should remain synchronous
+        # lambdifiked argument order matters! This should remain synchronous
         # with the lambdify call
         # incoherently combining over sources
         # Warning: modifying the array
         #combined = np.abs(static_output*np.conjugate(static_output)).astype(np.float32)
         return static_output
+
+    @property
+    def gain_map(self):
+        ds_sr = self.vigneting_map.ds_sr
+        # Since maps contain eta, their unti is in electron/photon * m**2 * sr
+        mapunits = units.electron / units.photon * units.m**2 * units.sr
+        throughput_map = 1/(ds_sr*units.sr) * self.maps*mapunits 
+        return throughput_map
+
         
     def __call__(self):
         pass
