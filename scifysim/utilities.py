@@ -84,9 +84,9 @@ def get_raw_array(config):
         apath = Path(config.get("configuration", "array_motion_file"))
         relative = config.getboolean("configuration", "array_motion_local")
         if relative:
-            mypath = parent/apath
-        else:
             mypath = apath
+        else:
+            mypath = parent/apath
         raw_array = np.load(mypath)
         assert len(raw_array.shape) == 3 # Check (n_t, n_tel, X)
         assert raw_array.shape[2] == 3 # check 3D position

@@ -49,20 +49,10 @@ European Union's Horizon 2020 research and innovation program (*grant agreement 
 Dependencies:
 -------------
 
-The following packages are required:
+Last tested with python 3.9 . The following packages are required:
 
 - kernuller `<https://github.com/rlaugier/kernuller>`_
-- numpy
-- sympy
-- scipy
-- numexpr
-- matplotlib
-- tqdm
-- lmfit
-- astropy
-- astroplan
-- astroquery
-- einops
+- xaosim `<https://github.com/fmartinache/xaosim>`
 
 Optional:
 
