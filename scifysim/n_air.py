@@ -122,6 +122,15 @@ class wet_atmo(object):
                          co2=self.co2,
                          eso=self.eso)
         return self.Nair
+    def report_setup(self):
+        print("================================")
+        print(f"{self.name}")
+        print(f"Temperature : {self.temp:.3e} K")
+        print(f"Pressure : {self.pres:.3e} mbar")
+        print(f"CO2 content : {self.co2:.1f} ppm")
+        print(f"Relative humidity : {self.rhum:.1f} %")
+        print("================================")
+        
     
     def report_setup(self):
         print("================================")
