@@ -403,6 +403,7 @@ class SpaceObservatory(observatory):
             self.motion = self.rotation
         elif self.motion_type == "interpolation":
             self.motion = self.interpolation
+            # TODO: switch on "array_time_type" : array or file. 
             self.interp_t = self.config.getarray("configuration", "array_time_steps")
             self.interp_y = raw_array
             self.interpolation_function = interp1d(self.interp_t,
