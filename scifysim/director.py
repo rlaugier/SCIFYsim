@@ -11,7 +11,7 @@ from pathlib import Path
 from copy import deepcopy
 
 import dask.array as da
-import jax.numpy as jp
+# import jax.numpy as jp
 
 parent = Path(__file__).parent.absolute()
 
