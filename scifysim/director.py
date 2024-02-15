@@ -11,6 +11,7 @@ from pathlib import Path
 from copy import deepcopy
 
 import dask.array as da
+import jax.numpy as jp
 
 parent = Path(__file__).parent.absolute()
 
@@ -658,6 +659,7 @@ class simulator(object):
         myinput = inst_phasor*geom_phasor*amplitude[:,None]
         output_amps = np.einsum("ijk,ik->ij",self.combiner.Mcn, myinput)
         return output_amps
+    
     def geometric_phasor(self, alpha, beta, anarray):
         """
         Returns the complex phasor corresponding to the locations
@@ -667,7 +669,7 @@ class simulator(object):
         
         * alpha         : The coordinate matched to X in the array geometry
         * beta          : The coordinate matched to Y in the array geometry
-        * anarray       : The array geometry (n_input, 2)
+        * fanarray       : The array geometry (n_input, 2)
         
         **Returns** : A vector of complex phasors
         """
@@ -675,6 +677,9 @@ class simulator(object):
         phi = self.k[:,None] * anarray.dot(a)[None,:]
         b = np.exp(1j*phi)
         return b
+
+    
+
     def geometric_phasor_dask(self, alphas, betas, anarray):
         """
         Returns the complex phasor corresponding to the locations

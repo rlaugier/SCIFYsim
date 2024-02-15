@@ -323,6 +323,7 @@ class ObservatoryAltAz(observatory):
             logit.debug("old array "+ str(loc_array))
             logit.debug("new array "+ str(newarray))
         return newarray
+
     def get_projected_geometric_pistons(self, taraltaz=None):
         """
         **Parameters:**
@@ -491,6 +492,16 @@ class SpaceObservatory(observatory):
     #     pass
 
     def get_position(self, target, time, grid_times_targets=False):
+        """
+        Computes the position of the collectors as a function of time
+
+        **Arguments** : 
+
+        * target : Ignored
+        * time   : The time of the observations (astropy.Time)
+          such as found in `simulator.sequence`
+        * grid_times_target : Ignored
+        """
         dummy_taraltaz = self.dummy_location.altaz(time, target=target,
                             grid_times_targets=grid_times_targets)
         t = time.to_value("unix") - self.t_0
@@ -498,20 +509,38 @@ class SpaceObservatory(observatory):
         aPA = np.arctan2(x_A_t[0,1], x_A_t[0,0])
         return dummy_taraltaz, aPA
 
-    def get_projected_array(self, taraltaz=None, time=None, PA=None, loc_array=None):
+    def get_projected_array(self, taraltaz=None, time=None,
+                        PA=None, loc_array=None,
+                        c3d=False,):
+        """
+        Returns the projected collector array
+
+        **Arguments : **
+        * tarltaz : Ignored
+        * time : (optional) A given time at which to point
+        * PA   : (Optional) Ignored
+        * loc_array : (Optional) Overrides the current array
+          configuration from pointing to use this one instead.
+        * c3d  : (optional) When True, returns the array as a 
+        set of 3D vector. When False (default) 2D vectors are given
+            
+        """
         if time is not None:
             self.point(time)
         if loc_array is None:
             loc_array = self.x_A_t
         x_P = np.einsum("o i , a i -> a o", self.P_M, loc_array)
-        return x_P
+        if c3d:
+            return x_P
+        else:
+            return x_P[:,:2]
 
     def get_projected_geometric_pistons(self):
         """
             Computes the distance traveled past the reference plane:
         $P_A - A + AM$
         """
-        P_A = self.get_projected_array()
+        P_A = self.get_projected_array(c3d=True)
         P_A_A = self.x_A_t  - P_A
         norm_PAA = np.linalg.norm(P_A_A, axis=1)
         M_A = self.x_M - self.x_A_t
@@ -528,6 +557,7 @@ def basic_interpolation(t,):
 def basic_z_rotation(theta):
     """
         basic rotation matrix around z
+    **Returns**: The rotation matrix.
     """
     M_R = np.array([[np.cos(theta), np.sin(theta), 0,],
                     [-np.sin(theta), np.cos(theta),0,],
