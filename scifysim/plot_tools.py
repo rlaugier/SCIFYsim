@@ -176,7 +176,7 @@ def plot_projected_pupil(asim, seq_index,
         formatted_grid = np.array([parallels,meridians])
         projected_grid = formatted_grid.copy()
         for i in range(formatted_grid.shape[0]):
-            for j in range(formatted_gridid.shape[1]):
+            for j in range(formatted_grid.shape[1]):
                 projected_grid[i,j] = asim.obs.get_projected_array(altaz,
                                                                PA=PA,
                                                                loc_array=formatted_grid[i,j])
@@ -193,8 +193,11 @@ def plot_projected_pupil(asim, seq_index,
     else:
         compass = None
         
-    p_array = asim.obs.get_projected_array(altaz, PA=PA, loc_array=anarray)
-    thepistons = asim.obs.get_projected_geometric_pistons(altaz)
+    p_array = asim.obs.get_projected_array(altaz, PA=PA)
+    if not asim.space:
+        thepistons = asim.obs.get_projected_geometric_pistons(altaz)
+    else:
+        thepistons = np.ones_like(p_array[:,0])
     
     fig = plot_pupil(p_array, thepistons, compass=pcompass,
                     usize=usize, dist=dist, perspective=perspective,
