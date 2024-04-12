@@ -669,7 +669,7 @@ class simulator(object):
         
         * alpha         : The coordinate matched to X in the array geometry
         * beta          : The coordinate matched to Y in the array geometry
-        * fanarray       : The array geometry (n_input, 2)
+        * anarray       : The array geometry (n_input, 2)
         
         **Returns** : A vector of complex phasors
         """
