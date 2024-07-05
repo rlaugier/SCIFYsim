@@ -1,6 +1,15 @@
 import numpy as np
 import jax.numpy as jp
 
+"""   
+## object-oriented version
+relies on self.Mcj, self.Mcn, self.k (=2pi/lamb) 
+
+
+    
+"""
+
+
 def combine_light_jax(self, asource, injected, input_array, collected,
                       dosum=True, dtype=np.float64):
         """
