@@ -919,7 +919,7 @@ class injector(object):
                                              pscale=self.pscale, pdiam=self.pdiam,
                                              wl=wl, rm_inj_piston=self.rm_inj_piston) for wl in self.lambda_range])
             if self.fiber_mode == "gaussian":
-                self.fiber = gaussian_fiber_head()
+                self.fiber = gaussian_fiber_head(NA=self.NA)
             elif self.fiber_mode == "diameter":
                 self.fiber = fiber_head()
             else :
@@ -930,10 +930,11 @@ class injector(object):
             for wl in range(self.lambda_range.shape[0]):
                 fp[wl].signal = 1.
                 fp[wl].phot_noise = False
-        self.LP01 = fiber_head()
+        self.LP01 = self.fiber
         self.LP01.full_consolidation(self.NA, self.a, self.ncore)
         ### Still need to figure out the focal scale
         self.lpmap = self.LP01.numerical_evaluation(self.focal_hrange, self.focal_res, self.lambda_range)
+        self.lpmap = np.abs(self.lpmap)
         quartiles = []
         for i, amap in enumerate(self.lpmap):
             quartiles.append([i*np.max(amap)/4 for i in range(4)])
