@@ -184,7 +184,7 @@ def plot_projected_pupil(asim, seq_index,
         projected_grid = None
         
     if compass:
-        mycompass = np.array([[0., 10.],
+        mycompass = compass_length*np.array([[0., 10.],
                              [10.,0.]])
         if asim.space:
             pcompass = mycompass
