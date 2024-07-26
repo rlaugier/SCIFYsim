@@ -77,6 +77,8 @@ class observatory(object):
         else:
             self.statlocs = statlocs
         
+        self.pdiams = self.config.getarray("configuration","diam")
+        
         self.theta = sp.symbols("self.theta")
         #R handles the azimuthal rotation
         self.Rs = sp.Matrix([[sp.cos(self.theta), sp.sin(self.theta)],
@@ -116,6 +118,7 @@ class observatory(object):
         * target    : The astroplan.FixedTarget object of interest. Usually resolved in the 
           self.build_observign_sequence() routine with astroplan.FixedTarget.from_name()
         """
+        self.time = obstime
         self.altaz = self.observatory_location.altaz(target=target,
                                                    time=obstime)
         self.PA = self.observatory_location.parallactic_angle(obstime, target=target)
@@ -371,6 +374,7 @@ class SpaceObservatory(observatory):
         self.observatory_location = location
         self.dummy_location = astroplan.Observer.at_site("paranal", timezone="UTC")
         self.n_tel = self.config.getint("configuration", "n_dish")
+        self.pdiams = self.config.getarray("configuration","diam")
         
         # self.array_config = self.config.get("configuration", "config")
         raw_array, array_config = utilities.get_raw_array(self.config)
@@ -477,6 +481,7 @@ class SpaceObservatory(observatory):
         * `self.x_A_t`
         * `self.R_rotation` when relevant
         """
+        self.time = time
         t = self.time2t(time)
         motion_result = self.motion(t, full_output=True)
         if self.motion_type == "rotation":

@@ -184,7 +184,7 @@ def plot_projected_pupil(asim, seq_index,
         projected_grid = None
         
     if compass:
-        mycompass = np.array([[0., 10.],
+        mycompass = compass_length*np.array([[0., 10.],
                              [10.,0.]])
         if asim.space:
             pcompass = mycompass
@@ -432,14 +432,14 @@ def plot_injection(theinjector, show=True, noticks=True):
     focal_plane = plt.figure(figsize=(2*theinjector.ntelescopes,2*2),dpi=100)
     for i in range(theinjector.ntelescopes):
         plt.subplot(2,theinjector.ntelescopes,i+1)
-        plt.imshow(np.abs(theinjector.focal_planes[i,0]), cmap="Blues")
+        plt.imshow(np.abs(theinjector.focal_plane[i][0].getimage()), cmap="Blues")
         CS = plt.contour(theinjector.lpmap[0], levels=theinjector.map_quartiles[0], colors="black")
         plt.clabel(CS, inline=1, fontsize=6)
         if noticks:
             plt.xticks([])
             plt.yticks([])
         plt.subplot(2,theinjector.ntelescopes,i+1+theinjector.ntelescopes)
-        plt.imshow(np.abs(theinjector.focal_planes[i,-1]), cmap="Reds")
+        plt.imshow(np.abs(theinjector.focal_plane[i][-1].getimage()), cmap="Reds")
         CS = plt.contour(theinjector.lpmap[-1], levels=theinjector.map_quartiles[-1], colors="black")
         plt.clabel(CS, inline=1, fontsize=6)
         if noticks:
@@ -623,6 +623,8 @@ def plot_response_map(asim, outputs=None,
             plt.savefig(save+"Compound_maps_%04d.png"%(i), dpi=dpi)
         if show:
             plt.show()
+        figs.append(fig)
+    return figs
             
 def plot_differential_map(asim, kernel=None,
                       wavelength=None,

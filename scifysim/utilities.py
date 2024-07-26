@@ -1176,6 +1176,23 @@ def eval_perf(afile,t_exp,n_frames=100,
     
     return asim, prof, characteristics
 
+def get_index_pos(ax, ay, thesim):
+    """
+    Get the coordinates on the discrete map
+    of a relative position
+    
+    *Arguments*:
+    * ax     : [mas] Coordinate x
+    * ay     : [mas] Coordinate y
+    * thesim : Simulator object
+    """
+    ms = thesim.mapsource
+    mapshape = thesim.mapshape
+    dist = np.hypot((ms.xx_r - mas2rad(ax)), (ms.yy_r - mas2rad(ay)))
+    idx = np.argmin(dist, keepdims=True)
+    loc = np.unravel_index(idx, mapshape[-2:])
+    return loc
+
 def produce_maps(asim, prof, adit=1.,
                 mypfa=0.01,mypdet=0.9,
                 base_name="/tmp/R200_twinmaps_",

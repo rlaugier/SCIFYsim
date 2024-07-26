@@ -19,6 +19,7 @@ from copy import deepcopy
 parent = Path(__file__).parent.absolute()
 #znse_file = parent/"data/znse_index.csv"
 znse_file = parent/"data/znse_Connolly.csv"
+caf2_file = parent/"data/caf2_index.csv"
 
 
 
@@ -746,12 +747,12 @@ def generic_vacuum(lambs, add=1.):
     """
     Add should always be 1.
     """
-    return lambs * add
+    return np.ones_like(lambs) + add
 def no_material(lambs, add=0):
     """
     Add should always be 0.
     """
-    return lambs * 0.
+    return np.zeros_like(lambs) + add
 
 class corrector(object):
     def __init__(self, config, lambs, file=None, order=3,
@@ -786,9 +787,9 @@ class corrector(object):
         """
         self.config = config
         if file is None:
-            nplate_file = np.loadtxt(znse_file,delimiter=";")
+            nplate_file = np.loadtxt(znse_file, delimiter=";")
         else: 
-            nplate_file = file
+            nplate_file = np.loadtxt(parent/"data"/file, delimiter=";")
         self.nplate = interp.interp1d(nplate_file[:,0]*1e-6, nplate_file[:,1],
                                      kind=order, bounds_error=False )
         if model_comp is None:
@@ -940,7 +941,7 @@ class corrector(object):
         Returns the theoertical value of dcomp for a given value of compensator
         plate, to correct for the pure piston term introduced.
         **Arguments**:
-        * c   : The value of glass plaet [m]
+        * c   : The value of glass plate [m]
         """
         dcomp = -(self.nmean-1)*c
         return dcomp

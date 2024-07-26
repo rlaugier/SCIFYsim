@@ -15,6 +15,21 @@ direc_data_file = parent/"data/directional_coupling_bar.csv"
 import logging
 logit = logging.getLogger(__name__)
 
+def sp_clip_rows(mat, clip):
+    """
+        A convenience function to clip sympy matrices
+    equivalent to `mat[np.logical_not(clip),:]`
+
+    *Arguments:*
+    * mat : A sympy matrix
+    * clip : A numpy boolean array of the rows to remove
+
+    *Return:* clipped sympy matrix
+    """
+    a = np.logical_not(clip)
+    ass = np.argwhere(a)
+    mymat = sp.Matrix([mat[anass[0],:] for anass in ass])
+    return mymat
 
 def four2six():
     sigma = sp.symbols("sigma", real=True)
@@ -307,7 +322,7 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False,
     combiner = E1@E@D@C2@C@B@A@A0
     if offset:
         combiner = combiner# + sp.ones(combiner.shape[0], combiner.shape[1])*1.e-20*lamb
-    #fprint(combiner2, "\mathbf{M}_2 = ")
+    # fprint(combiner2, "\mathbf{M}_2 = ")
     
     if ph_shifters is not None:
         thesubs = [(phi[0], ph_shifters[0]),
@@ -321,11 +336,22 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False,
         combiner = combiner.subs(thesubs)
     if tap_ratio is not None:
         combiner = combiner.subs([(sigma, tap_ratio)])
+    if np.isclose(tap_ratio, 0.):
+        clip_photo = True
+    else:
+        clip_photo = False
+
+    bright = np.array([False, False, True, False, False, True, False, False], dtype=bool)
+    dark = np.array([False, False, False, True, True, False, False, False], dtype=bool)
+    photometric = np.array([True, True, False, False, False, False, True, True], dtype=bool)
+
+    if clip_photo:
+        combiner = sp_clip_rows(combiner, photometric)
+        bright = bright[np.logical_not(photometric)]
+        dark = dark[np.logical_not(photometric)]
+        photometric = photometric[np.logical_not(photometric)]
     
     if include_masks:
-        bright = np.array([False, False, True, False, False, True, False, False])
-        dark = np.array([False, False, False, True, True, False, False, False])
-        photometric = np.array([True, True, False, False, False, False, True, True])
         return combiner, bright, dark, photometric
     else:
         return combiner
@@ -501,7 +527,6 @@ def kernel_nuller_6T(include_masks=False, tap_ratio=None):
         return coupler
     
 
-
 def VIKiNG(ph_shifters=None, include_masks=False, tap_ratio=None):
     """
     optional :
@@ -534,10 +559,20 @@ def VIKiNG(ph_shifters=None, include_masks=False, tap_ratio=None):
     
     if tap_ratio is not None:
         VIKiNG = VIKiNG.subs([(sigma, tap_ratio)])
+    if np.isclose(tap_ratio, 0.):
+        clip_photo = True
+    else:
+        clip_photo = False
+    bright = np.array([False, False, True, False, False, False, False, False, False, False, False], dtype=bool)
+    dark = np.array([False, False, False, True, True, True, True, True, True, False, False], dtype=bool)
+    photometric = np.array([True, True, False, False, False, False, False, False, False,  True, True], dtype=bool)
+    if clip_photo:
+        VIKiNG = sp_clip_rows(VIKiNG, photometric)
+        bright = bright[np.logical_not(photometric)]
+        dark = dark[np.logical_not(photometric)]
+        photometric = photometric[np.logical_not(photometric)]
+        
     if include_masks:
-        bright = np.array([False, False, True, False, False, False, False, False, False, False, False])
-        dark = np.array([False, False, False, True, True, True, True, True, True, False, False])
-        photometric = np.array([True, True, False, False, False, False, False, False, False,  True, True])
         return VIKiNG, bright, dark, photometric
     else:
         return VIKiNG

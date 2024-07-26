@@ -262,20 +262,24 @@ class simulator(object):
         if config.get("corrector","mode") == "znse":
             print("----------------------------------------")
             print("Switching to znse")
-            logit.error("Correcting with only ZnSe")
-            self.corrector = sf.correctors.corrector(config,
-                                                 self.lambda_science_range,
-                                                model_comp=myair)
-        elif config.get("corrector","mode") == "znse_co2":
-            print("----------------------------------------")
-            print("Switching to znse+co2")
-            logit.error("Correcting with only ZnSe and CO2")
-            co2_for_compensation = sf.wet_atmo(temp=myair.temp, pres=myair.pres,
-                                               rhum=0., co2=1.0e6)
+            logit.error("Correcting with only glass")
+            glass_file = config.get("corrector", "glass_file")
             self.corrector = sf.correctors.corrector(config,
                                                  self.lambda_science_range,
                                                 model_comp=myair,
-                                                model_material2=co2_for_compensation)
+                                                file=glass_file)
+        elif config.get("corrector","mode") == "znse_co2":
+            print("----------------------------------------")
+            print("Switching to znse+co2")
+            logit.error("Correcting with only glass and CO2")
+            co2_for_compensation = sf.wet_atmo(temp=myair.temp, pres=myair.pres,
+                                               rhum=0., co2=1.0e6)
+            glass_file = config.get("corrector", "glass_file")
+            self.corrector = sf.correctors.corrector(config,
+                                                 self.lambda_science_range,
+                                                model_comp=myair,
+                                                model_material2=co2_for_compensation,
+                                                file=glass_file)
         
         elif config.get("corrector","mode") == "dispersed":
             raise NotImplementedError("Dispersed not implemented")
@@ -669,7 +673,7 @@ class simulator(object):
         
         * alpha         : The coordinate matched to X in the array geometry
         * beta          : The coordinate matched to Y in the array geometry
-        * fanarray       : The array geometry (n_input, 2)
+        * anarray       : The array geometry (n_input, 2)
         
         **Returns** : A vector of complex phasors
         """

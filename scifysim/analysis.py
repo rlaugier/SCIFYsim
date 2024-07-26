@@ -17,7 +17,6 @@ from scipy.optimize import leastsq
 
 logit = logging.getLogger(__name__)
 
-
 class noiseprofile(object):
     def __init__(self, integ, asim, diffobs_series, verbose=False, n_pixsplit=1):
         """
@@ -56,8 +55,8 @@ class noiseprofile(object):
         self.mask_dark = asim.combiner.dark
         self.mask_bright = asim.combiner.bright
         self.mask_phot = asim.combiner.photometric
+        self.K = asim.combiner.K
         
-
         # Photon noise
         self.dit_0 = asim.injector.screen[0].step_time * integ.n_subexps
         self.m_0, self.mp0 = asim.context.get_mags_of_sim(asim)
@@ -113,7 +112,9 @@ class noiseprofile(object):
         
         
         sigma_phot = np.sqrt(self.eta * dit * (s_d + s_s))
-        sigma_phot_d = np.sqrt(np.sum(sigma_phot[:,self.mask_dark]**2, axis=-1)) # kernel will need different treatment here
+        vark = np.einsum("ki, wi-> wk", sigma_phot**2, np.abs(self.K))
+        sigma_phot_d = np.sqrt(vark.flatten())
+        # sigma_phot_d = np.sqrt(np.sum(sigma_phot[:,self.mask_dark]**2, axis=-1)) # kernel will need different treatment here
         sigma_phot_photo = sigma_phot[:,self.mask_phot]
         sigma_phot_bright = sigma_phot[:,self.mask_bright]
         
@@ -123,7 +124,7 @@ class noiseprofile(object):
         else:
             sigma_phi_d = self.eta * self.k_phi * Fs
             return sigma_phot_d, sigma_phi_d
-        
+
     def diff_noise_floor_dit(self, m_star, dit, matrix=False):
         """Returns the compound noise floor
         WARNING: if matrix is True, then the result is
@@ -132,7 +133,7 @@ class noiseprofile(object):
         **Arguments:**
         
         * m_star       : Magnitude of the star
-        * dit          : Detector integration time [s]
+        * dit          : Detector integratioon time [s]
         
         **Returns:**
         
