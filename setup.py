@@ -3,7 +3,7 @@ import sys
 from setuptools import setup
 
 setup(name='scifysim',
-      version='0.2.3', # defined in the __init__ module
+      version='0.2.4', # defined in the __init__ module
       description='A python tool for simulating high contrast interferometric observations from the ground or in space.',
       url='--',
       author='Romain Laugier',
