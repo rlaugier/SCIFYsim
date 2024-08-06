@@ -177,7 +177,7 @@ class ee(object):
 
 def prepare_all(afile, thetarget=None, update_params=False,
                instrumental_errors=True, seed=None,
-               crop=1., target_coords=None,
+               crop=0.7, res=100, target_coords=None,
                compensate_chromatic=True,
                modificators=None, update_start_end=True,
                statlocs=None, verbose=False):
@@ -226,7 +226,7 @@ def prepare_all(afile, thetarget=None, update_params=False,
         asim.config.set("fringe tracker", "dry_scaling", "0.0001")
         asim.config.set("fringe tracker", "wet_scaling", "0.0001")
         asim.config.set("atmo", "correc", "300.")
-    asim.prepare_injector(file=asim.config, seed=seed, crop=crop)
+    asim.prepare_injector(file=asim.config, seed=seed, crop=crop, res=res)
     asim.prepare_combiner(asim.config)
     asim.prepare_sequence(asim.config)
     asim.prepare_fringe_tracker(asim.config, seed=seed)

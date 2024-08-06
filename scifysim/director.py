@@ -125,7 +125,7 @@ class simulator(object):
                  pscale=None,
                  interpolation=None,
                  res = 50,
-                 crop = 1.,
+                 crop = 0.7,
                  injector=None, seed=None):
         """
         **Either:**
