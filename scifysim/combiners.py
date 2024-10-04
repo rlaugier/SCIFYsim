@@ -355,6 +355,140 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False,
         return combiner, bright, dark, photometric
     else:
         return combiner
+    
+
+def angel_woolf_ph_mod(ph_shifter_01=None, ph_shifters=None, include_masks=False, tap_ratio=None):
+    """
+    optional :
+    ph_shifter_01 : a list of phase shifters applied to input 1 and 0
+                (eg: ph_shifters=[sp.pi/2, sp.pi/2])
+    ph_shifters : a list of phase shifters in between the 2 stages
+                (eg: for kernel-nuller ph_shifters=[0, sp.pi/2])
+    include_masks: If true, the output will include bright, dark and photometric masks
+                selecting the relevant outputs
+    in: 4
+    out: 8 (ph0, ph1, bright0, dark0, dark1, bright1, ph2, ph3)
+    symbols:
+        sigma  : the photometric ratio (in intensity)
+        phi_0   : the phase shifter1
+        phi_1   : the phase shifter2
+    Build a bracewell combiner with photometric outputs.
+    
+    
+    Returns: the sympy.Matrix of the combiner
+    Free symbols can be retrieved in list(M.free_symbols)
+    """
+    sigma = sp.symbols("sigma", real=True)
+    phi = sp.Matrix(sp.symbols('phi0:{}'.format(2), real=True))
+    psi = sp.Matrix(sp.symbols('psi0:{}'.format(2), real=True))
+    psplitter1 = sp.Matrix([[sp.sqrt(sigma)],
+                            [sp.sqrt(1-sigma)]])
+    psplitter2 = kernuller.crossover@psplitter1
+    #fprint(psplitter1, "\mathbf{Y}_1 = ")
+    #fprint(psplitter2, "\mathbf{Y}_2 = ")
+    #fprint(kernuller.xcoupler, "\mathbf{X} = ")
+
+    A0 = sp.diag(kernuller.ph_shifter(psi[0]), kernuller.ph_shifter(psi[1]), sp.eye(2))
+    A = sp.diag(psplitter1, psplitter1, psplitter2, psplitter2)
+    B = sp.diag(1, kernuller.crossover, sp.eye(2), kernuller.crossover, 1)
+    C = sp.diag(sp.eye(2),kernuller.xcoupler, kernuller.xcoupler, sp.eye(2))
+    C2 = sp.diag(sp.eye(4), kernuller.crossover, sp.eye(2))
+    D = sp.diag(sp.eye(3), kernuller.ph_shifter(phi[0]), kernuller.ph_shifter(phi[1]), sp.eye(3))
+    E = sp.diag(sp.eye(3), kernuller.xcoupler, sp.eye(3))
+    E1  = sp.diag(sp.eye(3), kernuller.ph_shifter(sp.pi/2), kernuller.ph_shifter(sp.pi), sp.eye(3))
+
+
+    combiner = E1@E@D@C2@C@B@A@A0
+    #fprint(combiner2, "\mathbf{M}_2 = ")
+    
+    if ph_shifter_01 is not None:
+        thesubs = [(psi[0], ph_shifter_01[0]),
+                  (psi[1], ph_shifter_01[1])]
+        combiner = combiner.subs(thesubs)
+    
+    if ph_shifters is not None:
+        thesubs = [(phi[0], ph_shifters[0]),
+                  (phi[1], ph_shifters[1])]
+        combiner = combiner.subs(thesubs)
+    
+    if tap_ratio is not None:
+        combiner = combiner.subs([(sigma, tap_ratio)])
+    
+    if include_masks:
+        bright = np.array([False, False, True, False, False, True, False, False])
+        dark = np.array([False, False, False, True, True, False, False, False])
+        photometric = np.array([True, True, False, False, False, False, True, True])
+        return combiner, bright, dark, photometric
+    else:
+        return combiner    
+    
+
+def angel_woolf_inph_mod(ph_shifter_01=None, ph_shifters=None, include_masks=False, tap_ratio=None):
+    """
+    optional :
+    ph_shifter_01 : a list of phase shifters applied to input 1 and 0
+                (eg: ph_shifters=[sp.pi/2, sp.pi/2])
+    ph_shifters : a list of phase shifters in between the 2 stages
+                (eg: for kernel-nuller ph_shifters=[0, sp.pi/2])
+    include_masks: If true, the output will include bright, dark and photometric masks
+                selecting the relevant outputs
+    in: 4
+    out: 8 (ph0, ph1, bright0, dark0, dark1, bright1, ph2, ph3)
+    symbols:
+        sigma  : the photometric ratio (in intensity)
+        phi_0   : the phase shifter1
+        phi_1   : the phase shifter2
+    Build a bracewell combiner with photometric outputs.
+    
+    
+    Returns: the sympy.Matrix of the combiner
+    Free symbols can be retrieved in list(M.free_symbols)
+    """
+    sigma = sp.symbols("sigma", real=True)
+    phi = sp.Matrix(sp.symbols('phi0:{}'.format(2), real=True))
+    psi = sp.Matrix(sp.symbols('psi0:{}'.format(2), real=True))
+    psplitter1 = sp.Matrix([[sp.sqrt(sigma)],
+                            [sp.sqrt(1-sigma)]])
+    psplitter2 = kernuller.crossover@psplitter1
+    #fprint(psplitter1, "\mathbf{Y}_1 = ")
+    #fprint(psplitter2, "\mathbf{Y}_2 = ")
+    #fprint(kernuller.xcoupler, "\mathbf{X} = ")
+
+    A0 = sp.diag(kernuller.ph_shifter(psi[0]), sp.eye(2), kernuller.ph_shifter(psi[1]))
+    A = sp.diag(psplitter1, psplitter1, psplitter2, psplitter2)
+    B = sp.diag(1, kernuller.crossover, sp.eye(2), kernuller.crossover, 1)
+    C = sp.diag(sp.eye(2),kernuller.xcoupler, kernuller.xcoupler, sp.eye(2))
+    C2 = sp.diag(sp.eye(4), kernuller.crossover, sp.eye(2))
+    D = sp.diag(sp.eye(3), kernuller.ph_shifter(phi[0]), kernuller.ph_shifter(phi[1]), sp.eye(3))
+    E = sp.diag(sp.eye(3), kernuller.xcoupler, sp.eye(3))
+    E1  = sp.diag(sp.eye(3), kernuller.ph_shifter(sp.pi/2), kernuller.ph_shifter(sp.pi), sp.eye(3))
+
+
+    combiner = E1@E@D@C2@C@B@A@A0
+    #fprint(combiner2, "\mathbf{M}_2 = ")
+    
+    if ph_shifter_01 is not None:
+        thesubs = [(psi[0], ph_shifter_01[0]),
+                  (psi[1], ph_shifter_01[1])]
+        combiner = combiner.subs(thesubs)
+    
+    if ph_shifters is not None:
+        thesubs = [(phi[0], ph_shifters[0]),
+                  (phi[1], ph_shifters[1])]
+        combiner = combiner.subs(thesubs)
+    
+    if tap_ratio is not None:
+        combiner = combiner.subs([(sigma, tap_ratio)])
+    
+    if include_masks:
+        bright = np.array([False, False, True, False, False, True, False, False])
+        dark = np.array([False, False, False, True, True, False, False, False])
+        photometric = np.array([True, True, False, False, False, False, True, True])
+        return combiner, bright, dark, photometric
+    else:
+        return combiner    
+    
+    
 
 
 def kernel_nuller_3T(include_masks=False, tap_ratio=None):
