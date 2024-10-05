@@ -203,7 +203,7 @@ class combiner(object):
         # Switch on combiner type
         if combiner_type == "angel_woolf_ph":
             hasph = True
-            M, bright, dark, photo = sf.combiners.angel_woolf_ph(ph_shifters=ph_shifters,
+            M, bright, dark, photo = sf.combiners.angel_woolf_ph(ph_shifters=[0.0, sp.pi/2],
                                                             include_masks=True, tap_ratio=tap_ratio)
         elif combiner_type == "angel_woolf_ph_chromatic":
             hasph = True
@@ -214,6 +214,31 @@ class combiner(object):
                 lamb = sp.symbols("lambda")
             else:
                 lamb, = M.free_symbols
+        # ------------------------------------------------- 
+        elif combiner_type == "nott_kernel_null":
+            hasph = True
+            M, bright, dark, photo = sf.combiners.nott_kernel_null(Mc=Mc, include_masks=True, tap_ratio=tap_ratio)
+            if M.free_symbols == set():
+                lamb = sp.symbols("lambda")
+            else:
+                lamb, = M.free_symbols
+                
+        elif combiner_type == "nott_symmetric":
+            hasph = True
+            M, bright, dark, photo = sf.combiners.nott_symmetric(Mc=Mc, include_masks=True, tap_ratio=tap_ratio)
+            if M.free_symbols == set():
+                lamb = sp.symbols("lambda")
+            else:
+                lamb, = M.free_symbols
+                
+        elif combiner_type == "nott_nuller":
+            hasph = True
+            M, bright, dark, photo = sf.combiners.nott_nuller(Mc=Mc, include_masks=True, tap_ratio=tap_ratio)
+            if M.free_symbols == set():
+                lamb = sp.symbols("lambda")
+            else:
+                lamb, = M.free_symbols   
+        # -----------------------------------------------
         elif combiner_type == "GLINT":
             hasph = True
             M, bright, dark, photo = sf.combiners.GLINT(include_masks=True,
