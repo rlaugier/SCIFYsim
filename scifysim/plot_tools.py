@@ -807,7 +807,7 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     * corrector : A corrector object
     * lambs     : The wavelengths to plot [m]
     * combiner  : A combiner object
-    * wv_model  : A wate vapor model (`wet_atmo`) to display along
+    * wv_model  : A water vapor model (`wet_atmo`) to display along
     * show      : Whether to call ``plt.show``
     * out_label : A list of output labels to pass to 
     

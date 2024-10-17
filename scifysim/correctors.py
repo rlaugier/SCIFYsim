@@ -973,9 +973,9 @@ class corrector(object):
         
         * lambs :     The wavelength channels to consider [m]
         * a     :     Vector of the amplitude term
-        * b     :     Vetor of the geometric piston term [m]
-        * c     :     Vetor of the dispersive piston term [m]
-        * e     :     Vettor of the addtional corretction material term [m]
+        * b     :     Vector of the geometric piston term [m]
+        * c     :     Vector of the dispersive piston term [m]
+        * e     :     Vector of the addtional corretction material term [m]
         * dcomp :     A length of air to compensate for the plate [m]
           if dcomp is None: it will be computed based on `self.c`
         """

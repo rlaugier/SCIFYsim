@@ -356,53 +356,6 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False,
     else:
         return combiner
 
-def nott_kernel_null(include_masks=False, offset=True, tap_ratio=None, Mc=M_KG):
-
-    result = angel_woolf_ph_chromatic(ph_shifters=[0, sp.pi/2],
-                                      include_masks=include_masks,
-                                      offset=offset, tap_ratio=tap_ratio,
-                                      Mc=Mc, input_ph_shifters=None)
-    return result
-
-def nott_symmetric(include_masks=False, offset=True, tap_ratio=None, Mc=M_KG):
-
-    input_shifters = [sp.pi/2, sp.pi/2, 0.0, 0.0]
-    result = angel_woolf_ph_chromatic(ph_shifters=[0, sp.pi/2],
-                                      include_masks=include_masks,
-                                      offset=offset, tap_ratio=tap_ratio,
-                                      Mc=Mc, input_ph_shifters=input_shifters)
-    return result
-
-def nott_nuller(include_masks=False, offset=True, tap_ratio=None, Mc=M_KG):
-
-    input_shifters = [sp.pi, 0.0, sp.pi, 0.0]
-    result = angel_woolf_ph_chromatic(ph_shifters=[0, sp.pi/2],
-                                      include_masks=include_masks,
-                                      offset=offset, tap_ratio=tap_ratio,
-                                      Mc=Mc, input_ph_shifters=input_shifters)
-
-    combiner = result[0] if include_masks else result
-    if np.isclose(tap_ratio, 0.):
-        clip_photo = True
-    else:
-        clip_photo = False
-
-    bright = np.array([False, False, False, True, True, False, False, False], dtype=bool)
-    dark = np.array([False, False, True, False, False, True, False, False], dtype=bool)
-    photometric = np.array([True, True, False, False, False, False, True, True], dtype=bool)
-
-    if clip_photo:
-        combiner = sp_clip_rows(combiner, photometric)
-        bright = bright[np.logical_not(photometric)]
-        dark = dark[np.logical_not(photometric)]
-        photometric = photometric[np.logical_not(photometric)]
-
-    if include_masks:
-        return combiner, bright, dark, photometric
-    else:
-        return combiner
-
-
 def kernel_nuller_3T(include_masks=False, tap_ratio=None):
     """
     optional :

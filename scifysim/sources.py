@@ -64,7 +64,7 @@ class transmission_emission(object):
             self.obs = observatory
         
         
-    def get_trans_emit(self,wl, bright=False, no=False):
+    def get_trans_emit(self, wl, bright=False, no=False):
         """
         Return the transmission or brightness of the object depending on th bright keyword
         
@@ -87,9 +87,9 @@ class transmission_emission(object):
             else:
                 result = 0.
         transmission = self.trans(wl)
-        if self.airmass :
+        if self.airmass:
             sky = transmission**self.obs.altaz.secz.value
-        else :
+        else:
             sky = transmission
         
         # Determining brightness:
@@ -267,7 +267,7 @@ class enclosure(transmission_emission):
         self.T = T
         self.airmass = False
             
-    def get_total_emission(self, wl, bandwidth=None, bright=False,n_sub=10,):
+    def get_total_emission(self, wl, bandwidth=None, bright=False, n_sub=10,):
         """
         Similar begaviour as get_trans_emit() but averages the effect over each spectral channel.
         
