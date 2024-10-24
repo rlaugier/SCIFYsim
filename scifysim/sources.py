@@ -660,35 +660,51 @@ class resolved_source(object):
         return P.to(units.L_sun)
 
 class exozodi_simple(object):
-    def __init__(self, lambda_range, distance, radius,
-                 star, z, 
-                 angular_res=10, radial_res=15, offset=(0.,0.),
-                 build_map=True ):
+    def __init__(self, lambda_range, distance, r_in, r_out, star, z, scale=True, 
+                 alpha=0.34, T_sub=1500, angular_res=10, radial_res=15, 
+                 offset=(0.,0.), build_map=True):
         """
         **Parameters:**
         
         * distance             : Distance of the source [pc]
-        * radius             : The radius of the source [R_sun]
+        * r_in                 : The inner radius of the disk [au]
+        * r_out                : The outer radius of the disk [au]
         * star                 : a star object
         * z                    : The amount of zodi  [zodi]
-        * L_star               : the star luminosity [L_sun]
+        * scale                : scale r_in/r_out based on star luminosity
+        * alpha                : surface density power law exponent
+        * T_sub                : dust sublimation temperture (limits r_in) [K]
         * angular_res          : Number of bins in position angle
         * radial_res           : Number of bins in radius
-        * offset               : Offset of the source radial ([mas], [deg])
+        * offset               : Offset of the source radial (x, y) [mas]
         * build_map            : Whether to precompute a mapped spectrum 
         
         
         After building the map, ``self.ss`` (wl, pos_x, pos_y) contains the map
         of flux density corresponding to positions ``self.xx``, ``self.yy``
         """
+        
+        self.alpha = alpha
+        # self.r_in = 0.034422617777777775 * np.sqrt(self.L_star.to(units.solLum).value) 
+        self.r_0 = np.sqrt(self.L_star)
+        self.sigma_zero = 7.11889e-8  # Sigma_{m,0} from Kennedy+2015 (doi:10.1088/0067-0049/216/2/23)
+        self.T_sub = T_sub
+        
         self.lambda_range = lambda_range
         self.distance = distance
-        self.radius = radius
         self.offset = offset
+        if scale:
+            r_in *= self.r_0
+            r_out *= self.r_0
+
+        self.r_in = r_in
+        self.r_out = r_out
+        
         # self.ang_radius is in radians
-        self.ang_radius = self.radius / (self.distance*units.pc.to(units.R_sun))
+        self.ang_r_in = self.r_in / (self.distance*units.pc.to(units.au))
+        self.ang_r_out = self.r_out / (self.distance*units.pc.to(units.au))
         self.build_grid(angular_res, radial_res)
-        self.total_solid_angle = np.pi * self.ang_radius**2 # disk section [sr]
+        self.total_solid_angle = np.pi * (self.ang_r_out**2 - self.ang_r_in**2) # disk section [sr]
         # self.total_flux_density = self.distant_blackbody()/ self.total_solid_angle # [ph / s / m^2 / sr]
 
          # calculate the parameters required by Kennedy2015
@@ -696,11 +712,6 @@ class exozodi_simple(object):
         self.L_star = self.star.L
         self.T_star = self.star.T
         self.z = z
-        
-        self.alpha = 0.34
-        self.r_in = 0.034422617777777775 * np.sqrt(self.L_star.to(units.solLum).value)
-        self.r_0 = np.sqrt(self.L_star)
-        self.sigma_zero = 7.11889e-8  # Sigma_{m,0} from Kennedy+2015 (doi:10.1088/0067-0049/216/2/23)
         
         self.exozodiacal_disk()
      
@@ -714,8 +725,10 @@ class exozodi_simple(object):
         * radial_res  : Number of radial elements
         
         """
-        radial_step = self.ang_radius/radial_res
-        self.theta, self.r = np.meshgrid( np.linspace(0., 2*np.pi, angular_res, endpoint=False), np.linspace(0.+radial_step/2, self.ang_radius-radial_step/2, radial_res, endpoint=True) )
+        radial_step = self.ang_r_out/radial_res
+        self.theta, self.r = np.meshgrid( 
+            np.linspace(0., 2*np.pi, angular_res, endpoint=False), 
+            np.linspace(0.+radial_step/2, self.ang_r_out-radial_step/2, radial_res, endpoint=True) )
         # Angular positions referenced East of North
         self.xx = -self.r*np.sin(self.theta)*units.rad.to(units.mas) \
                     - self.offset[0]
