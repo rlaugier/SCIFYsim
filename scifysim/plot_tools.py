@@ -936,3 +936,90 @@ def make_cursor(loc, size, extent=None, color="k",
     plt.plot(np.array([loc[1] - 2*size, loc[1] - size]),
              s*(np.ones(2) * loc[0]),
              color=color, **kwargs)
+    
+def plot_disk(disk):
+    
+    import astropy.units as u
+    from matplotlib.colors import LogNorm
+
+    distance = disk.distance * u.pc.to(u.au) # au
+    out = []
+    size_scale = LogNorm(vmin=disk.sigma.min(), vmax=disk.sigma.max())
+    # color_scale = LogNorm(vmin=disk.t_dust.min().value, vmax=disk.t_dust.max().value)
+
+    def mas2au(x):
+        return x * u.mas.to(u.rad) * distance
+    def au2mas(x):
+        return x / distance * u.rad.to(u.mas)
+    
+    r, ind = np.unique(disk.r_au, return_index=True)
+    t_dust = disk.t_dust.flatten()[ind] # [K]
+    s_dens = disk.sigma.flatten()[ind] # [AU^2 / AU^2]
+    flux = disk.total_flux_density.sum(axis=0).flatten()[ind] # [ph / s / m^2 / sr]
+    
+    flux_total = disk.get_spectrum_map().sum()
+    
+    fig, ax_dist = plt.subplots()
+    ax_dist.set_aspect(1)
+    sc = ax_dist.scatter(disk.xx_f, disk.yy_f, s=size_scale(disk.sigma.flatten())*20, 
+                         c=disk.t_dust.flatten().value, cmap='cool')
+    ax_dist.set_title('Disk Sampling')
+    ax_dist.set_xlabel('Relaveive Position [mas]')
+    ax_dist.set_ylabel('Relaveive Position [mas]')
+    fig.colorbar(sc, label='Temperature [K]')
+
+    ax_au = ax_dist.secondary_xaxis('top', functions=(mas2au, au2mas))
+    ax_au.set_xlabel('Relaveive Position [au]')
+    
+    fig.tight_layout()
+    out.append(fig)
+
+    subplot_kw = {'xscale': 'log', 'yscale': 'log'}
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3), sharex=True,
+                             subplot_kw=subplot_kw)
+    fig.suptitle('Disk Properties')
+    for ax in axes:
+        ax.set_xlabel('Radius [AU]')
+
+    ax_temp, ax_dens, ax_flux = axes
+    
+    ax_temp.plot(r, t_dust)
+    ax_temp.set_ylabel('Temperature [K]')
+    
+    ax_dens.plot(r, s_dens)
+    ax_dens.set_ylabel('Surface Density [$\mathrm{AU^2 / AU^2}$]')
+    
+    ax_flux.plot(r, flux)
+    ax_flux.set_ylabel('Flux Density [$\mathrm{ph / s / m^2 / sr}$]')
+    ax_flux.text(0.1, 0.1, f'tot = {flux_total:.1} [ph / s / m^2]', 
+                 transform=ax_flux.transAxes, ha='left')
+    
+    fig.tight_layout()
+    out.append(fig)
+
+    return out
+
+
+def plot_argand(phasor, cmap=plt.cm.Blues):
+    
+    pnts = phasor.size
+    
+    if phasor.dtype == complex:
+        x = phasor.real
+        y = phasor.imag
+    else:
+        y = phasor
+        x = np.arange(pnts)
+    colors = [cmap(i/pnts) for i in range(pnts)]    
+    
+    fig, ax = plt.subplots()
+    ax.scatter(x, y, c=colors)
+    ax.set_aspect(1)
+    ax.set_xlim(-1.2,1.2)
+    ax.set_ylim(-1.2,1.2)
+    
+    
+    
+    
+    
+    

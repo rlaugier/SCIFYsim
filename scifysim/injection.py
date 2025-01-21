@@ -75,7 +75,7 @@ class atmo(object):
     def __init__(self, name="GRAVITY+", csz = 512,
                  psz=200,
                  lsz=8.0, r0=0.2,
-                 ro_wl=3.5e-6, L0=10.0,
+                 r0_wl=3.5e-6, L0=10.0,
                  fc=24.5, correc=1.0, seed=None,
                  wind_speed = 1., 
                  wind_angle = 0.1,
@@ -149,12 +149,13 @@ class atmo(object):
             self.correc  = correc
             self.lo_excess = lo_excess
             self.fc      = fc
+        self.seed = seed
             
         kolm, self.modul    = atmo_screen(screen_dimension=self.csz, screen_extent=self.lsz,
                                           r0=self.r0, L0=self.L0,
                                           fc=self.fc, correc=self.correc,
                                           lo_excess=self.lo_excess,
-                                          pdiam=self.pdiam, seed=seed)
+                                          pdiam=self.pdiam, seed=self.seed)
         self.kolm = kolm.real
         
         self.qstatic = np.zeros((self.psz, self.psz))
@@ -251,6 +252,9 @@ class atmo(object):
 
         if fc is not None:
             self.fc = fc
+            
+        if seed is not None:
+            self.seed = seed
         
         # Converting to a piston screen in microns at this point
         # r0 is now expected at the mean of the wl band
@@ -258,7 +262,7 @@ class atmo(object):
                                           r0=self.r0, L0=self.L0,
                                           fc=self.fc, correc=self.correc,
                                           lo_excess=self.lo_excess,
-                                          pdiam=self.pdiam, seed=seed)
+                                          pdiam=self.pdiam, seed=self.seed)
         self.kolm    = 1.0e6 * self.r0_wl / (2*np.pi) * kolm.real  # converting to piston in microns
 
         self.kolm2   = np.tile(self.kolm, (2,2))
@@ -640,10 +644,26 @@ class focuser(object):
         injected = self.flat_masked_lppup.dot(wf)
         return injected
     
+    def get_field_dist(self):
+        '''
+        Computes the complex electric field distribution on the aperture plane.
+        
+        abs(FT(e_dist))**2 gives the primary beam of the sub apterture, and 
+        due to the linear phase shift in `self.screen_bias`, should account for
+        transverse dispersion.
+
+        '''
+        phs = self.screen_bias.reshape(self.csz, self.csz)
+        e_dist = self.lppup * np.sqrt(self.signal / self.pupilsum) \
+            * np.exp(1j*phs*self.mu2phase)  # signal scaling
+        return e_dist
+    
     def get_tilt(self, phscreen=None):
         ''' Measures the tip-tilt measurement corresponding to the wavefront
         provided. The tip-tilt is in a 2-array and the unit is lambda/D 
         where D is the extent of the pupil mask.
+
+        Output multiplied by lambda/D gives radians.
         
 
         **Parameters:**
@@ -696,16 +716,17 @@ class injector(object):
         
         **Parameters:**
         
-        - pupil     : The telescope pupil to consider
-        - pdiam     : The pupil diameter
+        - pupil     : The telescope pupil to consider (name or definition)
+        - pdiam     : The pupil diameter [m]
+        - odiam     : Diameter of obstruction [m]
         - ntelescopes : The number of telescopes to inject
-        - pupil     : Apupil name or definition
         - tt_correction : Amount of TT to correct (Not implemented yet)
         - no_piston : Remove the effect of piston at the injection 
           (So that it is handled only by the FT.)
         - NA        : Then numerical aperture of the fiber
         - a         : The radius of the core (m)
-        - ncore    : The refractive index of the core
+        - ncore     : The refractive index of the core
+        - wl_mfd    : Minimum wavelength of fiber
         - focal_hrange : The half-range of the focal region to simulate (m)
         - focal_res : The total resolution of the focal plane to simulate
         - pscale    : The pixel scale for imager setup (mas/pix)
@@ -806,7 +827,7 @@ class injector(object):
         #nwls = theconfig.getint("photon", "n_spectral_science")
         nwl = theconfig.getint("photon", "n_spectral_injection")
         if "None" in interpolation:
-            nwl = nwls
+            nwl = nwl  #s
         elif "nearest":
             pass
         elif "linear" in interpolation:
@@ -895,7 +916,7 @@ class injector(object):
     def _setup(self, seed=None):
         """
         Common part of the setup
-        Nota: the seed for creation of the screen is incremented by 1 between pupils
+        Note: the seed for creation of the screen is incremented by 1 between pupils
         """
         self.phscreensz = self.pupil.shape[0]
         
@@ -1126,6 +1147,9 @@ class injector(object):
             # print(focal_planes.shape)
             # injected = np.sum(focal_planes[0])
             #print(injected.dtype)
+            
+            # injected: wavelength dependent amplitude sensitivity integrated
+            # over focal plane for one input aperture at some offset
             injecteds.append(injected)
         injecteds = np.array(injecteds)
         points_x, points_y = np.array(np.meshgrid(self.lambda_range, offset))
@@ -1148,6 +1172,78 @@ class injector(object):
             
         # Discarding the first value : quick fix for python 3.9??
         discard = next(self.get_efunc)(self.lambda_range)
+        
+    @staticmethod
+    def gaussian_radial_fov(x, y, diam, wl, offset, width=0.6735):
+        '''
+        Gaussian raidal model for a instrument primary beam.
+
+        Parameters
+        ----------
+        x : 
+            Relative position of samples [mas].
+        y : 
+            Relative position of samples [mas].
+        wl : 
+            wavelength [m].
+        diam: 
+            Diameter of sub aperture [m].
+        offset : 
+            Offset from transverse dispersion (x, y) [mas].
+        width :
+            Gaussian width scaling factor. Default value is optimized for 
+            VLTI UTs.
+
+        Returns
+        -------
+        Beam of sub aperture at sampled points.
+
+        '''
+
+        r_0 = (width * wl/diam)*units.rad.to(units.mas) # [mas]
+        r = np.hypot(x-offset[0], y-offset[1])
+        return np.exp(-(r/r_0)**2)
+    
+    def build_fov_interpolator(self, pad_fact=40, crop=200, res=1_000,
+                               trans_disp=False):
+        
+        from numpy.fft import fft2, fftshift, fftfreq
+        from scipy.interpolate import RegularGridInterpolator, interpn
+        
+        lambs, vals = [], []
+        axis_samp = np.linspace(-crop, crop, res)
+        X, Y = np.meshgrid(axis_samp, axis_samp)
+
+        for inj in self.focal_plane[0]:
+            
+            e_field = inj.get_field_dist()
+            if not trans_disp:
+                # remove linear phase 
+                e_field = np.abs(e_field)
+            
+            scale_pix = inj.pdiam / e_field.shape[0] # m / pix 
+            n = pad_fact * e_field.shape[0] // 2
+            e_field = np.pad(e_field, [[n,n],[n,n]])
+
+            beam = np.abs(fftshift(fft2(fftshift(e_field))))**2
+            beam /= beam.max()
+            b_axis = fftshift(fftfreq(e_field.shape[0], scale_pix/inj.wl)) # normalize for wavelenth -> [rad]
+            b_axis = b_axis * units.rad.to(units.mas)  # [mas]
+            
+            vals_interp = interpn((b_axis, b_axis), beam, 
+                                  np.array([X.flatten(), Y.flatten()]).T,
+                                  method='linear').reshape(res, res)
+            
+            lambs.append(inj.wl)
+            vals.append(vals_interp)
+            
+        self.beam_interp = RegularGridInterpolator(
+                                    (lambs, axis_samp, axis_samp), 
+                                    vals, method='linear', 
+                                    bounds_error=False, fill_value=0.0)    
+        
+        
+
 
     
     

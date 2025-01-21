@@ -234,7 +234,7 @@ class offband_ft(object):
         **Arguments:**
         
         * wl_ft : The wavelength at which the fringe tracking is done.
-          OPD will be set to produce 0 phase at the man FT wavelength
+          OPD will be set to produce 0 phase at the mean FT wavelength
         * wl_science : The wavelength range for which the correction is optimized
         * wa_true : True wet air model
         * wa_model : Modeled wet air model (as measured at the telescopes)

@@ -36,6 +36,7 @@ class noiseprofile(object):
         
         * integ.mean_starlight (run ``integ.mean_starlight = np.mean(starlights, axis=0)``)
         * integ.mean_planetlight (run ``integ.mean_planetlight = np.mean(planetlights, axis=0)``)
+        * integ.mean_disklight (run ``integ.mean_disklight = np.mean(disklights, axis=0)``)
         * integ.get_static() (run ``integ.static = asim.computed_static``)
 
         **Notes:**
@@ -70,6 +71,7 @@ class noiseprofile(object):
         print(f" s_dark_current = {self.s_dark_current} [ph-/s] equivalent the dark current")
         print(f" s_enc_bg = {self.s_enc_bg} [ph-/s] equivalent the enclosure background")
         self.p_0 = integ.mean_planetlight / self.dit_0
+        self.d_0 = integ.mean_disklight / self.dit_0
         # The total background current per channel
         self.s_total_bg_current_ch = self.mynpix * self.s_dark_current +\
                                     self.eta * self.mynpix * self.s_enc_bg +\

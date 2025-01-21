@@ -194,7 +194,8 @@ class simulator(object):
 
 
     def prepare_integrator(self, config=None, keepall=False,
-                           n_sources=4, infinite_well=False):
+                           n_sources=4, infinite_well=False,
+                           seed=None):
         """
         Prepares the integraro object that rules the pixel properties
         of the detector.
@@ -212,7 +213,8 @@ class simulator(object):
         self.integrator = sf.spectrograph.integrator(config=config,
                                                      keepall=keepall,
                                                      n_sources=n_sources,
-                                                     infinite_well=infinite_well)
+                                                     infinite_well=infinite_well,
+                                                     seed=seed)
 
 
     def prepare_spectrograph(self, config=None, n_chan=None):
@@ -381,6 +383,8 @@ class simulator(object):
                             add=0,
                             db=False,
                             ref="center").reshape((injwl.shape[0], *ppixel_pistons.shape))
+                
+                # `pup_op` represents optical path offset along pupil with length units [m]
                 pup_op = pup_phases*injwl[:,None,None]/(2*np.pi)
             for j in range(len(self.injector.focal_plane[i])):
                 if disp:
@@ -409,7 +413,7 @@ class simulator(object):
             self.phasor_disp = np.exp(1j*self.ph_disp)
 
 
-    def make_metrologic_exposure(self, interest, star, diffuse,
+    def make_metrologic_exposure(self, planet, disk, star, diffuse,
                                  int_sources=None,
                                  texp=1., t_co=2.0e-3, time=None,
                                  monitor_phase=True, dtype=np.float32,
@@ -425,7 +429,8 @@ class simulator(object):
 
         **Parameters:**
 
-        * interest  : sf.sources.resolved_source object representing the source of intereest (planet)
+        * planet    : sf.sources.resolved_source object representing the source of intereest (planet)
+        * disk      : sf.sources.exozodi_simple object representing a dust distribution
         * star      : sf.sources.resolved_source object representing the star
         * diffuse   : a list of sf.transmission_emission objects linked in a chain.
         * texp      : Exposure time (seconds)
@@ -485,16 +490,20 @@ class simulator(object):
 
 
         logit.warning("Currently no vigneting (requires a normalization of vigneting)")
+        # `filtered_starlight` is a wavelength dependent efficieny term for how
+        # well light propagates from the target to the detector.
         filtered_starlight = diffuse[0].get_downstream_transmission(self.lambda_science_range)
         # collected will convert from [ph / s /m^2] to [ph]
         collected = filtered_starlight * self.injector.collecting * t_co
         self.integrator.starlight = []
         self.integrator.planetlight = []
+        self.integrator.disklight = []
         self.integrator.ft_phase = []
         self.integrator.inj_phase = []
         self.integrator.inj_amp = []
 
         for i in tqdm(range(self.n_subexps)):
+            # `injected` is wavelength dependent complex phase modification at the combiner inputs
             injected = self.phasor_disp.T * next(self.injector.get_efunc)(self.lambda_science_range)
             tracked = next(self.fringe_tracker.phasor)
             if perfect:
@@ -508,8 +517,11 @@ class simulator(object):
             injected = (injected * tracked).T * self.corrector.get_phasor(self.lambda_science_range)
             combined_starlight = self.combine_light(star, injected, array, collected)
             self.integrator.starlight.append(combined_starlight)
-            combined_planetlight = self.combine_light(interest, injected, array, collected)
+            combined_planetlight = self.combine_light(planet, injected, array, collected)
             self.integrator.planetlight.append(combined_planetlight)
+            combined_disklight = self.combine_light(disk, injected, array, collected)
+            self.integrator.disklight.append(combined_disklight)
+            
 
             # incoherently combining over sources
             # Warning: modifying the array
@@ -519,6 +531,7 @@ class simulator(object):
         #mean, std = self.integrator.compute_stats()
         self.integrator.starlight = np.array(self.integrator.starlight, dtype=dtype)
         self.integrator.planetlight = np.array(self.integrator.planetlight, dtype=dtype)
+        self.integrator.disklight = np.array(self.integrator.disklight, dtype=dtype)
         self.integrator.ft_phase = np.array(self.integrator.ft_phase, dtype=dtype)
         self.integrator.inj_phase = np.array(self.integrator.inj_phase, dtype=dtype)
         self.integrator.inj_amp = np.array(self.integrator.inj_amp, dtype=dtype)
@@ -527,6 +540,7 @@ class simulator(object):
             print("### WARNING: idealized injection used")
             print("mean phasor : ", np.mean(injected.T,axis=1))
         return self.integrator
+
     def combine_light(self, asource, injected, input_array, collected,
                       dosum=True, dtype=np.float64):
         """
@@ -683,6 +697,7 @@ class simulator(object):
         output_amps = np.einsum("ijk,ik->ij",self.combiner.Mcn.astype(np.complex64), myinput)
         #set_trace()
         return output_amps
+
     def combine(self, inst_phasor, geom_phasor, amplitude=None):
         """
         Computes the output INTENSITY based on the input AMPLITUDE
@@ -724,8 +739,6 @@ class simulator(object):
         b = np.exp(1j*phi)
         return b
 
-
-
     def geometric_phasor_dask(self, alphas, betas, anarray):
         """
         Returns the complex phasor corresponding to the locations
@@ -745,8 +758,7 @@ class simulator(object):
         z = da.exp(1j*phi)
         return z
 
-
-    def make_exposure(self, interest, star, diffuse,
+    def make_exposure(self, planet, disk, star, diffuse,
                                  texp=1., t_co=2.0e-3, time=None,
                                  monitor_phase=True,
                                  use_tqdm=False,
@@ -759,7 +771,8 @@ class simulator(object):
 
         **Parameters:**
 
-        * interest  : sf.sources.resolved_source object representing the source of intereest (planet)
+        * planet    : sf.sources.resolved_source object representing the source of intereest (planet)
+        * disk      : sf.sources.exozodi_simple object representing a dust distribution
         * star      : sf.sources.resolved_source object representing the star
         * diffuse   : a list of sf.transmission_emission objects linked in a chain.
         * texp      : Exposure time (seconds)
@@ -812,6 +825,7 @@ class simulator(object):
                 self.computed_static.append(static_output)
         self.integrator.starlight = np.zeros_like(self.computed_static[0])
         self.integrator.planetlight = np.zeros_like(self.integrator.starlight)
+        self.integrator.disklight = np.zeros_like(self.integrator.starlight)
         logit.warning("Currently no vigneting (requires a normalization of vigneting)")
         filtered_starlight = diffuse[0].get_downstream_transmission(self.lambda_science_range)
         # collected will convert from [ph / s /m^2] to [ph]
@@ -819,6 +833,7 @@ class simulator(object):
         self.integrator.ft_phase = []
         self.integrator.inj_phase = []
         self.integrator.inj_amp = []
+        all_injected = []
         logit.warning("Ugly management of injection/tracking")
         if use_tqdm:
             it_subexp = tqdm(range(self.n_subexps))
@@ -833,6 +848,7 @@ class simulator(object):
                 self.integrator.inj_phase.append(np.angle(injected[:,0]))
                 self.integrator.inj_amp.append(np.abs(injected[:,0]))
             injected = (injected * tracked).T * self.corrector.get_phasor(self.lambda_science_range)
+            all_injected.append(injected)
             # lambdified argument order matters! This should remain synchronous
             # with the lambdify call
             combined_starlight = self.combine_light(star, injected, array, collected)
@@ -840,7 +856,7 @@ class simulator(object):
                 self.integrator.accumulate(combined_starlight)
                 self.integrator.starlight += combined_starlight
 
-            combined_planetlight = self.combine_light(interest, injected, array, collected)
+            combined_planetlight = self.combine_light(planet, injected, array, collected)
             if spectro is None:
                 self.integrator.accumulate(combined_planetlight)
                 self.integrator.planetlight += combined_planetlight
@@ -851,6 +867,21 @@ class simulator(object):
             # self.integrator.accumulate(combined)
             for k, astatic in enumerate(self.computed_static):
                 self.integrator.accumulate(astatic)
+
+        collected = filtered_starlight * self.injector.collecting * texp
+        injected_mean = np.mean(np.abs(all_injected), axis=0) \
+                    * np.exp(1j * np.angle(np.mean(all_injected, axis=0)))
+                    
+        for l, lamb in enumerate(self.lambda_science_range):
+            samples = np.array([[lamb]*disk.xx_f.size, disk.xx_f, disk.yy_f])
+            trans = self.injector.beam_interp(samples.T)
+            disk.ss[l] = disk.ss_orig[l] * trans
+
+        combined_disklight = self.combine_light(disk, injected_mean, array, collected)
+        if spectro is None:
+            self.integrator.accumulate(combined_disklight)
+            self.integrator.disklight += combined_disklight
+                
         self.integrator.static_list = []
         for k, astatic in enumerate(self.computed_static):
             self.integrator.static_list.append(diffuse[k].__name__)
@@ -909,18 +940,12 @@ class simulator(object):
                 self.tarname = "from_string"
                 self.target = sf.observatory.astroplan.FixedTarget(coordinates)
 
-
-
         pass
     def make_sequence(self):
         """
         Deprecated
         """
         pass
-
-
-
-
 
     def build_all_maps(self, mapres=100, mapcrop=1.,
                        dtype=np.float32, transmission="default"):
@@ -1074,8 +1099,6 @@ class simulator(object):
         fname = f"/tmp/full_geometric_phasor_*.zarr"
         print(f"The files {fname} can be removed manually")
 
-
-
     def make_map_dask(self, blockindex, vigneting_map, dtype="dask", map_index=0,
                              transmission=None, no_compute=False):
         """
@@ -1162,7 +1185,6 @@ class simulator(object):
         #combined = np.abs(static_output*np.conjugate(static_output)).astype(np.float32)
         return static_output
 
-
     def make_map(self, blockindex, vigneting_map, dtype=np.float32,
                 transmission=None):
         """
@@ -1213,7 +1235,6 @@ class simulator(object):
         mapunits = units.electron / units.photon * units.m**2 * units.sr
         throughput_map = 1/(ds_sr*units.sr) * self.maps*mapunits
         return throughput_map
-
 
     def __call__(self):
         pass

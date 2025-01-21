@@ -15,7 +15,8 @@ class integrator():
     def __init__(self, config=None,
                  keepall=True,
                  n_sources=4,
-                 infinite_well=False):
+                 infinite_well=False,
+                 seed=None):
         """
         Contains the pixel model of the detector.
         Currently it does not implement a system gain (1ADU = 1photoelectron)
@@ -32,8 +33,9 @@ class integrator():
         
         **Content:**
         
-        * ``planetlight``: The planet light with shape (n_wavelength, n_outputs)
-        * ``starlight``: The starlight light with shape (n_wavelength, n_outputs)
+        * ``planetlight``: The planet light with shape (n_exp, n_wavelength, n_outputs)
+        * ``disklight``: The disk light with shape (n_exp, n_wavelength, n_outputs)
+        * ``starlight``: The starlight light with shape (n_exp, n_wavelength, n_outputs)
         * ``static`` : The list for all sources (see ``self.source_labels``) of the
           *background diffuse* light propagated through all ouptuts. Shape is
           (n_wavelength, n_outputs) each. This is only gets updated once per pointing
@@ -54,6 +56,8 @@ class integrator():
         self.keepall = keepall
         self.n_sources = n_sources
         self.exposure = 0.
+        self.seed = seed
+        self.rng = np.random.default_rng(np.random.SeedSequence(self.seed))
         if config is None:
             self.eta=0.7
             self.ron=0.
@@ -70,7 +74,7 @@ class integrator():
             self.dark = config.getfloat("detector", "dark")
             self.ENF = config.getfloat("detector", "ENF")
             self.mgain = config.getfloat("detector", "mgain")
-            self.n_pixsplit = config.getfloat("spectrograph", "n_pix_split")
+            self.n_pixsplit = config.getint("spectrograph", "n_pix_split")
             self.xs = config.getfloat("detector", "pix_size_x")
             self.ys = config.getfloat("detector", "pix_size_y")
             self.T_enclosure = config.getfloat("optics", "temp_cold_optics")
@@ -147,6 +151,8 @@ class integrator():
           the )
         * n_pixsplit    : The number of pixels over which to spread the
           signal of each spectral bin.
+          
+        returns array with shape (sources, wavelengths, outputs)
         """
         if n_pixsplit is not None: # Splitting the signal over a number pixels
             thepixels = self.acc.copy()
@@ -165,11 +171,13 @@ class integrator():
             acc = thepixels
         electrons = acc * self.eta * self.mgain
         #set_trace()
+        # TODO: Check if this should use `obtained_cold_bg`
         electrons = electrons + self.cold_bg[None,:,None] + obtained_dark
         expectancy = electrons.copy()
-        electrons = np.random.poisson(lam=electrons*self.ENF)/self.ENF
+        electrons = self.rng.poisson(lam=electrons*self.ENF)/self.ENF
         electrons = np.clip(electrons, 0, self.well)
-        read = electrons + np.random.normal(size=electrons.shape, scale=self.ron)
+        read = electrons + self.rng.normal(size=electrons.shape, scale=self.ron)
+        self.seed += 1
         if n_pixsplit is not None: # Binning the pixels again
             read = np.sum(read, axis=0)
         self.forensics = {"Expectancy": expectancy,
@@ -200,6 +208,8 @@ class integrator():
         return self.starlight.sum(axis=0)    
     def get_planetlight(self):
         return self.planetlight.sum(axis=0)
+    def get_disklight(self):
+        return self.disklight.sum(axis=0)
     
     def reset(self,):
         """
@@ -227,6 +237,7 @@ class integrator():
         self.exposure = 0.
         self.starlight = None
         self.planetlight = None
+        self.disklight = None
         
     def prepare_t_exp_base(self):
         """
@@ -251,6 +262,8 @@ class integrator():
             n_planet, n_tot, t_exp0, t_exp = sp.symbols("n_{planet}, n_{tot}, t_{esxp0}, t_{exp}", real=True)
         
         """
+
+        # TODO: change `f_planet` to `f_source`?
         eta, f_planet, n_pix, f_tot, ron, =  sp.symbols("eta, f_{planet}, n_p, f_{tot}, ron", real=True)
         n_planet, n_tot, t_exp0, t_exp = sp.symbols("n_{planet}, n_{tot}, t_{esxp0}, t_{exp}", real=True)
         SNR = sp.symbols("SNR", real=True)
@@ -293,7 +306,7 @@ class integrator():
         self.nsamples = self.n_subexps
         sumstatic = np.sum(self.static, axis=0)
         self.summed_signal = sumstatic[None,:,:]+self.starlight+\
-                            self.planetlight
+                            self.planetlight+self.disklight
         self.total_summed_signal = self.summed_signal.sum(axis=0)
 
         self.sums = []
@@ -305,6 +318,8 @@ class integrator():
         self.source_labels.append("Starlight")
         self.sums.append(self.planetlight.sum(axis=0))
         self.source_labels.append("Planet")
+        self.sums.append(self.disklight.sum(axis=0))
+        self.source_labels.append("Disk")
         
 
 class spectrograph(object):

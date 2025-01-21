@@ -6,7 +6,6 @@ import scifysim as sf
 
 parent = Path(__file__).parent.absolute()
 atarget = "GJ 86 A"
-
 fname = str(parent/"config/test_default.ini")
 
 # def makesim(fname, target=atarget):

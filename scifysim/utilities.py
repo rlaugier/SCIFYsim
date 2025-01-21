@@ -231,7 +231,7 @@ def prepare_all(afile, thetarget=None, update_params=False,
     asim.prepare_sequence(asim.config)
     asim.prepare_fringe_tracker(asim.config, seed=seed)
     asim.fringe_tracker.prepare_time_series(asim.lambda_science_range, duration=10, replace=True)
-    asim.prepare_integrator(config=asim.config, keepall=False, infinite_well=True)
+    asim.prepare_integrator(config=asim.config, keepall=False, infinite_well=True, seed=seed)
     asim.prepare_spectrograph(config=asim.config)
     asim.prepare_sources()
     highest = len(asim.sequence)//2
