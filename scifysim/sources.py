@@ -558,6 +558,10 @@ class star_planet_target(object):
         """The physical separation between the planet and star (AU)"""
         psep = self.planet_separation*units.mas.to(units.rad)*self.distance*units.pc.to(units.AU)
         return psep
+    
+    @property
+    def contrast_disk(self):
+        return self.disk.ss.sum() / self.star.ss.sum()
         
 
 
@@ -652,6 +656,7 @@ class resolved_source(object):
         The map is saved in a flat shape
         xx_f and yy_f are created to be flat versions of the coordinates.
         ss is a total flux (ph/s/m^2) at the entrance of earth atmosphere.
+        ss has shape (wavelengths, samples)
         """
         self.ss = self.get_spectrum_map().value # Fixing a bug that appears in the spectrograph?
         self.ss = self.ss.reshape(self.ss.shape[0], self.ss.shape[1]*self.ss.shape[2])
@@ -680,15 +685,27 @@ class resolved_source(object):
         """
         a = 4*np.pi*((self.radius * units.R_sun).to(units.m))**2
         P = 1 * a * constants.sigma_sb * (self.T*units.K)**4
-        
         return P.to(units.L_sun)
+    
+    @property 
+    def mag(self):
+        """ 
+        Computes the relative magnitude of the source.
+        Reference flux is 259 Jy (interpolated value at lamb=3.75um from UKIRT)
+        """
+        from scifysim.analysis import F2mag
+        F = self.L.to(units.W) / \
+            (4*np.pi*(self.distance*units.pc).to(units.m)**2) # W / m^2
+        band = (self.lambda_range[-1] - self.lambda_range[0]) * units.m
+        F0 = 259.0 * units.Jy * band.to(units.Hz, units.spectral())
+        return F2mag(F.value / F0.to(units.W / units.m**2).value)
 
 
 class exozodi_simple:
     
     def __init__(self, lambda_range, distance, r_in, r_out, star, z,
                  angle_inc=0.0, angle_rot=0.0, scale=True, alpha=0.34, 
-                 T_sub=1500.0, angular_res=10, radial_res=15, offset=(0., 0.), 
+                 T_sub=1500.0, angular_res=100, radial_res=100, offset=(0.,0.), 
                  build_map=True):
         """
         **Parameters:**
@@ -731,11 +748,26 @@ class exozodi_simple:
         self.T_sub = T_sub
         self.r_sub = ((278.3 * self.L_star.to(units.solLum).value**(0.25)) 
                       / T_sub)**2 # [au]
+        
+        # more generally 2 x lamb_max / Diam [rad]
+        self.r_max_mas = 200.0 # instrument is insensitive to light outside this range UT
+        self.r_max_rad = self.r_max_mas * units.mas.to(units.rad)
+        self.r_max_au = self.r_max_rad * self.distance*units.pc.to(units.au)
+        
         if scale:
             r_in *= self.r_0
             r_out *= self.r_0
         self.r_in = self.r_sub if self.r_sub > r_in else r_in
-        self.r_out = r_out
+        self.r_out = self.r_max_au if self.r_max_au < r_out else r_out
+        
+        self.has_flux = True
+        if self.r_in >= self.r_out:
+            self.has_flux = False
+            logit.warning("Disk sublimation radius is greater than primary beam radius.\n"
+                          "Instrument is insensitive to disk light.\n"
+                          "Creating dummy range.")
+            self.r_in = 0.03
+            self.r_out = 1.0
         
         # self.ang_r_* is in radians
         self.ang_r_in = self.r_in / (self.distance*units.pc.to(units.au))
@@ -829,8 +861,11 @@ class exozodi_simple:
         self.r_au = self.r_mas*units.mas.to(units.rad) * (self.distance*units.pc.to(units.au))
         # dust temperature
         self.t_dust = (278.3*self.L_star.to(units.solLum).value**(0.25)*self.r_au**(-0.5))*units.K
+        ind_nan = np.where(self.t_dust > self.T_sub*units.K)
+        self.t_dust[ind_nan] = np.nan*units.K
         # surface density
         self.sigma = self.sigma_zero * self.z * (self.r_au / self.r_0)**(-self.alpha)
+        self.sigma[ind_nan] = np.nan
         dlambda = np.gradient(self.lambda_range)
         #Discretization by spectral bins
         # of get_B_lamb_ph: f(wavelength[m], T[K]) Computes the Planck law in [ph / s / m^2 / m / sr]

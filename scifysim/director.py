@@ -841,13 +841,17 @@ class simulator(object):
             it_subexp = range(self.n_subexps)
         for i in it_subexp:
             self.integrator.exposure += t_co
-            injected = self.phasor_disp.T * next(self.injector.get_efunc)(self.lambda_science_range)
+            coupling = next(self.injector.get_efunc)(self.lambda_science_range)
+            injected = self.phasor_disp.T * coupling
+            # injected = self.phasor_disp.T * next(self.injector.get_efunc)(self.lambda_science_range) JS
             tracked = next(self.fringe_tracker.phasor)
             if monitor_phase:
                 self.integrator.ft_phase.append(np.angle(tracked[:,0]))
                 self.integrator.inj_phase.append(np.angle(injected[:,0]))
                 self.integrator.inj_amp.append(np.abs(injected[:,0]))
-            injected = (injected * tracked).T * self.corrector.get_phasor(self.lambda_science_range)
+            corrector = self.corrector.get_phasor(self.lambda_science_range)
+            injected = (injected * tracked).T * corrector
+            # injected = (injected * tracked).T * self.corrector.get_phasor(self.lambda_science_range) JS
             all_injected.append(injected)
             # lambdified argument order matters! This should remain synchronous
             # with the lambdify call

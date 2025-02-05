@@ -1018,7 +1018,101 @@ def plot_argand(phasor, cmap=plt.cm.Blues):
     ax.set_xlim(-1.2,1.2)
     ax.set_ylim(-1.2,1.2)
     
+
+def plot_source_position(asim, use_time=True):
+
+    def remove_common_prefix(strings):
+        """Removes the common prefix from a list of strings."""
+        if not strings:
+            return strings
+        shortest_string = min(strings, key=len)
+        for i, char in enumerate(shortest_string):
+            if not all(string[i] == char for string in strings):
+                return [string[i:] for string in strings]
+        return [""] * len(strings)
+
+    target = asim.target
+    sequence = asim.sequence
+    (altaz,) = asim.obs.get_positions(target, sequence)
+
+    fig, ax = plt.subplots()
+    x, y = [], []
+    for coord in altaz:
+        
+        time = coord.obstime.value
+        alt = coord.alt.deg
+        az = coord.az.deg
+        
+        y.append(alt)
+        if use_time:
+            x.append(time[:-7])
+        else:
+            x.append(az)
+
+    if use_time:
+        x = remove_common_prefix(x)
+        ax.tick_params(axis='x', labelrotation=45)
+        ax.set_xlabel('Time UTC')
+    else:
+        ax.set_ylabel('Azimuth [deg]')
+        
+    ax.plot(x, y)
+    ax.set_title('Source Position')
+    ax.set_ylabel('Altitude [deg]')
+    fig.tight_layout()
+
+    return fig, ax
     
+
+def plot_disk_sensitivity(asim):
+    
+    disk = asim.src.disk
+    x, y = disk.xx_f, disk.yy_f
+    
+    array = asim.obs.get_projected_array()
+    dummy_collected = np.ones(asim.lambda_science_range.shape[0])
+    perfect_injection = np.ones((asim.lambda_science_range.shape[0], asim.ntelescopes))\
+        * asim.corrector.get_phasor(asim.lambda_science_range)\
+        * asim.phasor_disp
+        
+    outputs = asim.combine_light(disk, perfect_injection,
+                                 array, dummy_collected,
+                                 dosum=False)
+    outputs = outputs.swapaxes(0, -1)
+    outputs = outputs.swapaxes(0, 1)
+    
+    fig, axes = plt.subplots(3, 2, figsize=(6,6), sharex=True, sharey=True)
+    for ax in axes.flatten():
+        ax.set_aspect(1)
+        
+    spec_ind = -1
+    norm = plt.Normalize(disk.ss_orig[spec_ind].min(), 
+                         disk.ss_orig[spec_ind].max())
+    tap_ratio = asim.config.getfloat('configuration', 'photometric_tap')
+    
+    # photometric
+    axes[0,0].set_title('Disk Model')
+    axes[0,0].scatter(x, y, c=disk.ss_orig[spec_ind], s=1)
+    axes[0,1].set_title('Photometric Sensitivity')
+    axes[0,1].scatter(x, y, c=outputs[spec_ind,0,:]/tap_ratio, norm=norm, s=1)
+    
+    # constructive
+    axes[1,0].set_title('Constructive Output 2')
+    axes[1,0].scatter(x, y, c=outputs[spec_ind,2,:], norm=norm, s=1)
+    axes[1,1].set_title('Constructive Output 5')
+    axes[1,1].scatter(x, y, c=outputs[spec_ind,5,:], norm=norm, s=1)
+    
+    # destructive
+    axes[2,0].set_title('Destructive Output 3')
+    axes[2,0].scatter(x, y, c=outputs[spec_ind,3,:], norm=norm, s=1)
+    axes[2,1].set_title('Destructive Output 4')
+    axes[2,1].scatter(x, y, c=outputs[spec_ind,4,:], norm=norm, s=1)
+    
+    fig.supxlabel('Relative Position [mas]')
+    fig.supylabel('Relative Position [mas]')
+    fig.tight_layout()
+    
+    return fig, axes
     
     
     

@@ -1204,11 +1204,15 @@ class injector(object):
         r = np.hypot(x-offset[0], y-offset[1])
         return np.exp(-(r/r_0)**2)
     
-    def build_fov_interpolator(self, pad_fact=40, crop=200, res=1_000,
+    def build_fov_interpolator(self, pad_fact=40, crop=1_000, res=5_000,
                                trans_disp=False):
+        # crop=200, res=1_000, is good for UT
+        # crop=1_000, res=5_000 is good for AT&UT but takes 2s longer.
         
         from numpy.fft import fft2, fftshift, fftfreq
         from scipy.interpolate import RegularGridInterpolator, interpn
+        
+        method = 'linear'
         
         lambs, vals = [], []
         axis_samp = np.linspace(-crop, crop, res)
@@ -1232,14 +1236,14 @@ class injector(object):
             
             vals_interp = interpn((b_axis, b_axis), beam, 
                                   np.array([X.flatten(), Y.flatten()]).T,
-                                  method='linear').reshape(res, res)
+                                  method=method).reshape(res, res)
             
             lambs.append(inj.wl)
             vals.append(vals_interp)
             
         self.beam_interp = RegularGridInterpolator(
                                     (lambs, axis_samp, axis_samp), 
-                                    vals, method='linear', 
+                                    vals, method=method, 
                                     bounds_error=False, fill_value=0.0)    
         
         
