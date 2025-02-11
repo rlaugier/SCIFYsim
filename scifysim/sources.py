@@ -431,8 +431,15 @@ def flux_bin2mag(lambda_range, fd):
       arriving to earth (no atmo)
 
     Returns : magnitude (vega) for each wavelength
+    
+    Note : reference flux in L band equates to ~237 Jy
+           compare to ~259 Jy at lamb=3.75um from UKIRT
     """
     vega_fd = vega_flux_bin(lambda_range)
+    if fd.ndim == 2:
+        vega_fd = vega_fd[:,None]
+    if not isinstance(fd, units.Quantity):
+        fd = fd * vega_fd.unit
     amag = -2.5 * np.log10(fd / vega_fd)
     return amag
 
@@ -550,7 +557,8 @@ class star_planet_target(object):
                                    angle_rot=self.disk_ang_rot, 
                                    scale=disk_scale, alpha=self.disk_alpha, 
                                    T_sub=self.disk_sub_t, 
-                                   angular_res=100, radial_res=100, 
+                                   # angular_res=250, radial_res=1_000, 
+                                   angular_res=100, radial_res=100,
                                    offset=(0., 0.), build_map=True)
         
     @property
@@ -691,22 +699,16 @@ class resolved_source(object):
     def mag(self):
         """ 
         Computes the relative magnitude of the source.
-        Reference flux is 259 Jy (interpolated value at lamb=3.75um from UKIRT)
         """
-        from scifysim.analysis import F2mag
-        F = self.L.to(units.W) / \
-            (4*np.pi*(self.distance*units.pc).to(units.m)**2) # W / m^2
-        band = (self.lambda_range[-1] - self.lambda_range[0]) * units.m
-        F0 = 259.0 * units.Jy * band.to(units.Hz, units.spectral())
-        return F2mag(F.value / F0.to(units.W / units.m**2).value)
+        return flux_bin2mag(self.lambda_range, self.ss.sum(axis=-1)).mean().value
 
 
 class exozodi_simple:
     
     def __init__(self, lambda_range, distance, r_in, r_out, star, z,
                  angle_inc=0.0, angle_rot=0.0, scale=True, alpha=0.34, 
-                 T_sub=1500.0, angular_res=100, radial_res=100, offset=(0.,0.), 
-                 build_map=True):
+                 T_sub=1500.0, angular_res=250, radial_res=1_000, 
+                 offset=(0.,0.), build_map=True):
         """
         **Parameters:**
         
@@ -749,8 +751,12 @@ class exozodi_simple:
         self.r_sub = ((278.3 * self.L_star.to(units.solLum).value**(0.25)) 
                       / T_sub)**2 # [au]
         
+        # instrument is insensitive to light outside this range ~200 UT; ~900 AT
         # more generally 2 x lamb_max / Diam [rad]
-        self.r_max_mas = 200.0 # instrument is insensitive to light outside this range UT
+        # takes into account disk inclination angle
+        self.r_max_mas = 200.0 / np.cos(np.deg2rad(self.angle_inc))
+        # clip at 1200 mas ~ 200 mas / cos(80)
+        self.r_max_mas = np.clip(self.r_max_mas, 0.0, 1200.0)
         self.r_max_rad = self.r_max_mas * units.mas.to(units.rad)
         self.r_max_au = self.r_max_rad * self.distance*units.pc.to(units.au)
         

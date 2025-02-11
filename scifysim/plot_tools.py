@@ -1064,11 +1064,38 @@ def plot_source_position(asim, use_time=True):
     return fig, ax
     
 
-def plot_disk_sensitivity(asim):
+def plot_disk_sensitivity(asim, interp=True):
     
+    if interp:
+        import astropy.units as u
+        from scipy.interpolate import griddata
+        from matplotlib.patches import Ellipse
+
     disk = asim.src.disk
     x, y = disk.xx_f, disk.yy_f
     
+    def plot_interp(x, y, z, ax, norm):
+
+        extent = [x.min(), x.max(), y.min(), y.max()]
+        x_axis = np.linspace(*extent[:2], 1_000)
+        y_axis = np.linspace(*extent[2:], 1_000)
+        xx, yy = np.meshgrid(x_axis, y_axis)
+        points = np.array([x, y]).T
+        out = griddata(points, z, (xx, yy), method='linear')
+        
+        width = 2 * disk.ang_r_in * u.rad.to(u.mas)
+        height = width * np.cos(disk.angle_inc * u.deg)
+        
+        elp = Ellipse(disk.offset, width, height, angle=disk.angle_rot,
+                      fill=True, ec='k', fc='k')
+        
+        ax.imshow(out, origin='lower', extent=extent, norm=norm, 
+                  interpolation='bilinear')
+        ax.add_patch(elp)
+        
+        return ax, out, extent
+
+
     array = asim.obs.get_projected_array()
     dummy_collected = np.ones(asim.lambda_science_range.shape[0])
     perfect_injection = np.ones((asim.lambda_science_range.shape[0], asim.ntelescopes))\
@@ -1081,7 +1108,7 @@ def plot_disk_sensitivity(asim):
     outputs = outputs.swapaxes(0, -1)
     outputs = outputs.swapaxes(0, 1)
     
-    fig, axes = plt.subplots(3, 2, figsize=(6,6), sharex=True, sharey=True)
+    fig, axes = plt.subplots(3, 2, figsize=(8,6.7), sharex=True, sharey=True)
     for ax in axes.flatten():
         ax.set_aspect(1)
         
@@ -1092,21 +1119,34 @@ def plot_disk_sensitivity(asim):
     
     # photometric
     axes[0,0].set_title('Disk Model')
-    axes[0,0].scatter(x, y, c=disk.ss_orig[spec_ind], s=1)
     axes[0,1].set_title('Photometric Sensitivity')
-    axes[0,1].scatter(x, y, c=outputs[spec_ind,0,:]/tap_ratio, norm=norm, s=1)
     
     # constructive
     axes[1,0].set_title('Constructive Output 2')
-    axes[1,0].scatter(x, y, c=outputs[spec_ind,2,:], norm=norm, s=1)
     axes[1,1].set_title('Constructive Output 5')
-    axes[1,1].scatter(x, y, c=outputs[spec_ind,5,:], norm=norm, s=1)
     
     # destructive
     axes[2,0].set_title('Destructive Output 3')
-    axes[2,0].scatter(x, y, c=outputs[spec_ind,3,:], norm=norm, s=1)
     axes[2,1].set_title('Destructive Output 4')
-    axes[2,1].scatter(x, y, c=outputs[spec_ind,4,:], norm=norm, s=1)
+    
+    if interp:
+        ax, out, extent =  plot_interp(x, y, disk.ss_orig[spec_ind], axes[0,0], norm)
+        ax, out, extent =  plot_interp(x, y, outputs[spec_ind,0,:]/tap_ratio, axes[0,1], norm)
+        
+        ax, out, extent =  plot_interp(x, y, outputs[spec_ind,2,:], axes[1,0], norm)
+        ax, out, extent =  plot_interp(x, y, outputs[spec_ind,5,:], axes[1,1], norm)
+        
+        ax, out, extent =  plot_interp(x, y, outputs[spec_ind,3,:], axes[2,0], norm)
+        ax, out, extent =  plot_interp(x, y, outputs[spec_ind,4,:], axes[2,1], norm)
+    else:
+        axes[0,0].scatter(x, y, c=disk.ss_orig[spec_ind], s=1)
+        axes[0,1].scatter(x, y, c=outputs[spec_ind,0,:]/tap_ratio, norm=norm, s=1)
+
+        axes[1,0].scatter(x, y, c=outputs[spec_ind,2,:], norm=norm, s=1)
+        axes[1,1].scatter(x, y, c=outputs[spec_ind,5,:], norm=norm, s=1)
+
+        axes[2,0].scatter(x, y, c=outputs[spec_ind,3,:], norm=norm, s=1)
+        axes[2,1].scatter(x, y, c=outputs[spec_ind,4,:], norm=norm, s=1)
     
     fig.supxlabel('Relative Position [mas]')
     fig.supylabel('Relative Position [mas]')

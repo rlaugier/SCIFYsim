@@ -34,6 +34,7 @@ class noiseprofile(object):
         
         **Creation makes use of:**
         
+        >>> Why not compute these in constructor? JS
         * integ.mean_starlight (run ``integ.mean_starlight = np.mean(starlights, axis=0)``)
         * integ.mean_planetlight (run ``integ.mean_planetlight = np.mean(planetlights, axis=0)``)
         * integ.mean_disklight (run ``integ.mean_disklight = np.mean(disklights, axis=0)``)
@@ -111,11 +112,11 @@ class noiseprofile(object):
         # small s is a flux
         s_s = Fs/self.F_0 * self.s_0
         s_d = self.s_d + self.mynpix*(self.s_dark_current + self.s_enc_bg)[:,None]
-        
-        
+
         sigma_phot = np.sqrt(self.eta * dit * (s_d + s_s))
         vark = np.einsum("ki, wi-> wk", sigma_phot**2, np.abs(self.K))
-        sigma_phot_d = np.sqrt(vark.flatten())
+        sigma_phot_d = np.sqrt(vark)
+        # sigma_phot_d = np.sqrt(vark.flatten()) JS
         # sigma_phot_d = np.sqrt(np.sum(sigma_phot[:,self.mask_dark]**2, axis=-1)) # kernel will need different treatment here
         sigma_phot_photo = sigma_phot[:,self.mask_phot]
         sigma_phot_bright = sigma_phot[:,self.mask_bright]
@@ -186,6 +187,9 @@ class noiseprofile(object):
             aline = plt.plot(wls,
                                  sigphis[i,:], label=msg,
                                  color=mybmap(sf.utilities.trois(cvalue, 0.,1., ymin=ymin, ymax=ymax)))
+            
+        # TODO: find a better way to manage multiple kmat. 
+        sigphots = sigphots[:,0,:]
         for i, dump in enumerate(sigphots):
             msg = f"$\sigma_{{phot}}$ (mag = {starmags[i]:.1f})"
             cvalue = i/sigphis.shape[0]

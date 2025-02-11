@@ -394,7 +394,7 @@ class simulator(object):
                 else:
                     self.injector.focal_plane[i][j].screen_bias = zero_screen
 
-            # Handling longitudinal dispersion
+        # Handling longitudinal dispersion
         self.pistons = self.obs.get_projected_geometric_pistons()
         if long_disp:
             # For faster computation:
@@ -411,6 +411,14 @@ class simulator(object):
                                                                                     mode=ld_mode,
                                                                                     ft_mode=ft_mode))
             self.phasor_disp = np.exp(1j*self.ph_disp)
+            
+        # attenuate extended disk flux using sub-aperture beam
+        self.injector.build_fov_interpolator()
+        disk = self.src.disk
+        for l, lamb in enumerate(self.lambda_science_range):
+            samples = np.array([[lamb]*disk.xx_f.size, disk.xx_f, disk.yy_f])
+            trans = self.injector.beam_interp(samples.T)
+            disk.ss[l] = disk.ss_orig[l] * trans
 
 
     def make_metrologic_exposure(self, planet, disk, star, diffuse,
@@ -447,6 +455,7 @@ class simulator(object):
         self.n_subexps = int(texp/t_co)
         self.integrator.n_subexps = self.n_subexps
         self.integrator.t_co = t_co
+        self.integrator.exposure = 0.0
         if not hasattr(self.integrator, "cold_bg"):
             self.integrator.update_enclosure(self.lambda_science_range)
         #taraltaz = self.obs.observatory_location.altaz(time, target=self.target)
@@ -501,9 +510,11 @@ class simulator(object):
         self.integrator.ft_phase = []
         self.integrator.inj_phase = []
         self.integrator.inj_amp = []
+        all_injected = []
 
         for i in tqdm(range(self.n_subexps)):
             # `injected` is wavelength dependent complex phase modification at the combiner inputs
+            self.integrator.exposure += t_co
             injected = self.phasor_disp.T * next(self.injector.get_efunc)(self.lambda_science_range)
             tracked = next(self.fringe_tracker.phasor)
             if perfect:
@@ -515,18 +526,26 @@ class simulator(object):
                 self.integrator.inj_phase.append(np.angle(injected[:,0]))
                 self.integrator.inj_amp.append(np.abs(injected[:,0]))
             injected = (injected * tracked).T * self.corrector.get_phasor(self.lambda_science_range)
+            all_injected.append(injected)
+            
             combined_starlight = self.combine_light(star, injected, array, collected)
             self.integrator.starlight.append(combined_starlight)
+            self.integrator.accumulate(combined_starlight)
             combined_planetlight = self.combine_light(planet, injected, array, collected)
             self.integrator.planetlight.append(combined_planetlight)
-            combined_disklight = self.combine_light(disk, injected, array, collected)
-            self.integrator.disklight.append(combined_disklight)
-            
+            self.integrator.accumulate(combined_planetlight)
 
             # incoherently combining over sources
             # Warning: modifying the array
             # combined = np.sum(np.abs(combined*np.conjugate(combined)), axis=(2))
             # integrator.accumulate(combined)
+            
+        collected = filtered_starlight * self.injector.collecting * texp
+        injected_mean = np.mean(np.abs(all_injected), axis=0) \
+                    * np.exp(1j * np.angle(np.mean(all_injected, axis=0)))
+        combined_disklight = self.combine_light(disk, injected_mean, array, collected)
+        self.integrator.disklight.append(combined_disklight)
+        self.integrator.accumulate(combined_disklight)
 
         #mean, std = self.integrator.compute_stats()
         self.integrator.starlight = np.array(self.integrator.starlight, dtype=dtype)
@@ -841,17 +860,17 @@ class simulator(object):
             it_subexp = range(self.n_subexps)
         for i in it_subexp:
             self.integrator.exposure += t_co
-            coupling = next(self.injector.get_efunc)(self.lambda_science_range)
-            injected = self.phasor_disp.T * coupling
-            # injected = self.phasor_disp.T * next(self.injector.get_efunc)(self.lambda_science_range) JS
+            # coupling = next(self.injector.get_efunc)(self.lambda_science_range)
+            # injected = self.phasor_disp.T * coupling
+            injected = self.phasor_disp.T * next(self.injector.get_efunc)(self.lambda_science_range)
             tracked = next(self.fringe_tracker.phasor)
             if monitor_phase:
                 self.integrator.ft_phase.append(np.angle(tracked[:,0]))
                 self.integrator.inj_phase.append(np.angle(injected[:,0]))
                 self.integrator.inj_amp.append(np.abs(injected[:,0]))
-            corrector = self.corrector.get_phasor(self.lambda_science_range)
-            injected = (injected * tracked).T * corrector
-            # injected = (injected * tracked).T * self.corrector.get_phasor(self.lambda_science_range) JS
+            # corrector = self.corrector.get_phasor(self.lambda_science_range)
+            # injected = (injected * tracked).T * corrector
+            injected = (injected * tracked).T * self.corrector.get_phasor(self.lambda_science_range)
             all_injected.append(injected)
             # lambdified argument order matters! This should remain synchronous
             # with the lambdify call
@@ -875,11 +894,6 @@ class simulator(object):
         collected = filtered_starlight * self.injector.collecting * texp
         injected_mean = np.mean(np.abs(all_injected), axis=0) \
                     * np.exp(1j * np.angle(np.mean(all_injected, axis=0)))
-                    
-        for l, lamb in enumerate(self.lambda_science_range):
-            samples = np.array([[lamb]*disk.xx_f.size, disk.xx_f, disk.yy_f])
-            trans = self.injector.beam_interp(samples.T)
-            disk.ss[l] = disk.ss_orig[l] * trans
 
         combined_disklight = self.combine_light(disk, injected_mean, array, collected)
         if spectro is None:
