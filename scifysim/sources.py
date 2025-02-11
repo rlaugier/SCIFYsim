@@ -557,8 +557,7 @@ class star_planet_target(object):
                                    angle_rot=self.disk_ang_rot, 
                                    scale=disk_scale, alpha=self.disk_alpha, 
                                    T_sub=self.disk_sub_t, 
-                                   # angular_res=250, radial_res=1_000, 
-                                   angular_res=100, radial_res=100,
+                                   angular_res=250, radial_res=1_000,
                                    offset=(0., 0.), build_map=True)
         
     @property
