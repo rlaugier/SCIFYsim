@@ -195,8 +195,8 @@ class test_offband_FT(unittest.TestCase):
         del self.asim
 
     def test_basic_simulation(self):
-        integ = self.asim.make_exposure(asim.src.planet, asim.src.star, asim.diffuse, texp=1.)
-        integ2 = self.bsim.make_exposure(bsim.src.planet, bsim.src.star, bsim.diffuse, texp=1.)
+        integ = self.asim.make_exposure(asim.src.planet, asim.src.disk, asim.src.star, asim.diffuse, texp=1.)
+        integ2 = self.bsim.make_exposure(bsim.src.planet, bsim.src.disk, bsim.src.star, bsim.diffuse, texp=1.)
         
         
     def test_test_offband(self):

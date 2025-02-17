@@ -1138,7 +1138,7 @@ def plot_disk_sensitivity(asim, interp=True, spec_ind=-1, norm=False):
     
     if norm:
         norm_data = outputs[spec_ind]
-        norm = plt.Normalize(norm_data.min(), norm_data.max()*0.50)
+        norm = plt.Normalize(norm_data.min(), norm_data.max()*0.20)
     else:
         norm = None
     

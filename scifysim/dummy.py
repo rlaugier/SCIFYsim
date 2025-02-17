@@ -36,5 +36,7 @@ def makesim(fname, target=atarget, compensate_chromatic=True, update_params=True
     asim.diffuse = diffuse
     return asim
 
+asim = makesim(fname)
+
 if __name__ == '__main__':
     asim = makesim(fname)
