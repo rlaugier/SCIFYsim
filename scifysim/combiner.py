@@ -203,9 +203,9 @@ class combiner(object):
         # Switch on combiner type
         if combiner_type == "angel_woolf_ph":
             hasph = True
-            M, bright, dark, photo = sf.combiners.angel_woolf_ph(ph_shifters=ph_shifters,
+            M, bright, dark, photo = sf.combiners.angel_woolf_ph(ph_shifters=[0.0, sp.pi/2],
                                                             include_masks=True, tap_ratio=tap_ratio)
-        elif combiner_type == "angel_woolf_ph_chromatic":
+        elif combiner_type in ["angel_woolf_ph_chromatic", "nott_kernel_null"]:
             hasph = True
             M, bright, dark, photo = sf.combiners.angel_woolf_ph_chromatic(Mc=Mc, ph_shifters=ph_shifters,
                                                             include_masks=True, tap_ratio=tap_ratio,
@@ -214,6 +214,41 @@ class combiner(object):
                 lamb = sp.symbols("lambda")
             else:
                 lamb, = M.free_symbols
+        # ------------------------------------------------- 
+
+        elif combiner_type == "nott_symmetric":
+            hasph = True
+            M, bright, dark, photo = sf.combiners.angel_woolf_ph_chromatic(Mc=Mc, ph_shifters=ph_shifters,
+                                                            include_masks=True, tap_ratio=tap_ratio,
+                                                            input_ph_shifters=input_offset*np.array([1,2,0,1]))
+            if M.free_symbols == set():
+                lamb = sp.symbols("lambda")
+            else:
+                lamb, = M.free_symbols
+                
+        elif combiner_type == "nott_nuller":
+            hasph = True
+            M, bright, dark, photo = sf.combiners.angel_woolf_ph_chromatic(Mc=Mc, ph_shifters=ph_shifters,
+                                                            include_masks=True, tap_ratio=tap_ratio,
+                                                            input_ph_shifters=input_offset*np.array([2,1,2,1]))
+            if np.isclose(tap_ratio, 0.):
+                clip_photo = True
+            else:
+                clip_photo = False
+            bright = np.array([False, False, False, True, True, False, False, False], dtype=bool)
+            dark = np.array([False, False, True, False, False, True, False, False], dtype=bool)
+            photometric = np.array([True, True, False, False, False, False, True, True], dtype=bool)
+            if clip_photo:
+                # combiner = sp_clip_rows(combiner, photometric) # same as M (unchanged)
+                bright = bright[np.logical_not(photometric)]
+                dark = dark[np.logical_not(photometric)]
+                photometric = photometric[np.logical_not(photometric)]
+            
+            if M.free_symbols == set():
+                lamb = sp.symbols("lambda")
+            else:
+                lamb, = M.free_symbols   
+        # -----------------------------------------------
         elif combiner_type == "GLINT":
             hasph = True
             M, bright, dark, photo = sf.combiners.GLINT(include_masks=True,

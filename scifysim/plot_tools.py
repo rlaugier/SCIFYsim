@@ -807,7 +807,7 @@ def plot_corrector_tuning_angel_woolf(corrector,lambs,
     * corrector : A corrector object
     * lambs     : The wavelengths to plot [m]
     * combiner  : A combiner object
-    * wv_model  : A wate vapor model (`wet_atmo`) to display along
+    * wv_model  : A water vapor model (`wet_atmo`) to display along
     * show      : Whether to call ``plt.show``
     * out_label : A list of output labels to pass to 
     
@@ -936,3 +936,253 @@ def make_cursor(loc, size, extent=None, color="k",
     plt.plot(np.array([loc[1] - 2*size, loc[1] - size]),
              s*(np.ones(2) * loc[0]),
              color=color, **kwargs)
+    
+def plot_disk(disk):
+    """
+    Plots the disk model and shows the distribution of physical parameters.
+    
+    **Arguments:**
+    
+    * disk : exozodi_simple object
+    
+    **Plots:**
+    
+    - Disk sampling. marker size related to surface density, 
+    color related to temperature.
+    - Radial distribution plot showing temperature, 
+    surface density, and flux density
+    """
+    
+    import astropy.units as u
+    from matplotlib.colors import LogNorm
+
+    distance = disk.distance * u.pc.to(u.au) # au
+    out = []
+    size_scale = LogNorm(vmin=disk.sigma.min(), vmax=disk.sigma.max())
+    # color_scale = LogNorm(vmin=disk.t_dust.min().value, vmax=disk.t_dust.max().value)
+
+    def mas2au(x):
+        return x * u.mas.to(u.rad) * distance
+    def au2mas(x):
+        return x / distance * u.rad.to(u.mas)
+    
+    r, ind = np.unique(disk.r_au, return_index=True)
+    t_dust = disk.t_dust.flatten()[ind] # [K]
+    s_dens = disk.sigma.flatten()[ind] # [AU^2 / AU^2]
+    flux = (disk.ss_orig / disk.ds.flatten()).sum(axis=0)[ind] # [ph / s / m^2 / sr]
+    flux_total = disk.ss_orig.sum() # [ph / s / m^2]
+    
+    fig, ax_dist = plt.subplots()
+    ax_dist.set_aspect(1)
+    sc = ax_dist.scatter(disk.xx_f, disk.yy_f, s=size_scale(disk.sigma.flatten())*20, 
+                         c=disk.t_dust.flatten().value, cmap='cool')
+    ax_dist.set_title('Disk Sampling')
+    ax_dist.set_xlabel('Relaveive Position [mas]')
+    ax_dist.set_ylabel('Relaveive Position [mas]')
+    fig.colorbar(sc, label='Temperature [K]')
+
+    ax_au = ax_dist.secondary_xaxis('top', functions=(mas2au, au2mas))
+    ax_au.set_xlabel('Relaveive Position [au]')
+    
+    fig.tight_layout()
+    out.append(fig)
+
+    subplot_kw = {'xscale': 'log', 'yscale': 'log'}
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3), sharex=True,
+                             subplot_kw=subplot_kw)
+    fig.suptitle('Disk Properties')
+    for ax in axes:
+        ax.set_xlabel('Radius [AU]')
+
+    ax_temp, ax_dens, ax_flux = axes
+    
+    ax_temp.plot(r, t_dust)
+    ax_temp.set_ylabel('Temperature [K]')
+    
+    ax_dens.plot(r, s_dens)
+    ax_dens.set_ylabel('Surface Density [$\mathrm{AU^2 / AU^2}$]')
+    
+    ax_flux.plot(r, flux)
+    ax_flux.set_ylabel('Flux Density [$\mathrm{ph / s / m^2 / sr}$]')
+    ax_flux.text(0.1, 0.1, f'tot = {flux_total:.1} [ph / s / m^2]', 
+                 transform=ax_flux.transAxes, ha='left')
+    
+    fig.tight_layout()
+    out.append(fig)
+
+    return out
+
+
+def plot_source_position(asim, use_time=True):
+    """
+    Plots the Alt-Az positon of the target star over the simulation sequence.
+    
+    **Arguments:**
+    
+    * asim : simulator object
+    * use_time : If True, x-axis is observing time, else Az angle.
+    
+    """
+
+    def remove_common_prefix(strings):
+        """Removes the common prefix from a list of strings."""
+        if not strings:
+            return strings
+        shortest_string = min(strings, key=len)
+        for i, char in enumerate(shortest_string):
+            if not all(string[i] == char for string in strings):
+                return [string[i:] for string in strings]
+        return [""] * len(strings)
+
+    target = asim.target
+    sequence = asim.sequence
+    (altaz,) = asim.obs.get_positions(target, sequence)
+
+    fig, ax = plt.subplots()
+    x, y = [], []
+    for coord in altaz:
+        
+        time = coord.obstime.value
+        alt = coord.alt.deg
+        az = coord.az.deg
+        
+        y.append(alt)
+        if use_time:
+            x.append(time[:-7])
+        else:
+            x.append(az)
+
+    if use_time:
+        x = remove_common_prefix(x)
+        ax.tick_params(axis='x', labelrotation=45)
+        ax.set_xlabel('Time UTC')
+    else:
+        ax.set_ylabel('Azimuth [deg]')
+        
+    ax.plot(x, y)
+    ax.set_title('Source Position')
+    ax.set_ylabel('Altitude [deg]')
+    fig.tight_layout()
+
+    return fig, ax
+    
+
+def plot_disk_sensitivity(asim, interp=True, spec_ind=-1, norm=False):
+    """
+    Plots the spatial distribution of photons received by the instrument
+    at each output.
+    
+    **Arguments:**
+    
+    * asim : simulator object
+    * interp : If True, images use interpolation (better interactive
+        plot performance), else plots the sampled points (more accurate 
+        representation of simulation). 
+    * spec_ind : Spectal index for which the plots are displayed. 
+    * norm : normalizes sensitivity maps in a way that increases contrast.
+                                                          
+    **Plots**
+    top-left panel is the disk model, top-right is a photometric output
+    middle row is constructive outputs, bottom row is destructive outputs.
+    
+    **Notes**
+    Disk model has units of [ph / s / m^2]. All other plots have units of 
+    [ph / sr] for one second of integration, unless norm=True, in which case
+    scaling is applied.
+    
+    """
+    if interp:
+        import astropy.units as u
+        from scipy.interpolate import griddata
+        from matplotlib.patches import Ellipse
+
+    disk = asim.src.disk
+    x, y = disk.xx_f, disk.yy_f
+    
+    def plot_interp(x, y, z, ax, norm, cmap=None):
+
+        extent = [x.min(), x.max(), y.min(), y.max()]
+        x_axis = np.linspace(*extent[:2], 1_000)
+        y_axis = np.linspace(*extent[2:], 1_000)
+        xx, yy = np.meshgrid(x_axis, y_axis)
+        points = np.array([x, y]).T
+        out = griddata(points, z, (xx, yy), method='linear')
+        
+        width = 2 * disk.ang_r_in * u.rad.to(u.mas)
+        height = width * np.cos(disk.angle_inc * u.deg)
+        
+        elp = Ellipse(disk.offset, width, height, angle=disk.angle_rot,
+                      fill=True, ec='k', fc='k')
+        
+        ax.imshow(out, origin='lower', extent=extent, norm=norm, 
+                  interpolation='bilinear', cmap=cmap)
+        ax.add_patch(elp)
+        
+        return ax, out, extent
+
+
+    array = asim.obs.get_projected_array()
+    filtered_starlight = asim.diffuse[0].get_downstream_transmission(asim.lambda_science_range)
+    collected = asim.injector.collecting * filtered_starlight * 1.0
+    perfect_injection = np.ones((asim.lambda_science_range.shape[0], asim.ntelescopes))\
+        * asim.corrector.get_phasor(asim.lambda_science_range)\
+        * asim.phasor_disp
+        
+    outputs = asim.combine_light(disk, perfect_injection,
+                                 array, collected,
+                                 dosum=False)
+    outputs = outputs.swapaxes(0, -1)
+    outputs = outputs.swapaxes(0, 1)
+    outputs = outputs / disk.ds.flatten()[None, None, :]
+    tap_ratio = asim.config.getfloat('configuration', 'photometric_tap')
+    
+    if norm:
+        norm_data = outputs[spec_ind]
+        norm = plt.Normalize(norm_data.min(), norm_data.max()*0.20)
+    else:
+        norm = None
+    
+    fig, axes = plt.subplots(3, 2, figsize=(8,6.7), sharex=True, sharey=True)
+    for ax in axes.flatten():
+        ax.set_aspect(1)
+
+    # photometric
+    axes[0,0].set_title('Disk Model')
+    axes[0,1].set_title('Photometric Sensitivity')
+    
+    # constructive
+    axes[1,0].set_title('Constructive Output 2')
+    axes[1,1].set_title('Constructive Output 5')
+    
+    # destructive
+    axes[2,0].set_title('Destructive Output 3')
+    axes[2,1].set_title('Destructive Output 4')
+    
+    if interp:
+        ax, out, extent =  plot_interp(x, y, disk.ss_orig[spec_ind], axes[0,0], None, 'inferno')
+        ax, out, extent =  plot_interp(x, y, outputs[spec_ind,0,:]/tap_ratio, axes[0,1], norm)
+        
+        ax, out, extent =  plot_interp(x, y, outputs[spec_ind,2,:], axes[1,0], norm)
+        ax, out, extent =  plot_interp(x, y, outputs[spec_ind,5,:], axes[1,1], norm)
+        
+        ax, out, extent =  plot_interp(x, y, outputs[spec_ind,3,:], axes[2,0], norm)
+        ax, out, extent =  plot_interp(x, y, outputs[spec_ind,4,:], axes[2,1], norm)
+    else:
+        axes[0,0].scatter(x, y, c=disk.ss_orig[spec_ind], s=1, cmap='inferno')
+        axes[0,1].scatter(x, y, c=outputs[spec_ind,0,:]/tap_ratio, norm=norm, s=1)
+
+        axes[1,0].scatter(x, y, c=outputs[spec_ind,2,:], norm=norm, s=1)
+        axes[1,1].scatter(x, y, c=outputs[spec_ind,5,:], norm=norm, s=1)
+
+        axes[2,0].scatter(x, y, c=outputs[spec_ind,3,:], norm=norm, s=1)
+        axes[2,1].scatter(x, y, c=outputs[spec_ind,4,:], norm=norm, s=1)
+    
+    fig.supxlabel('Relative Position [mas]')
+    fig.supylabel('Relative Position [mas]')
+    fig.tight_layout()
+    
+    return fig, axes
+    
+    
+    
+    

@@ -45,7 +45,7 @@ def four2six():
     E = sp.diag(sp.eye(3), kernuller.splitter, kernuller.crossover, kernuller.crossover, sp.eye(3))
     M = E@D@C@B@A
     return M
-    
+
 def four_photometric(tap_ratio):
     sigma = tap_ratio
     #
@@ -150,7 +150,7 @@ phase_Gross = sp.Add(*[a*lamb**i for i, a in enumerate(np.flip(coefs))])
 # Implementation of the directional coupler
 # Data from Tepper et al. 2017
 xk = np.genfromtxt(direc_data_file, delimiter=",")
-# Here, making the asumption that the combiner 
+# Here, making the asumption that the combiner
 x = xk[1:,0]*1e-6 + 0.4e-6 # will be tune for the correct band
 k = xk[1:,1]
 coefs = np.polyfit(x, k, 1)
@@ -187,8 +187,8 @@ def bracewell_ph(include_masks=False, tap_ratio=None):
     symbols:
         sigma  : the photometric ratio (in intensity)
     Build a bracewell combiner with photometric outputs.
-    
-    
+
+
     Returns: the sympy.Matrix of the combiner M
     Free symbols can be retrieved in list(M.free_symbols)
     """
@@ -214,7 +214,7 @@ def bracewell_ph(include_masks=False, tap_ratio=None):
         photometric = np.array([True, False, False, True])
     if tap_ratio is not None:
         combiner = combiner.subs([(sigma, tap_ratio)])
-    
+
     if include_masks:
         return combiner, bright, dark, photometric
     else:
@@ -236,8 +236,8 @@ def angel_woolf_ph(ph_shifters=None, include_masks=False, tap_ratio=None):
         phi_0   : the phase shifter1
         phi_1   : the phase shifter2
     Build a bracewell combiner with photometric outputs.
-    
-    
+
+
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
@@ -261,15 +261,15 @@ def angel_woolf_ph(ph_shifters=None, include_masks=False, tap_ratio=None):
 
     combiner = E1@E@D@C2@C@B@A
     #fprint(combiner2, "\mathbf{M}_2 = ")
-    
+
     if ph_shifters is not None:
         thesubs = [(phi[0], ph_shifters[0]),
                   (phi[1], ph_shifters[1])]
         combiner = combiner.subs(thesubs)
-    
+
     if tap_ratio is not None:
         combiner = combiner.subs([(sigma, tap_ratio)])
-    
+
     if include_masks:
         bright = np.array([False, False, True, False, False, True, False, False])
         dark = np.array([False, False, False, True, True, False, False, False])
@@ -279,7 +279,7 @@ def angel_woolf_ph(ph_shifters=None, include_masks=False, tap_ratio=None):
         return combiner
 
 def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False,
-                             offset=True, tap_ratio=None, 
+                             offset=True, tap_ratio=None,
                              Mc=M_KG, input_ph_shifters=None):
     """
     optional :
@@ -288,7 +288,7 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False,
     include_masks: If true, the output will include bright, dark and photometric masks
                 selecting the relevnant outputs
     Mc          : The chromatic combiner model default: M_KG
-                
+
     in: 4
     out: 8 (ph0, ph1, bright0, dark0, dark1, bright1, ph2, ph3)
     symbols:
@@ -296,8 +296,8 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False,
         phi_0   : the phase shifter1
         phi_1   : the phase shifter2
     Build a bracewell combiner with photometric outputs.
-    
-    
+
+
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
@@ -318,12 +318,12 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False,
     D = sp.diag(sp.eye(3), kernuller.ph_shifter(phi[0]), kernuller.ph_shifter(phi[1]), sp.eye(3))
     E = sp.diag(sp.eye(3), Mc, sp.eye(3))
     E1  = sp.diag(sp.eye(3), kernuller.ph_shifter(sp.pi/2), kernuller.ph_shifter(sp.pi), sp.eye(3))
-    
+
     combiner = E1@E@D@C2@C@B@A@A0
     if offset:
         combiner = combiner# + sp.ones(combiner.shape[0], combiner.shape[1])*1.e-20*lamb
     # fprint(combiner2, "\mathbf{M}_2 = ")
-    
+
     if ph_shifters is not None:
         thesubs = [(phi[0], ph_shifters[0]),
                   (phi[1], ph_shifters[1])]
@@ -350,12 +350,11 @@ def angel_woolf_ph_chromatic(ph_shifters=None, include_masks=False,
         bright = bright[np.logical_not(photometric)]
         dark = dark[np.logical_not(photometric)]
         photometric = photometric[np.logical_not(photometric)]
-    
+
     if include_masks:
         return combiner, bright, dark, photometric
     else:
         return combiner
-
 
 def kernel_nuller_3T(include_masks=False, tap_ratio=None):
     """
@@ -369,21 +368,21 @@ def kernel_nuller_3T(include_masks=False, tap_ratio=None):
         phi_0   : the phase shifter1
         phi_1   : the phase shifter2
     Build a bracewell combiner with photometric outputs.
-    
-    
+
+
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
-    
+
     from kernuller.nullers import matrices_3T
     kernel_nuller_3T = matrices_3T[0]
     #sigma = sp.symbols("sigma", real=True)
-    
+
     #photometric_preamble = four_photometric(sigma)
     #C = sp.diag(sp.eye(2), kernel_nuller_4T, sp.eye(2))
     #coupler = C@photometric_preamble
     coupler = kernel_nuller_3T
-    
+
     if tap_ratio is not None:
         coupler = coupler.subs([(sigma, tap_ratio)])
     if include_masks:
@@ -405,21 +404,21 @@ def kernel_nuller_4T(include_masks=False, tap_ratio=None):
         phi_0   : the phase shifter1
         phi_1   : the phase shifter2
     Build a bracewell combiner with photometric outputs.
-    
-    
+
+
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
-    
+
     from kernuller.nullers import matrices_4T
     kernel_nuller_4T = matrices_4T[0]
     #sigma = sp.symbols("sigma", real=True)
-    
+
     #photometric_preamble = four_photometric(sigma)
     #C = sp.diag(sp.eye(2), kernel_nuller_4T, sp.eye(2))
     #coupler = C@photometric_preamble
     coupler = kernel_nuller_4T
-    
+
     if tap_ratio is not None:
         coupler = coupler.subs([(sigma, tap_ratio)])
     if include_masks:
@@ -432,7 +431,7 @@ def kernel_nuller_4T(include_masks=False, tap_ratio=None):
         return coupler, bright, dark, photometric
     else:
         return coupler
-    
+
 def kernel_nuller_5T(include_masks=False, tap_ratio=None):
     """
     optional :
@@ -445,21 +444,21 @@ def kernel_nuller_5T(include_masks=False, tap_ratio=None):
         phi_0   : the phase shifter1
         phi_1   : the phase shifter2
     Build a bracewell combiner with photometric outputs.
-    
-    
+
+
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
-    
+
     from kernuller.nullers import matrices_5T
     kernel_nuller_5T = matrices_5T[0]
     #sigma = sp.symbols("sigma", real=True)
-    
+
     #photometric_preamble = four_photometric(sigma)
     #C = sp.diag(sp.eye(2), kernel_nuller_4T, sp.eye(2))
     #coupler = C@photometric_preamble
     coupler = kernel_nuller_5T
-    
+
     if tap_ratio is not None:
         coupler = coupler.subs([(sigma, tap_ratio)])
     if include_masks:
@@ -467,7 +466,7 @@ def kernel_nuller_5T(include_masks=False, tap_ratio=None):
                            False, False, False, False, False, False,
                            False, False, False, False, False, False])
         dark = np.array([False,
-                         True,  True,  True,  True,  True,  True, 
+                         True,  True,  True,  True,  True,  True,
                          True,  True,  True,True,  True,  True])
         photometric = np.array([False,
                                 False, False, False, False, False, False,
@@ -475,7 +474,7 @@ def kernel_nuller_5T(include_masks=False, tap_ratio=None):
         return coupler, bright, dark, photometric
     else:
         return coupler
-    
+
 
 def kernel_nuller_6T(include_masks=False, tap_ratio=None):
     """
@@ -489,33 +488,33 @@ def kernel_nuller_6T(include_masks=False, tap_ratio=None):
         phi_0   : the phase shifter1
         phi_1   : the phase shifter2
     Build a bracewell combiner with photometric outputs.
-    
-    
+
+
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
-    
+
     from kernuller.nullers import matrices_6T
     kernel_nuller_6T = matrices_6T[0]
     #sigma = sp.symbols("sigma", real=True)
-    
+
     #photometric_preamble = four_photometric(sigma)
     #C = sp.diag(sp.eye(2), kernel_nuller_4T, sp.eye(2))
     #coupler = C@photometric_preamble
     coupler = kernel_nuller_6T
-    
+
     if tap_ratio is not None:
         coupler = coupler.subs([(sigma, tap_ratio)])
     if include_masks:
-        bright = np.array([True, 
+        bright = np.array([True,
                                 False, False, False, False, False,
                                 False, False, False, False, False,
                                 False, False, False, False, False,
                                 False, False, False, False, False])
         dark = np.array([False,
-                         True, True, True, True, True, 
-                         True, True, True, True, True, 
-                         True, True, True, True, True, 
+                         True, True, True, True, True,
+                         True, True, True, True, True,
+                         True, True, True, True, True,
                          True, True, True, True, True])
         photometric = np.array([False,
                                 False, False, False, False, False,
@@ -525,7 +524,7 @@ def kernel_nuller_6T(include_masks=False, tap_ratio=None):
         return coupler, bright, dark, photometric
     else:
         return coupler
-    
+
 
 def VIKiNG(ph_shifters=None, include_masks=False, tap_ratio=None):
     """
@@ -541,22 +540,22 @@ def VIKiNG(ph_shifters=None, include_masks=False, tap_ratio=None):
         phi_0   : the phase shifter1
         phi_1   : the phase shifter2
     Build a bracewell combiner with photometric outputs.
-    
-    
+
+
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
-    
+
     from kernuller.nullers import matrices_4T
     kernel_nuller_4T = matrices_4T[0]
     #sigma = sp.symbols("sigma", real=True)
     phi = sp.Matrix(sp.symbols('phi0:{}'.format(2), real=True))
     sigma = sp.symbols("sigma", real=True)
-    
+
     photometric_preamble = four_photometric(sigma)
     C = sp.diag(sp.eye(2), kernel_nuller_4T, sp.eye(2))
     VIKiNG = C@photometric_preamble
-    
+
     if tap_ratio is not None:
         VIKiNG = VIKiNG.subs([(sigma, tap_ratio)])
     if np.isclose(tap_ratio, 0.):
@@ -571,21 +570,21 @@ def VIKiNG(ph_shifters=None, include_masks=False, tap_ratio=None):
         bright = bright[np.logical_not(photometric)]
         dark = dark[np.logical_not(photometric)]
         photometric = photometric[np.logical_not(photometric)]
-        
+
     if include_masks:
         return VIKiNG, bright, dark, photometric
     else:
         return VIKiNG
-    
 
-    
+
+
 def ABCD(Mc=kernuller.xcoupler,
          ph_shifter_type="achromatic",
          wl=None):
     """
     Build an ABCD combiner.
-    
-    
+
+
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
@@ -609,7 +608,7 @@ def GRAVITY(Mc=kernuller.xcoupler,
     Build a 4 input baseline-wise ABCD combiner
     similar in principle to the one used in GRAVITY.
     E@D@C@B@A
-    
+
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
@@ -626,14 +625,14 @@ def GLINT(include_masks=False, tap_ratio=None):
     """
     Build a 4 input baseline-wise Bracewell combiner
     similar in principle to the one used in GLINT.
-    
-    
+
+
     Returns: the sympy.Matrix of the combiner
     Free symbols can be retrieved in list(M.free_symbols)
     """
     b_nuller = kernuller.xcoupler
     sigma = sp.symbols("sigma", real=True)
-    
+
     photometric_preamble = four_photometric(sigma)
     beam2baseline = sp.diag(sp.eye(2), four2six(), sp.eye(2))
     main_stage = sp.diag(sp.eye(2), b_nuller, b_nuller, b_nuller,
@@ -673,19 +672,19 @@ def GLINT(include_masks=False, tap_ratio=None):
     else:
         return GLINT
 
-    
+
 def test_combiners():
     b = bracewell_ph()
     a = angel_woolf_ph(ph_shifters=[0, sp.pi/2])
-    
+
     #sigma = list(b.free_symbols)[0]
     thesubs = [(sigma, 0.05)]
-    
+
     fprint(b)
     Mn = kernuller.sp2np(b.subs(thesubs)).astype(np.complex128)
     fig, axs = kernuller.cmp(Mn, nx=1, out_label=np.arange(4), mainlinewidth=0.05)
-    
+
     fprint(a)
     Mn = kernuller.sp2np(a.subs(thesubs)).astype(np.complex128)
     fig, axs = kernuller.cmp(Mn, nx=2, out_label=np.arange(8), mainlinewidth=0.05)
-    
+

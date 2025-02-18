@@ -234,7 +234,7 @@ class offband_ft(object):
         **Arguments:**
         
         * wl_ft : The wavelength at which the fringe tracking is done.
-          OPD will be set to produce 0 phase at the man FT wavelength
+          OPD will be set to produce 0 phase at the mean FT wavelength
         * wl_science : The wavelength range for which the correction is optimized
         * wa_true : True wet air model
         * wa_model : Modeled wet air model (as measured at the telescopes)
@@ -738,7 +738,7 @@ class offband_ft(object):
         
         elif mode == "feedforward":
             # Assumes a measurement of dispersion in the FT band
-            logit.warning("feedfoward not implemented yet. returns model-model")
+            logit.warning("feedfoward not implemented yet. returns asgard_model-nott_model")
             return self.phi_asgard_model - self.phi_nott_model
 
         
@@ -899,9 +899,9 @@ class corrector(object):
         
         * lambs :     The wavelength channels to consider [m]
         * a     :     Vector of the amplitude term
-        * b     :     Vettor of the geometric piston term [m]
-        * c     :     Vettor of the dispersive piston term [m]
-        * e     :     Vettor of the addtional corretction material term [m]
+        * b     :     Vector of the geometric piston term [m]
+        * c     :     Vector of the dispersive piston term [m]
+        * e     :     Vector of the addtional corretction material term [m]
         * dcomp :     A length of air to compensate for the plate
         * vector :    The vector-form of all dispersive correction 
           shape: (n_materials, n_tel) [m]
@@ -973,9 +973,9 @@ class corrector(object):
         
         * lambs :     The wavelength channels to consider [m]
         * a     :     Vector of the amplitude term
-        * b     :     Vetor of the geometric piston term [m]
-        * c     :     Vetor of the dispersive piston term [m]
-        * e     :     Vettor of the addtional corretction material term [m]
+        * b     :     Vector of the geometric piston term [m]
+        * c     :     Vector of the dispersive piston term [m]
+        * e     :     Vector of the addtional corretction material term [m]
         * dcomp :     A length of air to compensate for the plate [m]
           if dcomp is None: it will be computed based on `self.c`
         """
