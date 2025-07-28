@@ -550,15 +550,15 @@ class star_planet_target(object):
         
         # TODO: resolution should be tied to sampled spatial frequencies
         self.disk = exozodi_simple(director.lambda_science_range, 
-                                   distance=self.distance, 
-                                   r_in=disk_r_in, r_out=disk_r_out, 
-                                   star=self.star, z=self.disk_zodi,
-                                   angle_inc=self.disk_ang_inc, 
-                                   angle_rot=self.disk_ang_rot, 
-                                   scale=disk_scale, alpha=self.disk_alpha, 
-                                   T_sub=self.disk_sub_t, 
-                                   angular_res=250, radial_res=1_000,
-                                   offset=(0., 0.), build_map=True)
+                                    distance=self.distance, 
+                                    r_in=disk_r_in, r_out=disk_r_out, 
+                                    star=self.star, z=self.disk_zodi,
+                                    angle_inc=self.disk_ang_inc, 
+                                    angle_rot=self.disk_ang_rot, 
+                                    scale=disk_scale, alpha=self.disk_alpha, 
+                                    T_sub=self.disk_sub_t, 
+                                    angular_res=250, radial_res=1_000,
+                                    offset=(0., 0.), build_map=True)
         
     @property
     def physical_separation(self):
@@ -667,6 +667,8 @@ class resolved_source(object):
         """
         self.ss = self.get_spectrum_map().value # Fixing a bug that appears in the spectrograph?
         self.ss = self.ss.reshape(self.ss.shape[0], self.ss.shape[1]*self.ss.shape[2])
+        self.ss_orig = self.ss.copy()
+        
         self.xx_f = self.xx.flatten()
         self.yy_f = self.yy.flatten()
         self.xx_r = mas2rad(self.xx_f)
@@ -810,7 +812,8 @@ class exozodi_simple:
         self.ds = self.r*self.dr*self.dtheta # In sr
 
         # Angular positions referenced East of North
-        # represents face-on distribution
+        # represents face-on distribution 
+        # NOT updated when inclination/rotation applied
         self.r += self.dr.mean()/2
         self.xx = -self.r*np.sin(self.theta)*units.rad.to(units.mas) \
                     - self.offset[0]

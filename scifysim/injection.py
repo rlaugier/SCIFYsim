@@ -1119,13 +1119,17 @@ class injector(object):
         #set_trace()
         
         
-    def compute_injection_function(self, interpolation="linear", tilt_res=50, tilt_range=2.):
+    def compute_injection_function(self, interpolation="linear", tilt_res=50, tilt_range=2.5):
         """
         Computes an interpolation of the injection as a function of a tip-tilt
         
+        **Notes**
+            ``tilt_range`` * lambda_mean / D [rad] small angle approximates the
+            angular coverage of the computed interpolation object.
+        
         ``injector.injection_abs(wl [m], offset [lambda/D])``
         """
-        from scipy.interpolate import interp2d
+        from scipy.interpolate import RegularGridInterpolator
         
         meanwl = np.mean(self.lambda_range)
         # tilt_vector goes for 1 lambda/D
@@ -1155,9 +1159,17 @@ class injector(object):
         points_x, points_y = np.array(np.meshgrid(self.lambda_range, offset))
         print(points_x.shape)
         print(injecteds.flatten().shape)
+        
+        # self.injection_rate_ = RegularGridInterpolator(points=(self.lambda_range, offset), 
+        #                                               values=np.abs(injecteds.T)**2, 
+        #                                               method='linear', bounds_error=False, fill_value=0.)
+        values=np.abs(injecteds)**2
+        values /= values.max(axis=0)
         self.injection_rate = LinearNDInterpolator(points=list(zip(points_x.flatten(), points_y.flatten())), values=np.abs(injecteds.flatten())**2, fill_value=0.)
+        self.coupling_rate = LinearNDInterpolator(points=list(zip(points_x.flatten(), points_y.flatten())), values=values.flatten(), fill_value=0.)
         # self.injection_rate = unsorted_intepr2d(self.lambda_range, offset, np.abs(injecteds)**2, kind=interpolation, fill_value=0.)
         self.injection_rate.__doc__ = """rate(wavelength[m], offset[lambda/D])"""
+        self.coupling_rate.__doc__ = """rate(wavelength[m], offset[lambda/D])"""
         self.injection_arg = LinearNDInterpolator(points=list(zip(points_x.flatten(), points_y.flatten())), values=np.angle(injecteds.flatten()), fill_value=0.)
         # self.injection_arg = unsorted_interp2d(self.lambda_range, offset, np.angle(injecteds), kind=interpolation, fill_value=0.)
         self.injection_arg.__doc__ = """phase(wavelength[m], offset[lambda/D])"""
@@ -1683,7 +1695,7 @@ class injection_vigneting(object):
         print(self.mas2lambond)
         
         if not hasattr(injector, "injection_rate"):
-            injector.compute_injection_function("linear", tilt_range=1.)
+            injector.compute_injection_function("linear", tilt_range=2.5)
         mygrid = np.meshgrid(injector.lambda_range, self.rr_lambdaond)
         self.vig = injector.injection_rate(*mygrid)
         del mygrid
@@ -1754,7 +1766,7 @@ class injection_cloud(object):
         print(self.mas2lambond)
         
         if not hasattr(injector, "injection_rate"):
-            injector.compute_injection_function("linear", tilt_range=1.)
+            injector.compute_injection_function("linear", tilt_range=2.5)
         mygrid = np.meshgrid(injector.lambda_range, np.linspace(0, np.max(self.rr_lambdaond), res))
         self.vig = injector.injection_rate(*mygrid)
         del mygrid

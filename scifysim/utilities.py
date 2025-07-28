@@ -1435,3 +1435,11 @@ def table2latex(table, latex_option="AA"):
                         Writer=ascii.Latex,
                         latexdict=ascii.latex.latexdicts['AA'])
     return latex_output
+
+def get_baseline_lengths(asim):
+    # assume 0-1 and 2-3 bracewell
+    # assume pointing is done
+    # aperture order should be taken care of by `asim`
+    array = asim.obs.get_projected_array()
+    delta_array = np.diff(array, axis=0)[[0,2]]
+    return np.hypot(*delta_array.T)
