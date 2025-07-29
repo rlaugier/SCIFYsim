@@ -180,8 +180,6 @@ class integrator():
         electrons = self.rng.poisson(lam=electrons*self.ENF)/self.ENF
         electrons = np.clip(electrons, 0, self.well)
         read = electrons + self.rng.normal(size=electrons.shape, scale=self.ron)
-        if self.seed is not None:
-            self.seed += 1
         if n_pixsplit is not None: # Binning the pixels again
             read = np.sum(read, axis=0)
         self.forensics = {"Expectancy": expectancy,
