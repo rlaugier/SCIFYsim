@@ -412,13 +412,35 @@ class simulator(object):
                                                                                     ft_mode=ft_mode))
             self.phasor_disp = np.exp(1j*self.ph_disp)
             
-        # attenuate extended disk flux using sub-aperture beam
-        self.injector.build_fov_interpolator()
-        disk = self.src.disk
-        for l, lamb in enumerate(self.lambda_science_range):
-            samples = np.array([[lamb]*disk.xx_f.size, disk.xx_f, disk.yy_f])
-            trans = self.injector.beam_interp(samples.T)
-            disk.ss[l] = disk.ss_orig[l] * trans
+        # attenuate source flux using sub-aperture beam
+        
+        lambond = (np.mean(self.injector.lambda_range) / self.injector.pdiam)*units.rad.to(units.mas)
+        mas2lambond = 1/lambond
+
+        for source in [self.src.star, self.src.planet, self.src.disk]:
+            radial_mas = np.hypot(source.xx_f, source.yy_f) 
+            trans = self.injector.coupling_rate(self.lambda_science_range[:,None], 
+                                                radial_mas[None,:] * mas2lambond)
+            source.ss = source.ss_orig * trans
+        
+        # disk = self.src.disk
+        # radial_mas = np.hypot(disk.xx_f, disk.yy_f) 
+        # trans = self.injector.coupling_rate(self.lambda_science_range[:,None], 
+        #                                      radial_mas[None,:] * mas2lambond)
+        # disk.ss = disk.ss_orig * trans
+        
+        # # For RegularGrid interpolation
+        # ll, rr = np.meshgrid(self.lambda_science_range, radial_ang, indexing='ij')
+        # points = np.column_stack((ll.ravel(), rr.ravel()))
+        # trans = self.injector.injection_rate_(points).reshape(disk.ss_orig.shape)
+        # disk.ss = disk.ss_orig * trans
+        
+        # # For 2D FFT based method
+        # self.injector.build_fov_interpolator()
+        # for l, lamb in enumerate(self.lambda_science_range):
+        #     samples = np.array([[lamb]*disk.xx_f.size, disk.xx_f, disk.yy_f])
+        #     trans = self.injector.beam_interp(samples.T)
+        #     disk.ss[l] = disk.ss_orig[l] * trans
 
 
     def make_metrologic_exposure(self, planet, disk, star, diffuse,
@@ -865,9 +887,12 @@ class simulator(object):
             injected = self.phasor_disp.T * next(self.injector.get_efunc)(self.lambda_science_range)
             tracked = next(self.fringe_tracker.phasor)
             if monitor_phase:
-                self.integrator.ft_phase.append(np.angle(tracked[:,0]))
-                self.integrator.inj_phase.append(np.angle(injected[:,0]))
-                self.integrator.inj_amp.append(np.abs(injected[:,0]))
+                # self.integrator.ft_phase.append(np.angle(tracked[:,0]))
+                # self.integrator.inj_phase.append(np.angle(injected[:,0]))
+                # self.integrator.inj_amp.append(np.abs(injected[:,0]))
+                self.integrator.ft_phase.append(np.angle(tracked))
+                self.integrator.inj_phase.append(np.angle(injected))
+                self.integrator.inj_amp.append(np.abs(injected))
             # corrector = self.corrector.get_phasor(self.lambda_science_range)
             # injected = (injected * tracked).T * corrector
             injected = (injected * tracked).T * self.corrector.get_phasor(self.lambda_science_range)
