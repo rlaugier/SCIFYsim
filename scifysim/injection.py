@@ -25,7 +25,9 @@ import threading
 import time
 from pathlib import Path
 from scipy.interpolate import interp2d, interp1d
+import xaosim
 from xaosim import zernike
+from xaosim import pupil as xaosimpupil
 
 
 
@@ -1731,9 +1733,8 @@ def test_injection(phscreensz=200, r0=8.,
     """
     Remember to pass seed=None if you want a random initialization
     """
-    import xaosim
     # Construct a pupil using xaosim
-    apup = xaosim.pupil.VLT(phscreensz, phscreensz,phscreensz/2)
+    apup = xaosimpupil.VLT(phscreensz, phscreensz,phscreensz/2)
     myinst = injector(pupil=apup, r0=r0,
                      interpolation=interpolation, seed=seed)
     import matplotlib.pyplot as plt
@@ -1788,9 +1789,8 @@ def test_injection_fromfile(phscreensz=200,
     """
     **Remember** to pass ``seed=None`` if you want a **random initialization**
     """
-    import xaosim
     # Construct a pupil using xaosim
-    apup = xaosim.pupil.VLT(phscreensz, phscreensz,phscreensz/2)
+    apup = xaosimpupil.VLT(phscreensz, phscreensz,phscreensz/2)
     myinst = injector.from_config_file(fpath=fpath,
                                      pupil=apup,
                                      seed=seed)
@@ -1872,7 +1872,6 @@ def tel_pupil(n,m, radius, file=None, pdiam=None,
     `<http://cdsads.u-strasbg.fr/abs/2011ExA....30...59G>`_
     
     '''
-    import xaosim
     if file is not None:
         if pdiam is None:
             pdiam = file.getarray("configuration","diam")[tel_index]
@@ -1887,7 +1886,7 @@ def tel_pupil(n,m, radius, file=None, pdiam=None,
     offset = odiam #1.11              # spider intersection offset (meters)
     beta   = 50.      #50.5           # spider angle beta
     
-    apupil = xaosim.pupil.four_spider_mask(m, n, radius, pdiam, odiam, 
+    apupil = xaosimpupil.four_spider_mask(m, n, radius, pdiam, odiam, 
                             beta, thick, offset, spiders=spiders,
                             between_pix=between_pix)
 
