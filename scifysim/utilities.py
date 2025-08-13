@@ -180,7 +180,7 @@ def prepare_all(afile, thetarget=None, update_params=False,
                crop=0.7, res=100, target_coords=None,
                compensate_chromatic=True,
                modificators=None, update_start_end=True,
-               statlocs=None, verbose=False):
+               statlocs=None, verbose=False, duration=10):
     """
     A shortcut to prepare a simulator object
     **Parameters:**
@@ -230,7 +230,7 @@ def prepare_all(afile, thetarget=None, update_params=False,
     asim.prepare_combiner(asim.config)
     asim.prepare_sequence(asim.config)
     asim.prepare_fringe_tracker(asim.config, seed=seed)
-    asim.fringe_tracker.prepare_time_series(asim.lambda_science_range, duration=10, replace=True)
+    asim.fringe_tracker.prepare_time_series(asim.lambda_science_range, duration=duration, replace=True)
     asim.prepare_integrator(config=asim.config, keepall=False, infinite_well=True)
     asim.prepare_spectrograph(config=asim.config)
     asim.prepare_sources()

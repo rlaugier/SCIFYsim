@@ -482,7 +482,7 @@ class star_planet_target(object):
         
         # Creating absorbtion / emission chain:
         self.trans_file = config.get("optics", "transfile_collecting_optics")
-        if director.space:
+        if director.space or (self.sky_trans_file == "none"):
             self.sky = transmission_emission(trans_file=1.,
                                              T=0.,
                                              observatory=director.obs,
