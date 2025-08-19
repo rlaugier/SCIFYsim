@@ -21,18 +21,8 @@ a series of complex numbers corresponding to injection complex phasors.
 
 
 import numpy as np
-import threading
-import time
 from pathlib import Path
 from scipy.interpolate import interp2d, interp1d
-import xaosim
-from xaosim import zernike
-from xaosim import pupil as xaosimpupil
-
-
-
-from pdb import set_trace
-
 
 # amto_screen is now provided in house to provide seed
 #from xaosim import wavefront as wft
@@ -47,6 +37,7 @@ import logging
 logit = logging.getLogger(__name__)
 
 from . import utilities
+from . import zernike
 
 parent = Path(__file__).parent.absolute()
 
@@ -1733,8 +1724,7 @@ def test_injection(phscreensz=200, r0=8.,
     """
     Remember to pass seed=None if you want a random initialization
     """
-    # Construct a pupil using xaosim
-    apup = xaosimpupil.VLT(phscreensz, phscreensz,phscreensz/2)
+    apup = VLT_pupil(phscreensz, phscreensz,phscreensz/2)
     myinst = injector(pupil=apup, r0=r0,
                      interpolation=interpolation, seed=seed)
     import matplotlib.pyplot as plt
@@ -1790,7 +1780,7 @@ def test_injection_fromfile(phscreensz=200,
     **Remember** to pass ``seed=None`` if you want a **random initialization**
     """
     # Construct a pupil using xaosim
-    apup = xaosimpupil.VLT(phscreensz, phscreensz,phscreensz/2)
+    apup = VLT_pupil(phscreensz, phscreensz,phscreensz/2)
     myinst = injector.from_config_file(fpath=fpath,
                                      pupil=apup,
                                      seed=seed)
@@ -1886,11 +1876,99 @@ def tel_pupil(n,m, radius, file=None, pdiam=None,
     offset = odiam #1.11              # spider intersection offset (meters)
     beta   = 50.      #50.5           # spider angle beta
     
-    apupil = xaosimpupil.four_spider_mask(m, n, radius, pdiam, odiam, 
+    apupil = four_spider_mask(m, n, radius, pdiam, odiam, 
                             beta, thick, offset, spiders=spiders,
                             between_pix=between_pix)
 
     return apupil
+
+def four_spider_mask(ys, xs, pix_rad, pdiam, odiam=0.0, 
+                     beta=45.0, thick=0.25, offset=0.0,
+                     spiders=True, split=False, between_pix=True):
+    """
+    Function forked from fmartinache/xaosim. Credit to 
+    F. Martinache for the creation of this function.
+    Forked here to fix conflicts with evolving packaging.
+    
+    Tool function called by other routines to generate specific
+    pupil geometries. Although the result is scaled by pix_rad in 
+    pixels, telescope specifics are provided in meters.
+
+    Parameters:
+    
+    - ys, xs  : dimensions of the 2D array      (in pixels)
+    - pix_rad : radius of the circular aperture (in pixels)
+    - pdiam   : diameter of the aperture        (in meters)
+    - odiam   : diameter of the obstruction     (in meters)
+    - beta    : angle of the spiders            (in degrees)
+    - thick   : thickness of the spiders        (in meters)
+    - offset  : spider intersect point distance (in meters)
+    - spiders : flag to true to include spiders (boolean)
+    - split   : split the mask into four parts  (boolean)
+    """
+    beta    = beta * dtor # converted to radians
+    ro      = odiam / pdiam
+    xx,yy   = np.meshgrid(np.arange(xs)-xs/2, np.arange(ys)-ys/2)
+    if between_pix is True:
+        xx,yy   = np.meshgrid(np.arange(xs)-xs/2+0.5, np.arange(ys)-ys/2+0.5)
+    mydist  = np.hypot(yy,xx)
+
+    thick  *= pix_rad / pdiam
+    offset *= pix_rad / pdiam
+
+    x0      = thick/(2 * np.sin(beta)) + offset 
+    y0      = thick/(2 * np.cos(beta)) - offset * np.tan(beta)
+    
+    if spiders:
+        # quadrants left - right
+        a = ((xx >=  x0) * (np.abs(np.arctan(yy/(xx-x0+1e-8))) < beta))
+        b = ((xx <= -x0) * (np.abs(np.arctan(yy/(xx+x0+1e-8))) < beta))
+        # quadrants up - down
+        c = ((yy >= 0.0) * (np.abs(np.arctan((yy-y0)/(xx+1e-8))) > beta))
+        d = ((yy <  0.0) * (np.abs(np.arctan((yy+y0)/(xx+1e-8))) > beta))
+        
+    # pupil outer and inner edge
+    e = (mydist <= np.round(pix_rad))
+    if odiam > 1e-3: # threshold at 1 mm
+        e *= (mydist > np.round(ro * pix_rad))
+        
+    if split:
+        res = np.array([a*e, b*e, c*e, d*e])
+        return(res)
+    
+    if spiders:
+        return((a+b+c+d)*e)
+    else:
+        return(e)
+
+def VLT_pupil(n,m, radius, spiders=True, between_pix=True):
+    """
+    Function forked from fmartinache/xaosim. Credit to 
+    F. Martinache for the creation of this function.
+    Forked here to fix conflicts with evolving packaging.
+    
+    returns an array that draws the pupil of the VLT
+    at the center of an array of size (n,m) with radius "radius".
+
+    Parameters describing the pupil were deduced from a pupil mask
+    description of the APLC coronograph of SPHERE, by Guerri et al, 
+    2011. 
+
+    http://cdsads.u-strasbg.fr/abs/2011ExA....30...59G
+    """
+
+    # VLT pupil description
+    # ---------------------
+    pdiam, odiam = 8.00, 1.12  # tel. and obst. diameters (meters)
+    thick  = 0.04              # adopted spider thickness (meters)
+    offset = 1.11              # spider intersection offset (meters)
+    beta   = 50.5              # spider angle beta
+
+    return(four_spider_mask(m, n, radius, pdiam, odiam, 
+                            beta, thick, offset, spiders=spiders,
+                            between_pix=between_pix))
+
+
 def test_injection_function(asim):
     import matplotlib.pyplot as plt
     asim.injector.compute_injection_function("linear", tilt_range=1.)
