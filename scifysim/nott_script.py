@@ -16,7 +16,7 @@ import argparse
 
 from time import time
 
-start = time()
+start_full = time()
 
 parser = argparse.ArgumentParser(
                     prog='SCIFYsim Script',
@@ -451,6 +451,6 @@ myhdul["PRIMARY"].header.append(("SCIFYSIM PA", asim.src.planet_position_angle, 
 myhdul["PRIMARY"].header.append(("SCIFYSIM TARNAME", asim.target.name , ""))
 myhdul.writeto(f"{outdir}/result_{mode}.nifits", overwrite=True)
 
-elapsed = time()-start
+elapsed = time()-start_full
 myelapsed = (elapsed/60) * units.min
 print(f"Computation done in : {myelapsed:.2f}")
