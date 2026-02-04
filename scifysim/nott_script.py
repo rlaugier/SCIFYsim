@@ -368,7 +368,7 @@ def save_to_fits(self, Iout=None, KIout=None, Sigma=None, int_times_array=None):
         g_atmo = self.offband_model.get_phase_science_values(self.pistons)
         g_internal = self.corrector.get_phasor(self.lambda_science_range)
         throughput = self.src.sky.get_downstream_transmission(self.lambda_science_range, )
-        total_phasor = throughput[:,None] * np.exp(1j*g_atmo) * g_internal
+        total_phasor = np.sqrt(throughput[:,None]) * np.exp(1j*g_atmo) * g_internal
         mod_phas.append(total_phasor)
         appxy.append(self.obs.get_projected_array())
         
