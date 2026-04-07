@@ -31,18 +31,33 @@ def sp_clip_rows(mat, clip):
     mymat = sp.Matrix([mat[anass[0],:] for anass in ass])
     return mymat
 
-def four2six():
+def four2six(verbose=False):
     sigma = sp.symbols("sigma", real=True, positive=True)
     phi = sp.Matrix(sp.symbols('phi0:{}'.format(2), real=True))
     psplitter1 = sp.Matrix([[sp.sqrt(sigma)],
                             [sp.sqrt(1-sigma)]])
-    psplitter_low = psplitter1.subs([(sigma, 1/3)])
-    psplitter_high = psplitter1.subs([(sigma, 2/3)])
+    psplitter_low = psplitter1.subs([(sigma, sp.frac(sp.Rational(1,3)))])
+    psplitter_high = psplitter1.subs([(sigma, sp.frac(sp.Rational(2,3)))])
     A = sp.diag(psplitter_low, psplitter_low, psplitter_high, psplitter_high)
     B = sp.diag(1, kernuller.crossover, kernuller.crossover, kernuller.crossover, 1)
     C = sp.diag(sp.eye(2), kernuller.splitter, sp.eye(5))
     D = sp.diag(sp.eye(3), kernuller.crossover, kernuller.splitter, kernuller.splitter, sp.eye(2))
     E = sp.diag(sp.eye(3), kernuller.splitter, kernuller.crossover, kernuller.crossover, sp.eye(3))
+    if verbose:
+        print("psplitterlow")
+        print(psplitter_low)
+        print("psplitterhigh")
+        print(psplitter_high)
+        print("A")
+        print(A)
+        print("B")
+        print(B)
+        print("C")
+        print(C)
+        print("D")
+        print(D)
+        print("E")
+        print(E)
     M = E@D@C@B@A
     return M
     
@@ -605,7 +620,8 @@ def ABCD(Mc=kernuller.xcoupler,
 
 def GRAVITY(Mc=kernuller.xcoupler,
             wl=None,
-            ph_shifter_type="achromatic"):
+            ph_shifter_type="achromatic",
+            verbose=False):
     """
     Build a 4 input baseline-wise ABCD combiner
     similar in principle to the one used in GRAVITY.
@@ -618,7 +634,12 @@ def GRAVITY(Mc=kernuller.xcoupler,
                    ph_shifter_type=ph_shifter_type,
                    wl=wl)
     F = sp.diag(theabcd, theabcd, theabcd, theabcd, theabcd, theabcd)
-    M = four2six()
+    M = four2six(verbose=verbose)
+    if verbose:
+        print("F")
+        print(F)
+        print("M")
+        print(M)
     GRAVITY = F@M
     return GRAVITY #A, B, C, D, E, F
 
