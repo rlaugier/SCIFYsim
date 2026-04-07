@@ -322,7 +322,7 @@ print(f"Simulation done in {t_simul}")
 
 ##########################################################################################
 
-import nifits.io as niio
+import nifits.io.niio as niio
 from astropy.table import Table, Column
 import astropy.units as units
 def save_to_fits(self, Iout=None, KIout=None, Sigma=None, int_times_array=None):
@@ -388,9 +388,9 @@ def save_to_fits(self, Iout=None, KIout=None, Sigma=None, int_times_array=None):
                        unit="s", dtype=float)
     mod_phas          = Column(data=mod_phas, name="MOD_PHAS",
                        unit="rad", dtype=complex)
-    appxy             = Column(data=appxy, name="APPXY",
+    appxy             = Column(data=appxy, name="AP_XY",
                        unit="m", dtype=float)
-    arrcol            = Column(data=arrcol, name="ARRCOL",
+    arrcol            = Column(data=arrcol, name="COL_AR",
                        unit="m^2", dtype=float)
     fov_index         = Column(data=fov_index, name="FOV_INDEX",
                        unit=None, dtype=int)
