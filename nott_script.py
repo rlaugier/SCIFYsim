@@ -322,7 +322,7 @@ print(f"Simulation done in {t_simul}")
 
 ##########################################################################################
 
-import nifits.io.oifits as io
+import nifits.io as niio
 from astropy.table import Table, Column
 import astropy.units as units
 def save_to_fits(self, Iout=None, KIout=None, Sigma=None, int_times_array=None):
@@ -330,21 +330,21 @@ def save_to_fits(self, Iout=None, KIout=None, Sigma=None, int_times_array=None):
     wl_data = np.hstack((self.lambda_science_range[:,None], np.gradient(self.lambda_science_range)[:,None]))
     wl_table = Table(data=wl_data, names=("EFF_WAVE", "EFF_BAND"), dtype=(float, float))
     del wl_data
-    oi_wavelength = io.OI_WAVELENGTH(data_table=wl_table,)
-    # oi_wavelength = io.OI_WAVELENGTH()
-    ni_catm = io.NI_CATM(data_array=self.combiner.Mcn)
+    oi_wavelength = niio.OI_WAVELENGTH(data_table=wl_table,)
+    # oi_wavelength = niio.OI_WAVELENGTH()
+    ni_catm = niio.NI_CATM(data_array=self.combiner.Mcn)
     
-    mykmat = io.NI_KMAT(data_array=self.combiner.K)
-    oi_target = io.OI_TARGET.from_scratch()
+    mykmat = niio.NI_KMAT(data_array=self.combiner.K)
+    oi_target = niio.OI_TARGET.from_scratch()
     oi_target.add_target(target=self.target.name, 
                           raep0=self.target.ra.deg, 
                           decep0=self.target.dec.deg)
     
     from copy import copy
-    my_FOV_header = copy(io.NI_FOV_DEFAULT_HEADER)
+    my_FOV_header = copy(niio.NI_FOV_DEFAULT_HEADER)
     my_FOV_header["NIFITS FOV_TELDIAM"] = self.injector.pdiam
     my_FOV_header["NIFITS FOV_TELDIAM_UNIT"] = "m"
-    ni_fov = io.NI_FOV.simple_from_header(header=my_FOV_header, lamb=self.lambda_science_range,
+    ni_fov = niio.NI_FOV.simple_from_header(header=my_FOV_header, lamb=self.lambda_science_range,
                                       n=len(self.sequence))
     overhead = 0.3
     n_telescopes = self.ntelescopes
@@ -398,30 +398,30 @@ def save_to_fits(self, Iout=None, KIout=None, Sigma=None, int_times_array=None):
     mymod_table.add_columns((app_index, target_id, times_relative, mjds,
                             int_times, mod_phas, appxy, arrcol, fov_index))
     mymod_table
-    mynimod = io.NI_MOD(mymod_table)
+    mynimod = niio.NI_MOD(mymod_table)
 
     outbright = data=asim.combiner.bright[None,:]
     outphot = asim.combiner.photometric[None,:]
     outdark = asim.combiner.dark[None,:]
-    ni_iotags = io.NI_IOTAGS.from_arrays(outbright=outbright, outdark=outdark, outphot=outphot,
+    ni_iotags = niio.NI_IOTAGS.from_arrays(outbright=outbright, outdark=outdark, outphot=outphot,
                              inpola = inpol, outpola=outpol)
     
-    myheader = io.fits.Header()
+    myheader = niio.fits.Header()
 
     if Iout is not None:
         Iout_table = Table(data=(Iout,), names=("value",), dtype=(float,), )
-        myiout = io.NI_IOUT(data_table=Iout_table, unit=(units.ph/units.s))
+        myiout = niio.NI_IOUT(data_table=Iout_table, unit=(units.ph/units.s))
         # myiout.name="NI_IOUT"
     if KIout is not None:
         KIout_table = Table(data=(KIout,), names=("value",), dtype=(float,), )
-        mykiout = io.NI_KIOUT(data_table=KIout_table, unit=(units.ph/units.s))
+        mykiout = niio.NI_KIOUT(data_table=KIout_table, unit=(units.ph/units.s))
         # mykiout.name="NI_KIOUT"
     if Sigma is not None:
-        kcov_header = io.fits.Header()
+        kcov_header = niio.fits.Header()
         kcov_header["NIFITS SHAPE"] = ("frame (wavelength output)", "The shape of the covariance array.")
-        mykcov = io.NI_KCOV(data_array=Sigma, header=kcov_header, unit=(units.ph/units.s)**2)
+        mykcov = niio.NI_KCOV(data_array=Sigma, header=kcov_header, unit=(units.ph/units.s)**2)
         mykcov.name = "NI_KCOV"
-    mynifit = io.nifits(header=myheader,
+    mynifit = niio.nifits(header=myheader,
                         ni_catm=ni_catm,
                         ni_fov=ni_fov,
                         oi_target=oi_target,
