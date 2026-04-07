@@ -194,7 +194,8 @@ plt.close()
 print("Spectro view")
 t_exp = 1.0
 # asim.combiner.chromatic_matrix(asim.lambda_science_range)
-asim.point(asim.sequence[0], asim.target)
+halfway = len(asim.sequence)//2
+asim.point(asim.sequence[halfway], asim.target)
 
 integ = asim.make_metrologic_exposure(asim.src.planet, asim.src.star, asim.diffuse,
                                       texp=t_exp)
