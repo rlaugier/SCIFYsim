@@ -409,11 +409,11 @@ def save_to_fits(self, Iout=None, KIout=None, Sigma=None, int_times_array=None):
     myheader = niio.fits.Header()
 
     if Iout is not None:
-        Iout_table = Table(data=(Iout,), names=("value",), dtype=(float,), )
+        Iout_table = Table(data=(Iout,), names=("VALUE",), dtype=(float,), )
         myiout = niio.NI_IOUT(data_table=Iout_table, unit=(units.ph/units.s))
         # myiout.name="NI_IOUT"
     if KIout is not None:
-        KIout_table = Table(data=(KIout,), names=("value",), dtype=(float,), )
+        KIout_table = Table(data=(KIout,), names=("VALUE",), dtype=(float,), )
         mykiout = niio.NI_KIOUT(data_table=KIout_table, unit=(units.ph/units.s))
         # mykiout.name="NI_KIOUT"
     if Sigma is not None:
