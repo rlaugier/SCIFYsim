@@ -6,6 +6,7 @@ import astropy.units as units
 from astropy.table import Table
 import scifysim as sf
 import nifits
+from nifits import niio
 sf.logit.setLevel(sf.logging.ERROR)
 from scifysim.dummy import makesim
 import sys
@@ -407,6 +408,10 @@ def save_to_fits(self, Iout=None, KIout=None, Sigma=None, int_times_array=None):
                              inpola = inpol, outpola=outpol)
     
     myheader = niio.fits.Header()
+    myheader = niio.NI_NIFITS_DEFAULT_HEADER + niio.NI_NIFITS_OPTIONAL_KEYWORDS
+    myheader["INSTRUME"] = "Asgard/NOTT"
+    myheader["OBJECT"] = asim.target.name
+    myheader["INSMODE"] = mode
 
     if Iout is not None:
         Iout_table = Table(data=(Iout,), names=("VALUE",), dtype=(float,), )
@@ -432,6 +437,7 @@ def save_to_fits(self, Iout=None, KIout=None, Sigma=None, int_times_array=None):
                         ni_kcov=mykcov,
                         ni_kmat=mykmat,
                         ni_iotags=ni_iotags)
+    mynifit.refresh_primary_header(all=True, verbose=True)
     return mynifit
 
 ############################################################################################################
