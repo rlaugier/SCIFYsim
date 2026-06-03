@@ -84,7 +84,8 @@ with open(config, "r") as afile:
     print(afile.read())
 
 asim = makesim(first_parse,
-               target=target)
+               target=target,
+               update_params=False)
 # asim = makesim("/home/romain/Documents/hi5/didactic/MAP1_2023_NOTT_symmetric_mode/config/perfect_R400.ini",
 #                target="Gl 86 A ")
 
