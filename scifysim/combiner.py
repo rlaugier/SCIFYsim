@@ -166,7 +166,7 @@ class combiner(object):
 
         """
         hasph = False
-        lamb = None
+        lamb = sp.symbols("lambda")
         thesubs = []
         combiner_type = file.get("configuration", "combiner")
         tap_ratio = file.getfloat("configuration", "photometric_tap")

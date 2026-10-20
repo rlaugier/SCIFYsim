@@ -125,7 +125,7 @@ class simulator(object):
                  pscale=None,
                  interpolation=None,
                  res = 50,
-                 crop = 1.,
+                 crop = 0.7,
                  injector=None, seed=None):
         """
         **Either:**
@@ -616,6 +616,48 @@ class simulator(object):
             outputs = np.abs(b)**2
         return outputs
 
+    def combine_light_dask2(self, asource, injected, input_array, collected,
+                      dosum=True, map_index=0):
+        """
+        Computes the combination for a discretized light source object 
+        for all the wavelengths of interest. The computation is done 
+        out of core using dask.
+        Returns the intensity in all outputs at all wavelengths.
+        
+        **inputs:**
+        
+        * asource     : Source object or transmission_emission object
+          including ss and xx_r attributes as dask arrays
+        * injected    : complex phasor for the instrumental errors
+        * input_array  : The projected geometric configuration of the array
+          use observatory.get_projected_array()
+        * collected   : Dask version of the intensity across wavelength
+          and the difference source origins
+        * map_index   : The index of the pointing in the sequence. Mostly use for numbering
+                        of the temporary disk file
+        
+        .. note:: In "dask" mode the `collected` and `source.ss` are expected as dask arrays
+        
+        """
+        # Ideally, this collected operation should be factorized over all subexps
+        intensity = asource.ss * collected[:,None]
+        amplitude = np.sqrt(intensity)
+        b = []
+
+        geometric_phasor = self.geometric_phasor_dask(asource.xx_r,
+                                                      asource.yy_r,
+                                                      input_array)
+        # da.to_zarr(geometric_phasor , f"/tmp/full_geometric_phasor_{map_index}.zarr", overwrite=True)
+        # geometric_phasor =  da.from_zarr(f"/tmp/full_geometric_phasor_{map_index}.zarr")
+        myinput = injected[None,:,:] * geometric_phasor
+        myinput = myinput * amplitude.T[:,:,None]
+        b = da.einsum("w o i, f w i -> f w o", self.combiner.Mcn, myinput)
+        if dosum:
+            outputs = np.sum(np.abs(b)**2, axis=0)
+        else:
+            outputs = np.abs(b)**2
+        return outputs
+
     def combine_32(self, inst_phasor, geom_phasor, amplitude=None,):
         """
         Computes the output INTENSITY based on the input AMPLITUDE
@@ -912,6 +954,7 @@ class simulator(object):
         self.mapsource = type('', (), {})()
         self.mapsource.xx_r = mas2rad(self.vigneting_map.xx)
         self.mapsource.yy_r = mas2rad(self.vigneting_map.yy)
+        self.mapsource.rr_r = mas2rad(self.vigneting_map.rr)
         maps = []
         for i, time in enumerate(self.sequence):
             self.point(self.sequence[i], self.target)
@@ -955,7 +998,8 @@ class simulator(object):
         
         
     def build_all_maps_dask(self, mapres=100, mapcrop=1.,
-                       dtype="dask", transmission="default"):
+                       dtype="dask", transmission="default",
+                        no_compute=False):
         """
         Builds the transmission maps for the combiner for all the pointings
         on self.target at the times of self.sequence.
@@ -990,6 +1034,7 @@ class simulator(object):
         self.mapsource = type('', (), {})()
         self.mapsource.xx_r = mas2rad(self.vigneting_map.xx)
         self.mapsource.yy_r = mas2rad(self.vigneting_map.yy)
+        self.mapsource.rr_r = mas2rad(self.vigneting_map.rr)
         maps = []
         for i, time in enumerate(self.sequence):
             self.point(self.sequence[i], self.target)
@@ -998,7 +1043,7 @@ class simulator(object):
             else:
                 local_transmission = transmission.get_downstream_transmission(self.lambda_science_range)
             amap = self.make_map_dask(i, self.vigneting_map, dtype=dtype, map_index=i,
-                                     transmission=transmission)
+                                     transmission=transmission, no_compute=no_compute)
             maps.append(amap)
         maps = da.array(maps)
         print(maps.shape)
@@ -1032,7 +1077,7 @@ class simulator(object):
         
         
     def make_map_dask(self, blockindex, vigneting_map, dtype="dask", map_index=0,
-                             transmission=None):
+                             transmission=None, no_compute=False):
         """
         Create sensitivity map in m^2.sr per spectral channel.
         To get final flux of a point source :
@@ -1060,7 +1105,12 @@ class simulator(object):
         perfect_injection = da.ones((self.lambda_science_range.shape[0], self.ntelescopes))\
             * self.corrector.get_phasor(self.lambda_science_range)\
             * self.phasor_disp
-        static_output = self.combine_light_dask(self.mapsource, perfect_injection,
+        if no_compute:
+            static_output = self.combine_light_dask2(self.mapsource, perfect_injection,
+                                           array, dummy_collected,
+                                           dosum=False, map_index=map_index)
+        else:
+            static_output = self.combine_light_dask(self.mapsource, perfect_injection,
                                            array, dummy_collected,
                                            dosum=False, map_index=map_index)
         static_output = static_output.swapaxes(0, -1)

@@ -1,0 +1,7 @@
+# VLTI IR transmission UT after the beam compressor with freshly coated mirrors
+# Values provided by P. Gitton, 28-AUG-2003
+# Lambda[m] Transmission UT
+1.0e-7 1.0
+1.0e-6 1.0
+1.0e-5 1.0
+1.0e-4 1.0

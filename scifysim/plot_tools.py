@@ -143,7 +143,8 @@ def plot_pupil(thearray, thepistons=None, psz=8.,
 def plot_projected_pupil(asim, seq_index,
                          grid=False, grid_res=5,
                          compass=True, compass_length=10.,
-                         usize=150., dist=140., perspective=True):
+                         usize=150., dist=140., perspective=True,
+                        show=True):
     """
     Designed as a wrapper around plot_pupil that also handles
     additional illustration.
@@ -201,7 +202,8 @@ def plot_projected_pupil(asim, seq_index,
     
     fig = plot_pupil(p_array, thepistons, compass=pcompass,
                     usize=usize, dist=dist, perspective=perspective,
-                    grid=projected_grid)
+                    grid=projected_grid,
+                    show=show)
     
     return fig
 
@@ -454,7 +456,7 @@ def plot_injection(theinjector, show=True, noticks=True):
     amplitudes = plt.figure(figsize=(6.,2.))
     width = 0.1
     for i in range(theinjector.injected.shape[1]):
-        plt.bar(np.arange(4)+i*width,np.abs(theinjector.injected[:,i]), width, label="%.1f µm"%(theinjector.lambda_range[i]*1e6))
+        plt.bar(np.arange(4)+i*width, np.abs(theinjector.injected[:,i]), width, label="%.1f µm"%(theinjector.lambda_range[i]*1e6))
     plt.legend(loc="lower center",fontsize=7, title_fontsize=8)
     plt.ylabel("Injection amplitude")
     plt.title("Injection amplitude for each telescope by WL")
@@ -464,7 +466,7 @@ def plot_injection(theinjector, show=True, noticks=True):
     phases = plt.figure(figsize=(6.,2.))
     width = 0.1
     for i in range(theinjector.injected.shape[1]):
-        plt.bar(np.arange(4)+i*width,np.angle(theinjector.injected[:,i]), width, label="%.1f µm"%(theinjector.lambda_range[i]*1e6))
+        plt.bar(np.arange(4)+i*width, np.angle(theinjector.injected[:,i]), width, label="%.1f µm"%(theinjector.lambda_range[i]*1e6))
     plt.legend(loc="lower center",fontsize=7, title_fontsize=8)
     plt.ylabel("Injection phase [radians]")
     plt.title("Injection phase for each telescope by WL")
@@ -637,6 +639,7 @@ def plot_differential_map(asim, kernel=None,
                       central_marker=True,
                       cbar=False,
                       return_difmaps=False,
+                      use_precomputed=False,
                       **kwargs):
     """
     Plot the differential response map of the instrument for the target and sequence
@@ -656,6 +659,7 @@ def plot_differential_map(asim, kernel=None,
     * add_central_marker: Add a marker at the 0,0 location
     * central_marker_size: The size parameter to give the central marker
     * central_marker_type: The type of marker to use
+    * use_precomputed: (False) if True, use asim.difmaps pre-computed by extract_difobs_map
     
     **returns:** fig (, difmaps)
     """
@@ -683,8 +687,10 @@ def plot_differential_map(asim, kernel=None,
             raise AttributeError("could not find the kernel matrix.")
     n_kernels = kernel.shape[0]
     outputs = np.arange(n_kernels)
-            
-    difmaps = np.einsum("k o, s w o x y -> s w k x y", kernel,  asim.maps)
+    if use_precomputed:
+        difmaps = asim.difmaps
+    else:
+        difmaps = np.einsum("k o, s w o x y -> s w k x y", kernel,  asim.maps)
     
     if sumall:
         amax = np.max(np.abs(difmaps.sum(axis=1)))

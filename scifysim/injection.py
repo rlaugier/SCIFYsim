@@ -21,16 +21,8 @@ a series of complex numbers corresponding to injection complex phasors.
 
 
 import numpy as np
-import threading
-import time
 from pathlib import Path
 from scipy.interpolate import interp2d, interp1d
-from xaosim import zernike
-
-
-
-from pdb import set_trace
-
 
 # amto_screen is now provided in house to provide seed
 #from xaosim import wavefront as wft
@@ -45,6 +37,7 @@ import logging
 logit = logging.getLogger(__name__)
 
 from . import utilities
+from . import zernike
 
 parent = Path(__file__).parent.absolute()
 
@@ -100,7 +93,6 @@ class atmo(object):
         - wind_speed : the speed of the phas screen in [m/s]
         - step_time : the time resolution of the simulation [s]
         - config : a parsed config file 
-        -----------------------------------------------------
         '''
 
         if config is None:
@@ -187,7 +179,6 @@ class atmo(object):
     
     def update_step_vector(self,wind_angle=0.1, wind_speed=None, step_time=None):
         """
-        ----
         Refresh the step vector that will be applied
         
         **Parameters:**
@@ -197,7 +188,6 @@ class atmo(object):
         - wind_speed : The speed of the moving phase screen.
         - step_time  : The time step of the simulation [s]
         
-        ----
         """
         if wind_speed is not None:
             self.wind_speed = wind_speed
@@ -212,14 +202,12 @@ class atmo(object):
     
     def set_qstatic(self, qstatic=None):
         """
-        ----
         Defines some quasistatic errors in the wavefront
         
         **Parameters:**
         
         - qstatic    : A static phase screen
         
-        ----
         """
         if qstatic is not None:
             if qstatic.shape == (self.csz, self.csz):
@@ -235,7 +223,7 @@ class atmo(object):
 
     # ==============================================================
     def update_screen(self, correc=None, fc=None, r0=None, L0=None, seed=None):
-        ''' ------------------------------------------------
+        '''
         Generic update of the properties of the phase-screen
         
         **Parameters:**
@@ -244,7 +232,7 @@ class atmo(object):
         - fc : *float* The cutoff fequency
         - r0 : *flaot* r0 of the initial phase screen
         
-        ------------------------------------------------ '''
+        '''
         if r0 is not None:
             self.r0 = r0
 
@@ -274,7 +262,7 @@ class atmo(object):
         self.offy = 0.
         
     def give(self):
-        ''' ------------------------------------------
+        ''' 
         Main loop: frozen screen slid over the aperture
         
         This returns a iterator that yelds the phase screen
@@ -290,7 +278,7 @@ class atmo(object):
 
         **Options:**
         
-        -----------------------------------------  '''
+        '''
 
         while True:
             self.offx += self.step_vector[1] #2
@@ -316,7 +304,7 @@ def atmo_screen(screen_dimension, screen_extent,
                 r0, L0,
                 fc=25, correc=1.0, lo_excess=0.,
                 pdiam=None,seed=None):
-    ''' -----------------------------------------------------------
+    '''
     
     The Kolmogorov - Von Karman phase screen generation algorithm.
 
@@ -348,7 +336,7 @@ def atmo_screen(screen_dimension, screen_extent,
     If pdiam is not specified, the code assumes that the diameter of
     the pupil is equal to the extent of the phase screen "screen_extent".
     
-    ----------------------------------------------------------- '''
+    '''
     
     #phs = 2*np.pi * (np.random.rand(screen_dimension, screen_dimension) - 0.5)
     rng = np.random.default_rng(np.random.SeedSequence(seed))
@@ -414,16 +402,16 @@ class focuser(object):
                  pdiam=7.92, pscale=10.0, wl=1.6e-6):
         ''' Default instantiation of a cam object:
 
-        -------------------------------------------------------------------
-        Parameters are:
-        ---------------
+        
+        **Parameters are:**
+        
         - name    : a string describing the camera ("instrument + camera name")
         - csz     : array size for Fourier computations
         - (ys,xs) : the dimensions of the actually produced image
         - pupil   : a csz x csz array containing the pupil
         - pscale  : the plate scale of the image, in mas/pixel
         - wl      : the central wavelength of observation, in meters
-        ------------------------------------------------------------------- '''
+        '''
 
         self.name = name
         self.csz = csz              # Fourier computation size
@@ -553,7 +541,7 @@ class focuser(object):
     def sft(self, A2):
         ''' Class specific implementation of the explicit Fourier Transform
 
-        -------------------------------------------------------------------
+        
         The algorithm is identical to the function in the sft module,
         except that intermediate FT arrays are stored for faster
         computation.
@@ -563,7 +551,7 @@ class focuser(object):
 
         Assumes the original array is square.
         No need to "center" the data on the origin.
-        -------------------------------------------------------------- '''
+        '''
         try:
             test = self._A1  # look for existence of auxilliary arrays
         except AttributeError:
@@ -1133,10 +1121,14 @@ class injector(object):
             #print(injected.dtype)
             injecteds.append(injected)
         injecteds = np.array(injecteds)
-        
-        self.injection_rate = unsorted_interp2d(self.lambda_range, offset, np.abs(injecteds)**2, kind=interpolation,fill_value=0.)
+        points_x, points_y = np.array(np.meshgrid(self.lambda_range, offset))
+        print(points_x.shape)
+        print(injecteds.flatten().shape)
+        self.injection_rate = LinearNDInterpolator(points=list(zip(points_x.flatten(), points_y.flatten())), values=np.abs(injecteds.flatten())**2, fill_value=0.)
+        # self.injection_rate = unsorted_intepr2d(self.lambda_range, offset, np.abs(injecteds)**2, kind=interpolation, fill_value=0.)
         self.injection_rate.__doc__ = """rate(wavelength[m], offset[lambda/D])"""
-        self.injection_arg = unsorted_interp2d(self.lambda_range, offset, np.angle(injecteds), kind=interpolation, fill_value=0.)
+        self.injection_arg = LinearNDInterpolator(points=list(zip(points_x.flatten(), points_y.flatten())), values=np.angle(injecteds.flatten()), fill_value=0.)
+        # self.injection_arg = unsorted_interp2d(self.lambda_range, offset, np.angle(injecteds), kind=interpolation, fill_value=0.)
         self.injection_arg.__doc__ = """phase(wavelength[m], offset[lambda/D])"""
         return
     
@@ -1300,34 +1292,24 @@ class fringe_tracker(object):
         return np.ones_like(phase) * np.exp(1j*phase)
     
                                                     
-    
-        
-        
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+# TODO : try legacy: bisplev or RectBivariateSpline
+# For modern try:  interpn, LineraNDInterpolator
 
-        
+from scipy.interpolate import LinearNDInterpolator
+
+
     
-class unsorted_interp2d(interp2d):
-    def __call__(self, x, y, dx=0, dy=0):
-        if (len(x) == 1) and (len(y) == 1):
-            return interp2d.__call__(self, x, y, dx=dx, dy=dy, assume_sorted=True)
-        asx = np.argsort(x)
-        usx = np.argsort(asx)
-        asy = np.argsort(y)
-        usy = np.argsort(asy)
-        
-        return interp2d.__call__(self, x[asx], y[asy], dx=dx, dy=dy, assume_sorted=True)[usy,:][:,usx]
+# class unsorted_interp2d(interp2d):
+#     def __call__(self, x, y, dx=0, dy=0):
+#         if (len(x) == 1) and (len(y) == 1):
+#             return interp2d.__call__(self, x, y, dx=dx, dy=dy, assume_sorted=True)
+#         asx = np.argsort(x)
+#         usx = np.argsort(asx)
+#         asy = np.argsort(y)
+#         usy = np.argsort(asy)
+    
+#         return interp2d.__call__(self, x[asx], y[asy], dx=dx, dy=dy, assume_sorted=True)[usy,:][:,usx]
 
 from scipy.special import j0, k0
 from scipy.constants import mu_0, epsilon_0
@@ -1563,7 +1545,7 @@ class injection_vigneting(object):
     injector     : an injector object to emulate
     res          : 
     """
-    def __init__(self, injector, res, crop=1.):
+    def __init__(self, injector, res, crop=0.8):
         """
         A shortcut to injection simulation in the case of diffuse sources
         
@@ -1595,7 +1577,81 @@ class injection_vigneting(object):
         
         if not hasattr(injector, "injection_rate"):
             injector.compute_injection_function("linear", tilt_range=1.)
-        self.vig = injector.injection_rate(injector.lambda_range, self.rr_lambdaond)
+        mygrid = np.meshgrid(injector.lambda_range, self.rr_lambdaond)
+        self.vig = injector.injection_rate(*mygrid)
+        del mygrid
+        # self.vig = injector.injection_rate(injector.lambda_range, self.rr_lambdaond)
+        self.vig_func = injector.injection_rate
+        self.norm = 1/np.max(self.vig)
+
+    def vigneted_spectrum(self, spectrum, lambda_range, exptime, transmission=None):
+        """
+        Includes collecting area, throughput (in transmission is not None)
+        and pixel solid angle
+        
+        transmission: The first object of the transmission-emission chain
+        to be used to compute the instrument transmission. This allows to account
+        for throughtput, including airmass.
+        
+        spectrum   : Flux density in ph/s/sr/m^2 
+        
+        """
+        if transmission is not None:
+            throughput = transmission.get_downstream_transmission(lambda_range)
+        else:
+            throughput = 1.
+        factor = self.collecting * self.ds_sr * exptime
+        mygrid = np.meshgrid(lambda_range, self.rr_lambdaond)
+        vigneted_spectrum = self.vig_func(*mygrid) *\
+                                            (spectrum * factor * throughput)[None,:]
+        del mygrid
+        # vigneted_spectrum = self.vig_func(lambda_range, self.rr_lambdaond) *\
+        #                                     (spectrum * factor * throughput)[None,:]
+        return vigneted_spectrum
+
+class injection_cloud(object):
+    """
+    A shortcut to injection simulation in the case of diffuse sources
+    injector     : an injector object to emulate
+    res          : 
+    """
+    def __init__(self, injector, res, crop=1.):
+        """
+        A shortcut to injection simulation in the case of diffuse sources
+        
+        **Parameters:**
+        
+        - injector     : an injector object to emulate
+        - res          : The resolution of the map
+        - crop         : A factor that scales the FoV of the map
+        """
+        # First build a grid of coordinates
+        
+        lambond = (np.mean(injector.lambda_range) / injector.pdiam)*units.rad.to(units.mas)
+        self.mas2lambond = 1/lambond
+        
+        hskyextent = (injector.focal_hrange/injector.focal_length)*units.rad.to(units.mas)
+        hskyextent = hskyextent*crop
+        self.resol = res #injector.focal_res
+        
+        xys_mas = np.random.uniform(low=-hskyextent, high=+hskyextent, size=(2,res**2)) 
+        xx = xys_mas[0,:]
+        yy = xys_mas[1,:]
+        self.collecting = np.pi/4*(injector.pdiam**2 - injector.odiam**2)
+        self.ds = hskyextent**2 / res**2#In mas^2
+        self.ds_sr = (self.ds*units.mas**2).to(units.sr).value # In sr
+        self.xx = xx.flatten()
+        self.yy = yy.flatten()
+        self.rr = np.sqrt(self.xx**2 + self.yy**2)
+        self.rr_lambdaond =  self.rr*self.mas2lambond
+        print(self.mas2lambond)
+        
+        if not hasattr(injector, "injection_rate"):
+            injector.compute_injection_function("linear", tilt_range=1.)
+        mygrid = np.meshgrid(injector.lambda_range, np.linspace(0, np.max(self.rr_lambdaond), res))
+        self.vig = injector.injection_rate(*mygrid)
+        del mygrid
+        # self.vig = injector.injection_rate(injector.lambda_range, self.rr_lambdaond)
         self.vig_func = injector.injection_rate
         self.norm = 1/np.max(self.vig)
 
@@ -1613,10 +1669,13 @@ class injection_vigneting(object):
         else:
             throughput = 1.
         factor = self.collecting * self.ds_sr * exptime
-        vigneted_spectrum = self.vig_func(lambda_range, self.rr_lambdaond) *\
+        mygrid = np.meshgrid(lambda_range, self.rr_lambdaond)
+        vigneted_spectrum = self.vig_func(*mygrid) *\
                                             (spectrum * factor * throughput)[None,:]
+        del mygrid
+        # vigneted_spectrum = self.vig_func(lambda_range, self.rr_lambdaond) *\
+        #                                     (spectrum * factor * throughput)[None,:]
         return vigneted_spectrum
-        
     
 def test_fiber():
     
@@ -1665,9 +1724,7 @@ def test_injection(phscreensz=200, r0=8.,
     """
     Remember to pass seed=None if you want a random initialization
     """
-    import xaosim
-    # Construct a pupil using xaosim
-    apup = xaosim.pupil.VLT(phscreensz, phscreensz,phscreensz/2)
+    apup = VLT_pupil(phscreensz, phscreensz,phscreensz/2)
     myinst = injector(pupil=apup, r0=r0,
                      interpolation=interpolation, seed=seed)
     import matplotlib.pyplot as plt
@@ -1722,9 +1779,8 @@ def test_injection_fromfile(phscreensz=200,
     """
     **Remember** to pass ``seed=None`` if you want a **random initialization**
     """
-    import xaosim
     # Construct a pupil using xaosim
-    apup = xaosim.pupil.VLT(phscreensz, phscreensz,phscreensz/2)
+    apup = VLT_pupil(phscreensz, phscreensz,phscreensz/2)
     myinst = injector.from_config_file(fpath=fpath,
                                      pupil=apup,
                                      seed=seed)
@@ -1792,7 +1848,7 @@ def optimize_a():
 
 def tel_pupil(n,m, radius, file=None, pdiam=None,
               odiam=None, spiders=True, between_pix=True, tel_index=0):
-    ''' ---------------------------------------------------------
+    '''
     returns an array that draws the pupil of the VLT
     at the center of an array of size (n,m) with radius "radius".
     
@@ -1805,8 +1861,7 @@ def tel_pupil(n,m, radius, file=None, pdiam=None,
 
     `<http://cdsads.u-strasbg.fr/abs/2011ExA....30...59G>`_
     
-    --------------------------------------------------------- '''
-    import xaosim
+    '''
     if file is not None:
         if pdiam is None:
             pdiam = file.getarray("configuration","diam")[tel_index]
@@ -1821,11 +1876,99 @@ def tel_pupil(n,m, radius, file=None, pdiam=None,
     offset = odiam #1.11              # spider intersection offset (meters)
     beta   = 50.      #50.5           # spider angle beta
     
-    apupil = xaosim.pupil.four_spider_mask(m, n, radius, pdiam, odiam, 
+    apupil = four_spider_mask(m, n, radius, pdiam, odiam, 
                             beta, thick, offset, spiders=spiders,
                             between_pix=between_pix)
 
     return apupil
+
+def four_spider_mask(ys, xs, pix_rad, pdiam, odiam=0.0, 
+                     beta=45.0, thick=0.25, offset=0.0,
+                     spiders=True, split=False, between_pix=True):
+    """
+    Function forked from fmartinache/xaosim. Credit to 
+    F. Martinache for the creation of this function.
+    Forked here to fix conflicts with evolving packaging.
+    
+    Tool function called by other routines to generate specific
+    pupil geometries. Although the result is scaled by pix_rad in 
+    pixels, telescope specifics are provided in meters.
+
+    Parameters:
+    
+    - ys, xs  : dimensions of the 2D array      (in pixels)
+    - pix_rad : radius of the circular aperture (in pixels)
+    - pdiam   : diameter of the aperture        (in meters)
+    - odiam   : diameter of the obstruction     (in meters)
+    - beta    : angle of the spiders            (in degrees)
+    - thick   : thickness of the spiders        (in meters)
+    - offset  : spider intersect point distance (in meters)
+    - spiders : flag to true to include spiders (boolean)
+    - split   : split the mask into four parts  (boolean)
+    """
+    beta    = beta * dtor # converted to radians
+    ro      = odiam / pdiam
+    xx,yy   = np.meshgrid(np.arange(xs)-xs/2, np.arange(ys)-ys/2)
+    if between_pix is True:
+        xx,yy   = np.meshgrid(np.arange(xs)-xs/2+0.5, np.arange(ys)-ys/2+0.5)
+    mydist  = np.hypot(yy,xx)
+
+    thick  *= pix_rad / pdiam
+    offset *= pix_rad / pdiam
+
+    x0      = thick/(2 * np.sin(beta)) + offset 
+    y0      = thick/(2 * np.cos(beta)) - offset * np.tan(beta)
+    
+    if spiders:
+        # quadrants left - right
+        a = ((xx >=  x0) * (np.abs(np.arctan(yy/(xx-x0+1e-8))) < beta))
+        b = ((xx <= -x0) * (np.abs(np.arctan(yy/(xx+x0+1e-8))) < beta))
+        # quadrants up - down
+        c = ((yy >= 0.0) * (np.abs(np.arctan((yy-y0)/(xx+1e-8))) > beta))
+        d = ((yy <  0.0) * (np.abs(np.arctan((yy+y0)/(xx+1e-8))) > beta))
+        
+    # pupil outer and inner edge
+    e = (mydist <= np.round(pix_rad))
+    if odiam > 1e-3: # threshold at 1 mm
+        e *= (mydist > np.round(ro * pix_rad))
+        
+    if split:
+        res = np.array([a*e, b*e, c*e, d*e])
+        return(res)
+    
+    if spiders:
+        return((a+b+c+d)*e)
+    else:
+        return(e)
+
+def VLT_pupil(n,m, radius, spiders=True, between_pix=True):
+    """
+    Function forked from fmartinache/xaosim. Credit to 
+    F. Martinache for the creation of this function.
+    Forked here to fix conflicts with evolving packaging.
+    
+    returns an array that draws the pupil of the VLT
+    at the center of an array of size (n,m) with radius "radius".
+
+    Parameters describing the pupil were deduced from a pupil mask
+    description of the APLC coronograph of SPHERE, by Guerri et al, 
+    2011. 
+
+    http://cdsads.u-strasbg.fr/abs/2011ExA....30...59G
+    """
+
+    # VLT pupil description
+    # ---------------------
+    pdiam, odiam = 8.00, 1.12  # tel. and obst. diameters (meters)
+    thick  = 0.04              # adopted spider thickness (meters)
+    offset = 1.11              # spider intersection offset (meters)
+    beta   = 50.5              # spider angle beta
+
+    return(four_spider_mask(m, n, radius, pdiam, odiam, 
+                            beta, thick, offset, spiders=spiders,
+                            between_pix=between_pix))
+
+
 def test_injection_function(asim):
     import matplotlib.pyplot as plt
     asim.injector.compute_injection_function("linear", tilt_range=1.)

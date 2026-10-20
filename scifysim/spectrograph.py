@@ -177,6 +177,51 @@ class integrator():
                          "Dark signal": obtained_dark}
         return read
 
+    def get_total_noiseless(self, spectrograph=None, t_exp=None,
+                 n_pixsplit=None):
+        """
+        Made a little bit complicated by the ability to simulate CRED1 camera. It is
+        at this stage that the quantum efficiency ``self.eta`` is taken into account.
+        
+        **Parameters:**
+        
+        * spectrograph  : A spectrograph object to map the spectra on
+          a 2D detector
+        * t_exp         : [s]  Integration time to take into account dark current
+          This is only used if self.exposure is close to 0. (if 
+          the )
+        * n_pixsplit    : The number of pixels over which to spread the
+          signal of each spectral bin.
+        """
+        if n_pixsplit is not None: # Splitting the signal over a number pixels
+            thepixels = self.acc.copy()
+            thepixels = ((thepixels/n_pixsplit)[None,:,:]*np.ones(int(n_pixsplit))[:,None,None])
+            logit.warning("Usin post-defined n_pixsplit")
+        else:
+            thepixels = self.acc.copy()
+            thepixels = ((thepixels/self.n_pixsplit)[None,:,:]*np.ones(self.n_pixsplit)[:,None,None])
+        if np.isclose(self.exposure, 0., atol=1.e-8):
+            self.exposure = t_exp
+        obtained_dark = self.dark * self.exposure * self.mgain # This is done per pix
+        obtained_cold_bg = self.cold_bg * self.exposure # This is done per pix
+        if spectrograph is not None:
+            acc = spectrograph.get_spectrum_image(thepixels)
+        else:
+            acc = thepixels
+        electrons = acc * self.eta * self.mgain
+        #set_trace()
+        electrons = electrons + self.cold_bg[None,:,None] + obtained_dark
+        expectancy = electrons.copy()
+        electrons = np.random.poisson(lam=electrons*self.ENF)/self.ENF
+        electrons = np.clip(electrons, 0, self.well)
+        read = electrons
+        if n_pixsplit is not None: # Binning the pixels again
+            read = np.sum(read, axis=0)
+        self.forensics = {"Expectancy": expectancy,
+                         "Read noise": self.ron,
+                         "Dark signal": obtained_dark}
+        return read
+
     def get_static(self):
         """
         **Returns**

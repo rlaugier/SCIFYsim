@@ -8,7 +8,8 @@ import numpy as np
 from copy import copy
 import astropy.units as u
 
-from scifysim.dummy import asim
+from dummy import makesim, fname
+asim = makesim(fname)
 
 
 class Test_references(unittest.TestCase):

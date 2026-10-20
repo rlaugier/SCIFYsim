@@ -6,7 +6,8 @@ import numpy as np
 from copy import copy
 from astropy import units
 
-from dummy import asim
+from dummy import makesim, fname
+asim = makesim(fname)
 
 class test_simple_context(unittest.TestCase):
     def setUp(self):

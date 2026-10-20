@@ -24,6 +24,8 @@ def makesim(fname, target=atarget, compensate_chromatic=True):
     asim.diffuse = diffuse
     return asim
 
-asim = makesim(fname)
-interpsim = makesim(fname_interp)
+if "__name__" == "__main__":
+    asim = makesim(fname)
+    interpsim = makesim(fname_interp)
+
 

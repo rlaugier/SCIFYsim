@@ -31,18 +31,33 @@ def sp_clip_rows(mat, clip):
     mymat = sp.Matrix([mat[anass[0],:] for anass in ass])
     return mymat
 
-def four2six():
-    sigma = sp.symbols("sigma", real=True)
+def four2six(verbose=False):
+    sigma = sp.symbols("sigma", real=True, positive=True)
     phi = sp.Matrix(sp.symbols('phi0:{}'.format(2), real=True))
     psplitter1 = sp.Matrix([[sp.sqrt(sigma)],
                             [sp.sqrt(1-sigma)]])
-    psplitter_low = psplitter1.subs([(sigma, 1/3)])
-    psplitter_high = psplitter1.subs([(sigma, 2/3)])
+    psplitter_low = psplitter1.subs([(sigma, sp.frac(sp.Rational(1,3)))])
+    psplitter_high = psplitter1.subs([(sigma, sp.frac(sp.Rational(2,3)))])
     A = sp.diag(psplitter_low, psplitter_low, psplitter_high, psplitter_high)
     B = sp.diag(1, kernuller.crossover, kernuller.crossover, kernuller.crossover, 1)
     C = sp.diag(sp.eye(2), kernuller.splitter, sp.eye(5))
     D = sp.diag(sp.eye(3), kernuller.crossover, kernuller.splitter, kernuller.splitter, sp.eye(2))
     E = sp.diag(sp.eye(3), kernuller.splitter, kernuller.crossover, kernuller.crossover, sp.eye(3))
+    if verbose:
+        print("psplitterlow")
+        print(psplitter_low)
+        print("psplitterhigh")
+        print(psplitter_high)
+        print("A")
+        print(A)
+        print("B")
+        print(B)
+        print("C")
+        print(C)
+        print("D")
+        print(D)
+        print("E")
+        print(E)
     M = E@D@C@B@A
     return M
     
@@ -74,7 +89,8 @@ aphi = (2*sp.pi*p)/lamb
 #########################################################
 # A physically meaningful representation of a coupler
 ########################################################
-sigma, Delta , a = sp.symbols("sigma, Delta, a", real=True)
+Delta , a = sp.symbols("Delta, a", real=True)
+sigma = sp.symbols("sigma", real=True, positive=True)
 
 ccoupler = sp.sqrt(a)*sp.Matrix([[sp.sqrt(sigma), - sp.sqrt(1-sigma)*sp.exp(-sp.I*(-sp.pi/2 + Delta))],
                         [sp.sqrt(1-sigma)*sp.exp(sp.I*(-sp.pi/2 + Delta)), sp.sqrt(sigma)]])
@@ -551,7 +567,7 @@ def VIKiNG(ph_shifters=None, include_masks=False, tap_ratio=None):
     kernel_nuller_4T = matrices_4T[0]
     #sigma = sp.symbols("sigma", real=True)
     phi = sp.Matrix(sp.symbols('phi0:{}'.format(2), real=True))
-    sigma = sp.symbols("sigma", real=True)
+    sigma = sp.symbols("sigma", real=True, positive=True)
     
     photometric_preamble = four_photometric(sigma)
     C = sp.diag(sp.eye(2), kernel_nuller_4T, sp.eye(2))
@@ -604,7 +620,8 @@ def ABCD(Mc=kernuller.xcoupler,
 
 def GRAVITY(Mc=kernuller.xcoupler,
             wl=None,
-            ph_shifter_type="achromatic"):
+            ph_shifter_type="achromatic",
+            verbose=False):
     """
     Build a 4 input baseline-wise ABCD combiner
     similar in principle to the one used in GRAVITY.
@@ -616,8 +633,13 @@ def GRAVITY(Mc=kernuller.xcoupler,
     theabcd = ABCD(Mc=Mc,
                    ph_shifter_type=ph_shifter_type,
                    wl=wl)
-    F = sp.diag(theabcd, theabcd, theabcd,theabcd,theabcd, theabcd)
-    M = four2six()
+    F = sp.diag(theabcd, theabcd, theabcd, theabcd, theabcd, theabcd)
+    M = four2six(verbose=verbose)
+    if verbose:
+        print("F")
+        print(F)
+        print("M")
+        print(M)
     GRAVITY = F@M
     return GRAVITY #A, B, C, D, E, F
 
@@ -632,7 +654,7 @@ def GLINT(include_masks=False, tap_ratio=None):
     Free symbols can be retrieved in list(M.free_symbols)
     """
     b_nuller = kernuller.xcoupler
-    sigma = sp.symbols("sigma", real=True)
+    sigma = sp.symbols("sigma", real=True, positive=True)
     
     photometric_preamble = four_photometric(sigma)
     beam2baseline = sp.diag(sp.eye(2), four2six(), sp.eye(2))

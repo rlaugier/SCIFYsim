@@ -10,8 +10,12 @@ from copy import copy
 # import astroplan
 from scifysim.parsefile import parse_file
 
-from dummy_space import asim as aspacesim
-from dummy_space import interpsim as ainterpsim
+from dummy_space import makesim as makespacesim
+from dummy_space import fname
+from dummy_space import fname_interp
+
+aspacesim = makespacesim(fname)
+ainterpsim = makespacesim(fname_interp)
 
 
 class TestObservatory(unittest.TestCase):

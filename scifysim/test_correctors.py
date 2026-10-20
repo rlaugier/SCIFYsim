@@ -8,12 +8,12 @@ from copy import copy
 
 config = parsefile.parse_file("config/test_default.ini")
 
-import dummy
-from dummy import asim
+from dummy import makesim, fname
+asim = makesim(fname)
 
-bconf = parsefile.parse_file(dummy.fname)
+bconf = parsefile.parse_file(fname)
 bconf.set("corrector", "mode", "znse")
-bsim = dummy.makesim(bconf)
+bsim = makesim(bconf)
 
 
 

@@ -5,6 +5,10 @@ It is a python module designed to simulate the behaviour of high-contrast interf
 
 SCIFYsim aims at replacing GENIEsim [1]_ for all the simulations in the SCIFY project. It is specifically developped to accompany the development and implementation of future generations of advanced nulling techniques [2]_ [3]_.
 
+Currently, the ``develop`` branch is tested for python 3.12, with numpy 2.0 and scipy 1.14.0.
+
+If you are still on numpy < 2.0, use the ``master`` branch.
+
 Principles:
 -----------
 

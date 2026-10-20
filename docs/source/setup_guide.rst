@@ -8,6 +8,10 @@ Prerequisites
 
 Managing your environments through ``conda`` is highly recommended.
 
+Currently, the ``develop`` branch is tested for python 3.12, with numpy 2.0 and scipy 1.14.0.
+
+If you are still on numpy < 2.0, use the ``master`` branch.
+
 Quick install
 -------------
 

@@ -1318,5 +1318,5 @@ class corrector(object):
         pltlambrange = np.linspace(np.min(lambs),
                                    np.max(lambs),
                                    npoints)
-        init_phasor = cor.get_phasor(pltlambrange)
+        init_phasor = self.get_phasor(pltlambrange)
         
