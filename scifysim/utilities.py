@@ -701,7 +701,7 @@ def update_observing_night(config, time=None, duration=6.,  verbose=True,
         tstart = time[0]
         tend = time[1]
     name = config.get("target", "target")
-    dist, T, Rad = get_star_params(name, verbose=False)
+    # dist, T, Rad = get_star_params(name, verbose=False)
     if verbose:
         print("Sequence start set to ", tstart)
         print("Sequence end set to ", tend)
